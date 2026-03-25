@@ -108,7 +108,7 @@
   }
 
   .logo-btn:hover .logo {
-    opacity: 0.8;
+    filter: brightness(1.3);
   }
 
   .logo {
