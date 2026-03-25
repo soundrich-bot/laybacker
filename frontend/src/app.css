@@ -1,0 +1,172 @@
+/* ============================================
+   LAYBACKER — Indie Pedal / Club Flyer Aesthetic
+   ============================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Archivo+Black&family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+  /* Core palette — neon on dark, like a gig poster */
+  --bg-dark: #0a0a0f;
+  --bg-panel: #12121c;
+  --bg-panel-hover: #1a1a2a;
+  --bg-raised: #1e1e30;
+
+  /* Neon accent colors — guitar pedal vibes */
+  --neon-pink: #ff2e63;
+  --neon-yellow: #edff21;
+  --neon-cyan: #08f7fe;
+  --neon-orange: #ff6e27;
+  --neon-green: #39ff14;
+
+  /* Text */
+  --text-primary: #f0f0f0;
+  --text-secondary: #9999bb;
+  --text-muted: #666688;
+
+  /* Functional */
+  --success: #39ff14;
+  --warning: #edff21;
+  --error: #ff2e63;
+  --info: #08f7fe;
+
+  /* Borders */
+  --border-color: #2a2a44;
+  --border-accent: #3a3a5a;
+
+  /* Fonts */
+  --font-display: 'Archivo Black', 'Impact', sans-serif;
+  --font-mono: 'Space Mono', 'Courier New', monospace;
+  --font-body: 'Inter', -apple-system, sans-serif;
+
+  /* Spacing */
+  --gap-xs: 4px;
+  --gap-sm: 8px;
+  --gap-md: 16px;
+  --gap-lg: 24px;
+  --gap-xl: 32px;
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  background: var(--bg-dark);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.5;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+#app {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-dark); }
+::-webkit-scrollbar-thumb { background: var(--border-accent); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+::selection {
+  background: var(--neon-pink);
+  color: var(--bg-dark);
+}
+
+/* Noise texture overlay */
+.noise-overlay {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+  opacity: 0.025;
+  z-index: 9999;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Shared input styles */
+select, input[type="number"], input[type="text"] {
+  background: var(--bg-dark);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+select:focus, input:focus {
+  border-color: var(--neon-cyan);
+}
+select {
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  padding-right: 24px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238888aa'%3E%3Cpath d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+}
+
+/* ============================================
+   "MY EYES" tame mode — warm cream & coral
+   ============================================ */
+:root.tame {
+  /* Warm light backgrounds */
+  --bg-dark: #f5ecd7;
+  --bg-panel: #faf3e0;
+  --bg-panel-hover: #f0e6c8;
+  --bg-raised: #efe3c5;
+
+  /* Coral & warm accents */
+  --neon-pink: #e07a5f;
+  --neon-yellow: #c9a227;
+  --neon-cyan: #5a8a7a;
+  --neon-orange: #d4764e;
+  --neon-green: #6a9a5a;
+
+  /* Dark text on light */
+  --text-primary: #3a2e1e;
+  --text-secondary: #6b5d4a;
+  --text-muted: #a0937e;
+
+  /* Functional */
+  --success: #6a9a5a;
+  --warning: #c9a227;
+  --error: #e07a5f;
+  --info: #5a8a7a;
+
+  /* Borders */
+  --border-color: #ddd2b8;
+  --border-accent: #c8bda3;
+}
+
+/* Hide noise overlay in tame mode */
+:root.tame .noise-overlay {
+  display: none;
+}
+
+/* Fix selection in tame mode */
+:root.tame ::selection {
+  background: var(--neon-pink);
+  color: #fff;
+}
+
+/* Scrollbar in tame mode */
+:root.tame ::-webkit-scrollbar-track { background: var(--bg-dark); }
+:root.tame ::-webkit-scrollbar-thumb { background: var(--border-accent); }
+:root.tame ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }

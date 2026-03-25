@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <filter id="neon" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="12" result="blur1"/>
+      <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur2"/>
+      <feGaussianBlur in="SourceGraphic" stdDeviation="2" result="blur3"/>
+      <feMerge>
+        <feMergeNode in="blur1"/>
+        <feMergeNode in="blur2"/>
+        <feMergeNode in="blur3"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="outerGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="25" result="bigBlur"/>
+      <feColorMatrix in="bigBlur" type="matrix" values="0 0 0 0 1  0 0 0 0 0.18  0 0 0 0 0.39  0 0 0 0.4 0" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1a1a2e"/>
+      <stop offset="100%" stop-color="#0d0d1a"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1024" height="1024" rx="180" fill="url(#bgGrad)"/>
+
+  <!-- Subtle border -->
+  <rect x="8" y="8" width="1008" height="1008" rx="174" fill="none" stroke="#ff2e63" stroke-width="3" opacity="0.2"/>
+
+  <!-- LB text with neon glow -->
+  <g filter="url(#outerGlow)">
+    <g filter="url(#neon)">
+      <text x="512" y="600" text-anchor="middle" font-family="Arial Black, Impact, sans-serif" font-weight="900" font-size="480" fill="#ff2e63" letter-spacing="-10">LB</text>
+    </g>
+  </g>
+
+  <!-- Bright center highlight -->
+  <text x="512" y="600" text-anchor="middle" font-family="Arial Black, Impact, sans-serif" font-weight="900" font-size="480" fill="#ff6b8a" opacity="0.5" letter-spacing="-10">LB</text>
+
+  <!-- Hot white core -->
+  <text x="512" y="600" text-anchor="middle" font-family="Arial Black, Impact, sans-serif" font-weight="900" font-size="480" fill="#ffb3c6" opacity="0.15" letter-spacing="-10">LB</text>
+</svg>

@@ -1,0 +1,134 @@
+use crate::models::NormalizationSettings;
+use crate::services::ffmpeg;
+
+/// Result of loudness measurement
+#[derive(Debug, Clone)]
+pub struct LoudnessMeasurement {
+    pub integrated_lufs: f64,
+    pub true_peak_dbtp: f64,
+}
+
+/// Measure loudness of an audio file using ffmpeg's loudnorm filter
+/// This is more reliable than a custom implementation and leverages
+/// FFmpeg's ITU-R BS.1770-4 compliant measurement
+pub fn measure(audio_path: &str) -> Result<LoudnessMeasurement, String> {
+    let (lufs, true_peak) = ffmpeg::measure_loudness_ffmpeg(audio_path)?;
+
+    Ok(LoudnessMeasurement {
+        integrated_lufs: lufs,
+        true_peak_dbtp: true_peak,
+    })
+}
+
+/// Calculate the gain in dB needed to reach the target loudness,
+/// while respecting the true peak limit.
+///
+/// Two modes:
+/// - **Broadcast/Streaming** (target_lufs < 0): normalize to LUFS target, capped by true peak limit
+/// - **Full Scale Review** (target_lufs >= 0): maximize loudness up to true peak limit only
+pub fn calculate_gain(
+    measurement: &LoudnessMeasurement,
+    settings: &NormalizationSettings,
+) -> f64 {
+    if measurement.integrated_lufs.is_infinite() || measurement.integrated_lufs.is_nan() {
+        return 0.0;
+    }
+
+    // Maximum gain before true peak limit is exceeded
+    let max_gain = settings.true_peak_limit - measurement.true_peak_dbtp;
+
+    if settings.target_lufs >= 0.0 {
+        // Full Scale Review mode: push as loud as possible up to true peak limit
+        let gain = max_gain;
+        return (gain * 100.0).round() / 100.0;
+    }
+
+    // Broadcast/Streaming mode: target a specific LUFS level
+    let desired_gain = settings.target_lufs - measurement.integrated_lufs;
+
+    // Use the smaller of the two (don't exceed true peak)
+    let gain = desired_gain.min(max_gain);
+
+    // Round to 2 decimal places
+    (gain * 100.0).round() / 100.0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_gain_calculation_normal() {
+        let measurement = LoudnessMeasurement {
+            integrated_lufs: -20.0,
+            true_peak_dbtp: -3.0,
+        };
+        let settings = NormalizationSettings {
+            target_lufs: -23.0,
+            true_peak_limit: -1.0,
+        };
+
+        let gain = calculate_gain(&measurement, &settings);
+        assert_eq!(gain, -3.0); // Need to reduce by 3 dB
+    }
+
+    #[test]
+    fn test_gain_calculation_true_peak_limited() {
+        let measurement = LoudnessMeasurement {
+            integrated_lufs: -30.0,
+            true_peak_dbtp: -2.0,
+        };
+        let settings = NormalizationSettings {
+            target_lufs: -23.0,
+            true_peak_limit: -1.0,
+        };
+
+        let gain = calculate_gain(&measurement, &settings);
+        // Want +7 dB but true peak only allows +1 dB
+        assert_eq!(gain, 1.0);
+    }
+
+    #[test]
+    fn test_gain_calculation_full_scale_mode() {
+        let measurement = LoudnessMeasurement {
+            integrated_lufs: -14.5,
+            true_peak_dbtp: -1.96,
+        };
+        let settings = NormalizationSettings {
+            target_lufs: 0.0,       // Full scale mode
+            true_peak_limit: -1.0,
+        };
+
+        let gain = calculate_gain(&measurement, &settings);
+        // Should gain up to true peak limit: -1.0 - (-1.96) = 0.96 dB
+        assert_eq!(gain, 0.96);
+    }
+
+    #[test]
+    fn test_gain_calculation_full_scale_quiet_source() {
+        let measurement = LoudnessMeasurement {
+            integrated_lufs: -30.0,
+            true_peak_dbtp: -12.0,
+        };
+        let settings = NormalizationSettings {
+            target_lufs: 0.0,       // Full scale mode
+            true_peak_limit: -1.0,
+        };
+
+        let gain = calculate_gain(&measurement, &settings);
+        // Should gain: -1.0 - (-12.0) = 11.0 dB
+        assert_eq!(gain, 11.0);
+    }
+
+    #[test]
+    fn test_gain_calculation_infinite_lufs() {
+        let measurement = LoudnessMeasurement {
+            integrated_lufs: f64::NEG_INFINITY,
+            true_peak_dbtp: -100.0,
+        };
+        let settings = NormalizationSettings::default();
+
+        let gain = calculate_gain(&measurement, &settings);
+        assert_eq!(gain, 0.0); // Don't adjust silence
+    }
+}

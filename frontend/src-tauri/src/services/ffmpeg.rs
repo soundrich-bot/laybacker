@@ -1,0 +1,220 @@
+use std::process::Command;
+
+use crate::models::*;
+
+/// Find the ffmpeg binary
+pub fn find_ffmpeg() -> String {
+    let candidates = if cfg!(target_os = "windows") {
+        vec![
+            "ffmpeg".to_string(),
+            "C:\\ffmpeg\\bin\\ffmpeg.exe".to_string(),
+        ]
+    } else {
+        vec![
+            "ffmpeg".to_string(),
+            "/usr/local/bin/ffmpeg".to_string(),
+            "/opt/homebrew/bin/ffmpeg".to_string(),
+            "/usr/bin/ffmpeg".to_string(),
+        ]
+    };
+
+    for candidate in &candidates {
+        if Command::new(candidate).arg("-version").output().is_ok() {
+            return candidate.clone();
+        }
+    }
+
+    "ffmpeg".to_string()
+}
+
+/// Check if ffmpeg is available
+pub fn is_ffmpeg_available() -> bool {
+    let ffmpeg = find_ffmpeg();
+    Command::new(&ffmpeg).arg("-version").output().is_ok()
+}
+
+/// Get ffmpeg version string
+pub fn get_ffmpeg_version() -> Option<String> {
+    let ffmpeg = find_ffmpeg();
+    let output = Command::new(&ffmpeg).arg("-version").output().ok()?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    stdout.lines().next().map(|l| l.to_string())
+}
+
+/// Build the ffmpeg command arguments for a muxing job
+pub fn build_mux_command(
+    video_path: &str,
+    audio_path: &str,
+    output_path: &str,
+    settings: &ExportSettings,
+    audio_gain_db: Option<f64>,
+    timecode_offset_secs: f64,
+) -> Vec<String> {
+    let mut args: Vec<String> = Vec::new();
+
+    // Input files
+    args.extend(["-y".to_string()]); // Overwrite output
+    args.extend(["-i".to_string(), video_path.to_string()]);
+    args.extend(["-i".to_string(), audio_path.to_string()]);
+
+    // Map video from first input, audio from second input
+    args.extend(["-map".to_string(), "0:v:0".to_string()]);
+    args.extend(["-map".to_string(), "1:a:0".to_string()]);
+
+    // Video codec settings
+    match settings.video_codec {
+        VideoCodecOption::Original => {
+            args.extend(["-c:v".to_string(), "copy".to_string()]);
+        }
+        VideoCodecOption::H264 => {
+            args.extend(["-c:v".to_string(), "libx264".to_string()]);
+            args.extend(["-crf".to_string(), "18".to_string()]);
+            args.extend(["-preset".to_string(), "medium".to_string()]);
+            args.extend(["-pix_fmt".to_string(), "yuv420p".to_string()]);
+        }
+    }
+
+    // Audio filter chain
+    let mut audio_filters: Vec<String> = Vec::new();
+
+    // Timecode offset (delay audio start)
+    if timecode_offset_secs > 0.0 {
+        let delay_ms = (timecode_offset_secs * 1000.0) as i64;
+        audio_filters.push(format!("adelay={}|{}", delay_ms, delay_ms));
+    }
+
+    // Gain adjustment for normalization
+    if let Some(gain) = audio_gain_db {
+        if gain.abs() > 0.001 {
+            audio_filters.push(format!("volume={}dB", gain));
+        }
+    }
+
+    if !audio_filters.is_empty() {
+        args.extend(["-af".to_string(), audio_filters.join(",")]);
+    }
+
+    // Audio codec settings
+    // Note: stream copy (-c:a copy) is incompatible with audio filters.
+    // If filters are applied (normalization, offset), fall back to PCM encoding.
+    let has_audio_filters = !audio_filters.is_empty();
+
+    match settings.audio_format {
+        AudioFormatOption::Original => {
+            if has_audio_filters {
+                // Can't stream copy with filters — use lossless PCM instead
+                args.extend(["-c:a".to_string(), "pcm_s24le".to_string()]);
+            } else {
+                args.extend(["-c:a".to_string(), "copy".to_string()]);
+            }
+        }
+        AudioFormatOption::Aac => {
+            args.extend(["-c:a".to_string(), "aac".to_string()]);
+            args.extend(["-b:a".to_string(), format!("{}", settings.aac_bitrate)]);
+        }
+    }
+
+    // Shortest: trim output to shortest stream
+    args.push("-shortest".to_string());
+
+    // Output file
+    args.push(output_path.to_string());
+
+    args
+}
+
+/// Extract a thumbnail frame from a video file as a base64 JPEG data URL
+pub fn extract_thumbnail(video_path: &str, duration_secs: f64) -> Option<String> {
+    use base64::{Engine as _, engine::general_purpose::STANDARD};
+
+    let ffmpeg = find_ffmpeg();
+    // Seek to 10% of duration or 1 second, whichever is larger
+    let seek_secs = (duration_secs * 0.1).max(1.0).min(duration_secs - 0.1);
+
+    let output = Command::new(&ffmpeg)
+        .args([
+            "-ss", &format!("{:.2}", seek_secs),
+            "-i", video_path,
+            "-vframes", "1",
+            "-vf", "scale=80:-1",
+            "-f", "image2pipe",
+            "-vcodec", "mjpeg",
+            "-q:v", "8",
+            "pipe:1",
+        ])
+        .output()
+        .ok()?;
+
+    if !output.status.success() || output.stdout.is_empty() {
+        return None;
+    }
+
+    let b64 = STANDARD.encode(&output.stdout);
+    Some(format!("data:image/jpeg;base64,{}", b64))
+}
+
+/// Build ffmpeg command to measure loudness (used as fallback if Rust measurement has issues)
+pub fn build_loudness_measure_command(audio_path: &str) -> Vec<String> {
+    vec![
+        "-i".to_string(),
+        audio_path.to_string(),
+        "-af".to_string(),
+        "loudnorm=print_format=json".to_string(),
+        "-f".to_string(),
+        "null".to_string(),
+        "-".to_string(),
+    ]
+}
+
+/// Parse loudness measurement from ffmpeg loudnorm output
+pub fn parse_loudness_output(stderr: &str) -> Option<(f64, f64)> {
+    // ffmpeg loudnorm outputs JSON in stderr
+    let json_start = stderr.rfind('{')?;
+    let json_end = stderr.rfind('}')? + 1;
+    let json_str = &stderr[json_start..json_end];
+
+    let json: serde_json::Value = serde_json::from_str(json_str).ok()?;
+
+    let lufs = json["input_i"]
+        .as_str()
+        .and_then(|s| s.parse::<f64>().ok())?;
+    let true_peak = json["input_tp"]
+        .as_str()
+        .and_then(|s| s.parse::<f64>().ok())?;
+
+    Some((lufs, true_peak))
+}
+
+/// Run an ffmpeg command and return success/failure
+pub fn run_ffmpeg(args: &[String]) -> Result<(), String> {
+    let ffmpeg = find_ffmpeg();
+
+    log::info!("Running: {} {}", ffmpeg, args.join(" "));
+
+    let output = Command::new(&ffmpeg)
+        .args(args)
+        .output()
+        .map_err(|e| format!("Failed to run ffmpeg: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("ffmpeg failed: {}", stderr));
+    }
+
+    Ok(())
+}
+
+/// Measure loudness using ffmpeg's loudnorm filter
+pub fn measure_loudness_ffmpeg(audio_path: &str) -> Result<(f64, f64), String> {
+    let ffmpeg = find_ffmpeg();
+    let args = build_loudness_measure_command(audio_path);
+
+    let output = Command::new(&ffmpeg)
+        .args(&args)
+        .output()
+        .map_err(|e| format!("Failed to run ffmpeg for loudness measurement: {}", e))?;
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    parse_loudness_output(&stderr)
+        .ok_or_else(|| "Failed to parse loudness measurement output".to_string())
+}
