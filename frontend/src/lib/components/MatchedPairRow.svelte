@@ -392,16 +392,12 @@
     align-items: center;
     justify-content: center;
     transition: all 0.15s;
-    opacity: 0;
+    opacity: 0.5;
     align-self: center;
   }
 
-  .file-block:hover .play-btn {
-    opacity: 0.6;
-  }
-
   .play-btn:hover {
-    opacity: 1 !important;
+    opacity: 1;
     color: var(--neon-cyan);
     border-color: rgba(8, 247, 254, 0.4);
     background: rgba(8, 247, 254, 0.08);
@@ -522,7 +518,8 @@
     padding: 4px var(--gap-md) 8px;
     border-top: 1px solid rgba(255, 255, 255, 0.03);
     margin: 0 4px;
-    min-height: 32px;
+    min-height: 40px;
+    height: 40px;
   }
 
   .output-label {
@@ -539,11 +536,13 @@
     gap: 5px;
     flex: 1;
     min-width: 0;
-    padding: 2px 6px;
-    border: 1px solid rgba(8, 247, 254, 0.2);
+    padding: 4px 10px;
+    height: 30px;
+    box-sizing: border-box;
+    border: 1px solid rgba(8, 247, 254, 0.25);
     border-radius: var(--radius-sm);
     transition: all 0.15s;
-    background: rgba(8, 247, 254, 0.02);
+    background: rgba(8, 247, 254, 0.04);
     cursor: text;
     min-height: 22px;
     box-sizing: border-box;
@@ -557,8 +556,9 @@
 
   .output-name-text {
     font-family: var(--font-mono);
-    font-size: 10px;
-    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-primary);
     word-break: break-all;
     line-height: 1.3;
   }
@@ -597,9 +597,12 @@
 
   .name-edit {
     width: 100%;
-    font-size: 10px;
+    font-size: 13px;
+    font-weight: 700;
     font-family: var(--font-mono);
-    padding: 2px 6px;
+    padding: 4px 10px;
+    height: 30px;
+    box-sizing: border-box;
     background: var(--bg-dark);
     border: 1px solid var(--neon-cyan);
     border-radius: var(--radius-sm);

@@ -1,8 +1,24 @@
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use crate::models::*;
 use crate::services::{ffmpeg, loudness};
+
+/// Global cancellation flag
+static CANCEL_FLAG: AtomicBool = AtomicBool::new(false);
+
+pub fn request_cancel() {
+    CANCEL_FLAG.store(true, Ordering::SeqCst);
+}
+
+pub fn reset_cancel() {
+    CANCEL_FLAG.store(false, Ordering::SeqCst);
+}
+
+fn is_cancelled() -> bool {
+    CANCEL_FLAG.load(Ordering::SeqCst)
+}
 
 /// Process a single matched pair into an output video
 pub fn process_pair(
@@ -132,9 +148,20 @@ pub fn process_batch(
     let callback = Arc::new(progress_callback);
     let results = Arc::new(Mutex::new(Vec::new()));
 
-    // Process sequentially for now (ffmpeg is already multi-threaded internally)
-    // Could use rayon for parallel processing of independent pairs
+    reset_cancel();
+
     for pair in pairs {
+        if is_cancelled() {
+            results.lock().unwrap().push(ProcessingResult {
+                pair_id: pair.id.clone(),
+                success: false,
+                output_path: None,
+                error: Some("Cancelled".to_string()),
+                measured_lufs: None,
+                measured_true_peak: None,
+            });
+            continue;
+        }
         let cb = callback.clone();
         let result = process_pair(pair, settings, move |p| cb(p));
         results.lock().unwrap().push(result);

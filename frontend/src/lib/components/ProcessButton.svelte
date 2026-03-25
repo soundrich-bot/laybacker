@@ -1,5 +1,5 @@
 <script>
-  let { pairCount = 0, isProcessing = false, onProcess, onClear } = $props();
+  let { pairCount = 0, isProcessing = false, onProcess, onClear, onCancel } = $props();
 </script>
 
 <div class="process-bar">
@@ -11,19 +11,19 @@
     {/if}
   </div>
 
-  <button
-    class="process-btn"
-    class:processing={isProcessing}
-    disabled={pairCount === 0 || isProcessing}
-    onclick={onProcess}
-  >
-    {#if isProcessing}
-      <span class="btn-spinner"></span>
-      PROCESSING...
-    {:else}
+  {#if isProcessing}
+    <button class="cancel-btn" onclick={onCancel}>
+      CANCEL
+    </button>
+  {:else}
+    <button
+      class="process-btn"
+      disabled={pairCount === 0}
+      onclick={onProcess}
+    >
       LAYBACK {pairCount > 0 ? `(${pairCount})` : ''}
-    {/if}
-  </button>
+    </button>
+  {/if}
 
   <div class="process-bar-right"></div>
 </div>
@@ -103,24 +103,27 @@
     box-shadow: none;
   }
 
-  .process-btn.processing {
-    background: var(--neon-yellow);
+  .cancel-btn {
+    font-family: var(--font-display);
+    font-size: 16px;
+    letter-spacing: 0.2em;
+    color: #fff;
+    background: var(--neon-pink);
+    border: none;
+    border-radius: var(--radius-md);
+    padding: 12px 48px;
+    cursor: pointer;
+    transition: all 0.2s;
     box-shadow:
-      0 0 20px rgba(237, 255, 33, 0.3),
-      0 0 60px rgba(237, 255, 33, 0.1);
+      0 0 20px rgba(255, 46, 99, 0.3),
+      0 0 60px rgba(255, 46, 99, 0.1);
   }
 
-  .btn-spinner {
-    width: 14px;
-    height: 14px;
-    border: 2px solid rgba(0, 0, 0, 0.2);
-    border-top-color: var(--bg-dark);
-    border-radius: 50%;
-    animation: spin 0.6s linear infinite;
-  }
-
-  @keyframes spin {
-    to { transform: rotate(360deg); }
+  .cancel-btn:hover {
+    transform: scale(1.03);
+    box-shadow:
+      0 0 30px rgba(255, 46, 99, 0.4),
+      0 0 80px rgba(255, 46, 99, 0.2);
   }
 
   :global(:root.tame) .process-btn {

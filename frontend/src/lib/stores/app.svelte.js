@@ -61,15 +61,20 @@ async function scanFiles(paths) {
   isScanning = true;
   errors = [];
   try {
+    console.log('[store] invoking scan_files with', paths.length, 'paths');
     const scanned = await invoke('scan_files', { paths });
+    console.log('[store] scan returned', scanned.length, 'files');
 
     // Merge new files with existing, deduplicating by full path
     const existingPaths = new Set(files.map(f => f.path));
     const newFiles = scanned.filter(f => !existingPaths.has(f.path));
     files = [...files, ...newFiles];
+    console.log('[store] total files:', files.length);
 
     await autoMatch();
+    console.log('[store] autoMatch done, pairs:', matchedPairs.length);
   } catch (e) {
+    console.error('[store] SCAN ERROR:', e);
     errors = [...errors, `Scan failed: ${e}`];
   } finally {
     isScanning = false;
@@ -126,6 +131,10 @@ async function regenerateNames() {
   }
 }
 
+async function cancelProcessing() {
+  await invoke('cancel_processing');
+}
+
 async function processAll() {
   if (matchedPairs.length === 0) return;
   isProcessing = true;
@@ -178,10 +187,12 @@ function updatePairFilename(pairId, filename) {
 
 function toggleAllNorm() {
   const allEnabled = matchedPairs.every(p => p.normalizationEnabled);
+  console.log('[store] toggleAllNorm, allEnabled:', allEnabled, '-> setting to:', !allEnabled);
   matchedPairs = matchedPairs.map(p => ({
     ...p,
     normalizationEnabled: !allEnabled,
   }));
+  console.log('[store] after toggle, pairs:', matchedPairs.map(p => `${p.id}: norm=${p.normalizationEnabled}`));
 }
 
 function removePair(pairId) {
@@ -230,6 +241,7 @@ export function getAppState() {
     autoMatch,
     regenerateNames,
     processAll,
+    cancelProcessing,
     updateProgress,
     updatePairNormalization,
     updatePairFilename,

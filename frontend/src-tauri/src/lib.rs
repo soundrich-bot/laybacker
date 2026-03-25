@@ -28,6 +28,7 @@ pub fn run() {
             commands::play_sound,
             commands::open_url,
             commands::get_resource_path,
+            commands::cancel_processing,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

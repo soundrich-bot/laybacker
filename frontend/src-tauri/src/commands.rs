@@ -3,6 +3,12 @@ use tauri::{Emitter, Manager, Window};
 use crate::models::*;
 use crate::services::{ffmpeg, inspector, loudness, matcher, namer, processor};
 
+/// Cancel any in-progress processing
+#[tauri::command]
+pub fn cancel_processing() {
+    processor::request_cancel();
+}
+
 /// Check if FFmpeg is available on the system
 #[tauri::command]
 pub fn check_ffmpeg() -> Result<String, String> {

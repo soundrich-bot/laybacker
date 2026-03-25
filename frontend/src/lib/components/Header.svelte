@@ -2,6 +2,7 @@
   import { invoke } from '@tauri-apps/api/core';
   let { ffmpegStatus } = $props();
   let showAbout = $state(false);
+  let showHelp = $state(false);
 
   const DONATE_URL = 'https://monzo.com/pay/r/soundrich-limited_2qhNYp1kvgAICv';
   const FEEDBACK_EMAIL = 'soundrich+laybacker@gmail.com';
@@ -38,8 +39,13 @@
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
+<!-- svelte-ignore a11y_click_events_have_key_events -->
+<!-- svelte-ignore a11y_no_static_element_interactions -->
 {#if showAbout}
   <div class="about-overlay" onclick={closeAbout}></div>
+{/if}
+{#if showHelp}
+  <div class="about-overlay" onclick={() => showHelp = false}></div>
 {/if}
 
 <header class="header">
@@ -73,6 +79,30 @@
     {/if}
   </div>
   <div class="status-row">
+    <div class="help-wrapper">
+      <button class="help-btn" onclick={(e) => { e.stopPropagation(); showHelp = !showHelp; }} title="How to use Laybacker">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+          <circle cx="9" cy="9" r="8" stroke="currentColor" stroke-width="1.5"/>
+          <text x="9" y="13" text-anchor="middle" fill="currentColor" font-size="12" font-weight="700" font-family="sans-serif">?</text>
+        </svg>
+      </button>
+      {#if showHelp}
+        <div class="help-panel">
+          <div class="help-title">HOW IT WORKS</div>
+          <div class="help-divider"></div>
+          <ol class="help-steps">
+            <li><strong>Drop files</strong> — Drag video and audio files onto the window. Drop them all at once or one at a time. Laybacker pairs them by duration and filename similarity.</li>
+            <li><strong>Check pairs</strong> — Each card shows a video + audio pair. Use the play buttons to preview. If a pair is wrong, remove it and re-drop.</li>
+            <li><strong>Edit filenames</strong> — Click the Smart Filename to rename the output. Use the clock icon to add a timestamp.</li>
+            <li><strong>Normalise</strong> — Click NORM on a pair (or NORM ALL) to enable loudness normalisation. Click the badge to choose a standard (EBU R128, streaming, full scale).</li>
+            <li><strong>Choose format</strong> — Pick ORIGINAL (stream copy, fastest) or H.264/AAC for re-encoded output.</li>
+            <li><strong>Layback</strong> — Hit the green button. Output files are saved alongside your audio files.</li>
+          </ol>
+          <div class="help-divider"></div>
+          <div class="help-note">All processing happens locally on your machine using FFmpeg. Nothing is uploaded anywhere.</div>
+        </div>
+      {/if}
+    </div>
     {#if ffmpegStatus.available}
       <span class="status-badge good">FFmpeg OK</span>
     {:else}
@@ -245,6 +275,77 @@
     display: flex;
     align-items: center;
     gap: var(--gap-sm);
+  }
+
+  .help-wrapper {
+    position: relative;
+  }
+
+  .help-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 2px;
+    display: flex;
+    align-items: center;
+    transition: all 0.15s;
+  }
+
+  .help-btn:hover {
+    color: var(--neon-cyan);
+  }
+
+  .help-panel {
+    position: absolute;
+    top: calc(100% + 10px);
+    right: 0;
+    background: var(--bg-raised);
+    border: 1px solid var(--border-accent);
+    border-radius: var(--radius-md);
+    padding: 16px 20px;
+    z-index: 100;
+    width: 360px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  }
+
+  .help-title {
+    font-family: var(--font-display);
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    color: var(--neon-cyan);
+  }
+
+  .help-divider {
+    height: 1px;
+    background: var(--border-color);
+    margin: 2px 0;
+  }
+
+  .help-steps {
+    font-family: var(--font-body);
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    padding-left: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 0;
+  }
+
+  .help-steps li strong {
+    color: var(--text-primary);
+  }
+
+  .help-note {
+    font-family: var(--font-body);
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.4;
   }
 
   .status-badge {
