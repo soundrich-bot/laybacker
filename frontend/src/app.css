@@ -6,10 +6,10 @@
 
 :root {
   /* Core palette — neon on dark, like a gig poster */
-  --bg-dark: #0a0a0f;
-  --bg-panel: #12121c;
-  --bg-panel-hover: #1a1a2a;
-  --bg-raised: #1e1e30;
+  --bg-dark: #10101a;
+  --bg-panel: #1a1a2a;
+  --bg-panel-hover: #242438;
+  --bg-raised: #282840;
 
   /* Neon accent colors — guitar pedal vibes */
   --neon-pink: #ff2e63;
@@ -19,9 +19,9 @@
   --neon-green: #39ff14;
 
   /* Text */
-  --text-primary: #f0f0f0;
-  --text-secondary: #9999bb;
-  --text-muted: #666688;
+  --text-primary: #f4f4f8;
+  --text-secondary: #b0b0cc;
+  --text-muted: #8080a0;
 
   /* Functional */
   --success: #39ff14;
@@ -30,8 +30,8 @@
   --info: #08f7fe;
 
   /* Borders */
-  --border-color: #2a2a44;
-  --border-accent: #3a3a5a;
+  --border-color: #363655;
+  --border-accent: #4a4a6a;
 
   /* Fonts */
   --font-display: 'Archivo Black', 'Impact', sans-serif;
