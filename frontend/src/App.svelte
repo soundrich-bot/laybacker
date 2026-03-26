@@ -14,11 +14,15 @@
 
   const app = getAppState();
   let isDraggingOver = $state(false);
-  let tameMode = $state(false);
-  let timestampFormat = $state('YYYYMMDD_HHmm');
+  let tameMode = $state(localStorage.getItem('tameMode') === 'true');
+  let timestampFormat = $state(localStorage.getItem('timestampFormat') || 'YYYYMMDD_HHmm');
+
+  // Apply saved tame mode on load
+  if (tameMode) document.documentElement.classList.add('tame');
 
   function toggleTame() {
     tameMode = !tameMode;
+    localStorage.setItem('tameMode', tameMode);
     if (tameMode) {
       document.documentElement.classList.add('tame');
     } else {
@@ -108,7 +112,7 @@
     {tameMode}
     onToggleTame={toggleTame}
     {timestampFormat}
-    onTimestampFormatChange={(fmt) => timestampFormat = fmt}
+    onTimestampFormatChange={(fmt) => { timestampFormat = fmt; localStorage.setItem('timestampFormat', fmt); }}
   />
 
   <ProcessButton
