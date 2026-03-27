@@ -76,8 +76,10 @@
   let isComplete = $derived(result?.success === true);
   let isFailed = $derived(result?.success === false);
 
+  let isAudioOnly = $derived(!pair.video);
+
   // Duration mismatch detection (tolerance of 0.5s)
-  let durationDiff = $derived(pair.audio.durationSecs - pair.video.durationSecs);
+  let durationDiff = $derived(pair.video ? pair.audio.durationSecs - pair.video.durationSecs : 0);
   let audioLonger = $derived(durationDiff > 0.5);
   let audioShorter = $derived(durationDiff < -0.5);
   let durationWarning = $derived(
@@ -92,54 +94,74 @@
 <div class="pair-card" class:complete={isComplete} class:failed={isFailed}>
   <!-- Row 1: Source files -->
   <div class="source-row">
-    <!-- Video thumbnail -->
-    <div class="thumbnail">
-      {#if pair.video.thumbnailData}
-        <img src={pair.video.thumbnailData} alt="" class="thumb-img" />
-      {:else}
-        <div class="thumb-placeholder">
-          <svg width="16" height="12" viewBox="0 0 16 12" fill="none">
-            <rect x="1" y="1" width="14" height="10" rx="1.5" stroke="currentColor" stroke-width="1.2"/>
-            <path d="M6 4L10 6L6 8V4Z" fill="currentColor"/>
-          </svg>
-        </div>
-      {/if}
-    </div>
-
-    <!-- Video info -->
-    <div class="file-block video-block">
-      <button class="play-btn" onclick={() => previewFile = { path: pair.video.path, filename: pair.video.filename, mediaType: 'video' }} title="Preview video">
-        <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 1L9 5L2 9V1Z" fill="currentColor"/></svg>
-      </button>
-      <span class="file-duration">{formatDuration(pair.video.durationSecs)}</span>
-      <span class="file-name" title="{pair.video.codecInfo ?? ''}">{pair.video.filename}</span>
-    </div>
-
-    <!-- Arrow -->
-    <div class="connector" title="Audio will be relayed onto this video">
-      <svg width="20" height="14" viewBox="0 0 20 14">
-        <path d="M0 7H14M11 3L17 7L11 11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-    </div>
-
-    <!-- Audio info -->
-    <div class="file-block audio-block">
-      <button class="play-btn" onclick={() => previewFile = { path: pair.audio.path, filename: pair.audio.filename, mediaType: 'audio' }} title="Preview audio">
-        <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 1L9 5L2 9V1Z" fill="currentColor"/></svg>
-      </button>
-      <span class="file-duration">{formatDuration(pair.audio.durationSecs)}</span>
-      <span class="file-name" title="{pair.audio.channelCount ?? '?'}ch {pair.audio.sampleRate ? (pair.audio.sampleRate / 1000).toFixed(1) + 'kHz' : ''}">{pair.audio.filename}</span>
-    </div>
-
-    <!-- Duration warning -->
-    {#if durationWarning}
-      <span class="duration-warn" title={durationWarning}>
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-          <path d="M7 1L13 12H1L7 1Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
-          <path d="M7 5.5V8.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
-          <circle cx="7" cy="10.5" r="0.5" fill="currentColor"/>
+    {#if isAudioOnly}
+      <!-- Audio-only: waveform icon + audio info -->
+      <div class="thumbnail audio-only-thumb">
+        <svg width="20" height="14" viewBox="0 0 20 14" fill="none">
+          <path d="M1 7H3L5 2L7 12L9 4L11 10L13 5L15 9L17 6H19" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
-      </span>
+      </div>
+
+      <div class="file-block audio-block" style="flex: 2;">
+        <button class="play-btn" onclick={() => previewFile = { path: pair.audio.path, filename: pair.audio.filename, mediaType: 'audio' }} title="Preview audio">
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 1L9 5L2 9V1Z" fill="currentColor"/></svg>
+        </button>
+        <span class="file-duration">{formatDuration(pair.audio.durationSecs)}</span>
+        <span class="file-name" title="{pair.audio.channelCount ?? '?'}ch {pair.audio.sampleRate ? (pair.audio.sampleRate / 1000).toFixed(1) + 'kHz' : ''}">{pair.audio.filename}</span>
+      </div>
+
+      <span class="audio-only-badge">AUDIO ONLY</span>
+    {:else}
+      <!-- Video + Audio pair -->
+      <!-- Video thumbnail -->
+      <div class="thumbnail">
+        {#if pair.video.thumbnailData}
+          <img src={pair.video.thumbnailData} alt="" class="thumb-img" />
+        {:else}
+          <div class="thumb-placeholder">
+            <svg width="16" height="12" viewBox="0 0 16 12" fill="none">
+              <rect x="1" y="1" width="14" height="10" rx="1.5" stroke="currentColor" stroke-width="1.2"/>
+              <path d="M6 4L10 6L6 8V4Z" fill="currentColor"/>
+            </svg>
+          </div>
+        {/if}
+      </div>
+
+      <!-- Video info -->
+      <div class="file-block video-block">
+        <button class="play-btn" onclick={() => previewFile = { path: pair.video.path, filename: pair.video.filename, mediaType: 'video' }} title="Preview video">
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 1L9 5L2 9V1Z" fill="currentColor"/></svg>
+        </button>
+        <span class="file-duration">{formatDuration(pair.video.durationSecs)}</span>
+        <span class="file-name" title="{pair.video.codecInfo ?? ''}">{pair.video.filename}</span>
+      </div>
+
+      <!-- Arrow -->
+      <div class="connector" title="Audio will be relayed onto this video">
+        <svg width="20" height="14" viewBox="0 0 20 14">
+          <path d="M0 7H14M11 3L17 7L11 11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+
+      <!-- Audio info -->
+      <div class="file-block audio-block">
+        <button class="play-btn" onclick={() => previewFile = { path: pair.audio.path, filename: pair.audio.filename, mediaType: 'audio' }} title="Preview audio">
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 1L9 5L2 9V1Z" fill="currentColor"/></svg>
+        </button>
+        <span class="file-duration">{formatDuration(pair.audio.durationSecs)}</span>
+        <span class="file-name" title="{pair.audio.channelCount ?? '?'}ch {pair.audio.sampleRate ? (pair.audio.sampleRate / 1000).toFixed(1) + 'kHz' : ''}">{pair.audio.filename}</span>
+      </div>
+
+      <!-- Duration warning -->
+      {#if durationWarning}
+        <span class="duration-warn" title={durationWarning}>
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M7 1L13 12H1L7 1Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
+            <path d="M7 5.5V8.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+            <circle cx="7" cy="10.5" r="0.5" fill="currentColor"/>
+          </svg>
+        </span>
+      {/if}
     {/if}
 
     <!-- Norm -->
@@ -369,6 +391,26 @@
   .thumb-placeholder {
     color: var(--text-muted);
     opacity: 0.4;
+  }
+
+  .audio-only-thumb {
+    background: rgba(8, 247, 254, 0.06);
+    border-color: rgba(8, 247, 254, 0.2);
+    color: var(--neon-cyan);
+    opacity: 0.7;
+  }
+
+  .audio-only-badge {
+    font-family: var(--font-display);
+    font-size: 8px;
+    letter-spacing: 0.12em;
+    color: var(--neon-cyan);
+    background: rgba(8, 247, 254, 0.08);
+    border: 1px solid rgba(8, 247, 254, 0.25);
+    border-radius: var(--radius-sm);
+    padding: 3px 8px;
+    flex-shrink: 0;
+    white-space: nowrap;
   }
 
   /* File block: duration + name inline */

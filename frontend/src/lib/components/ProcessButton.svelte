@@ -1,5 +1,5 @@
 <script>
-  let { pairCount = 0, isProcessing = false, onProcess, onClear, onCancel } = $props();
+  let { pairCount = 0, isProcessing = false, onProcess, onClear, onCancel, audioOnly = false } = $props();
 </script>
 
 <div class="process-bar">
@@ -21,7 +21,7 @@
       disabled={pairCount === 0}
       onclick={onProcess}
     >
-      LAYBACK {pairCount > 0 ? `(${pairCount})` : ''}
+      {audioOnly ? 'NORMALIZE' : 'LAYBACK'} {pairCount > 0 ? `(${pairCount})` : ''}
     </button>
   {/if}
 

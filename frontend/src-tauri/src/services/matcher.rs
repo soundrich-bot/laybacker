@@ -61,7 +61,7 @@ pub fn match_files(files: &[MediaFile]) -> Vec<MatchedPair> {
 
         pairs.push(MatchedPair {
             id: Uuid::new_v4().to_string(),
-            video,
+            video: Some(video),
             audio,
             output_filename: String::new(), // Will be set by namer
             normalization_enabled: false,
@@ -134,6 +134,6 @@ mod tests {
         let pairs = match_files(&files);
         assert_eq!(pairs.len(), 2);
         // Both pairs should reference the same video
-        assert_eq!(pairs[0].video.filename_no_ext, pairs[1].video.filename_no_ext);
+        assert_eq!(pairs[0].video.as_ref().unwrap().filename_no_ext, pairs[1].video.as_ref().unwrap().filename_no_ext);
     }
 }

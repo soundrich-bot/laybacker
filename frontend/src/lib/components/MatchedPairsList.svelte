@@ -54,9 +54,15 @@
     </div>
   {:else}
     <div class="pairs-header">
-      <span class="pairs-count">{pairs.length} LAYBACK{pairs.length !== 1 ? 'S' : ''} READY</span>
+      {#if pairs.some(p => !p.video)}
+        <span class="pairs-count">{pairs.length} AUDIO FILE{pairs.length !== 1 ? 'S' : ''} READY</span>
+      {:else}
+        <span class="pairs-count">{pairs.length} LAYBACK{pairs.length !== 1 ? 'S' : ''} READY</span>
+      {/if}
       <div class="column-labels">
-        <span class="col-label col-video">VIDEO</span>
+        {#if pairs.every(p => p.video)}
+          <span class="col-label col-video">VIDEO</span>
+        {/if}
         <span class="col-label col-audio">AUDIO</span>
         <button
           class="col-norm-btn"

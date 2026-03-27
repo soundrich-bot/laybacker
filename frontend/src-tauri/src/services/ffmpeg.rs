@@ -123,6 +123,51 @@ pub fn build_mux_command(
     args
 }
 
+/// Build the ffmpeg command for audio-only processing (normalize + export)
+pub fn build_audio_only_command(
+    audio_path: &str,
+    output_path: &str,
+    settings: &ExportSettings,
+    audio_gain_db: Option<f64>,
+) -> Vec<String> {
+    let mut args: Vec<String> = Vec::new();
+
+    args.extend(["-y".to_string()]);
+    args.extend(["-i".to_string(), audio_path.to_string()]);
+
+    // Audio filter chain
+    let mut audio_filters: Vec<String> = Vec::new();
+
+    if let Some(gain) = audio_gain_db {
+        if gain.abs() > 0.001 {
+            audio_filters.push(format!("volume={}dB", gain));
+        }
+    }
+
+    if !audio_filters.is_empty() {
+        args.extend(["-af".to_string(), audio_filters.join(",")]);
+    }
+
+    let has_audio_filters = !audio_filters.is_empty();
+
+    match settings.audio_format {
+        AudioFormatOption::Original => {
+            if has_audio_filters {
+                args.extend(["-c:a".to_string(), "pcm_s24le".to_string()]);
+            } else {
+                args.extend(["-c:a".to_string(), "copy".to_string()]);
+            }
+        }
+        AudioFormatOption::Aac => {
+            args.extend(["-c:a".to_string(), "aac".to_string()]);
+            args.extend(["-b:a".to_string(), format!("{}", settings.aac_bitrate)]);
+        }
+    }
+
+    args.push(output_path.to_string());
+    args
+}
+
 /// Extract a thumbnail frame from a video file as a base64 JPEG data URL
 pub fn extract_thumbnail(video_path: &str, duration_secs: f64) -> Option<String> {
     use base64::{Engine as _, engine::general_purpose::STANDARD};

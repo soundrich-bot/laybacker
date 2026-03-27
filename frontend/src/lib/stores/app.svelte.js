@@ -86,7 +86,7 @@ async function autoMatch() {
     // Remember user customizations keyed by video+audio path combo
     const customizations = {};
     for (const p of matchedPairs) {
-      const key = `${p.video.path}|${p.audio.path}`;
+      const key = `${p.video?.path || 'none'}|${p.audio.path}`;
       customizations[key] = {
         outputFilename: p.outputFilename,
         normalizationEnabled: p.normalizationEnabled,
@@ -94,7 +94,26 @@ async function autoMatch() {
       };
     }
 
-    let pairs = await invoke('match_files', { files });
+    const videos = files.filter(f => f.mediaType === 'video');
+    const audios = files.filter(f => f.mediaType === 'audio');
+
+    let pairs;
+    if (videos.length === 0 && audios.length > 0) {
+      // Audio-only mode: create entries for each audio file
+      pairs = audios.map(audio => ({
+        id: crypto.randomUUID(),
+        video: null,
+        audio,
+        outputFilename: '',
+        normalizationEnabled: true,
+        normalizationSettings: { targetLufs: 0.0, truePeakLimit: -1.0 },
+        timecodeOffsetSecs: 0,
+        matchConfidence: 1.0,
+      }));
+    } else {
+      pairs = await invoke('match_files', { files });
+    }
+
     pairs = await invoke('generate_names', {
       pairs,
       removeDuplicates: namingSettings.removeDuplicates,
@@ -103,7 +122,7 @@ async function autoMatch() {
 
     // Restore user customizations for pairs that still exist
     pairs = pairs.map(p => {
-      const key = `${p.video.path}|${p.audio.path}`;
+      const key = `${p.video?.path || 'none'}|${p.audio.path}`;
       const custom = customizations[key];
       if (custom) {
         return { ...p, ...custom };

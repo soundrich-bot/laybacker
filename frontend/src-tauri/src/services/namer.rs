@@ -45,7 +45,12 @@ pub fn generate_name(
 pub fn generate_names(pairs: &mut [MatchedPair], remove_duplicates: bool, output_ext: &str) {
     // First pass: generate names
     for pair in pairs.iter_mut() {
-        pair.output_filename = generate_name(&pair.video, &pair.audio, remove_duplicates, output_ext);
+        if let Some(ref video) = pair.video {
+            pair.output_filename = generate_name(video, &pair.audio, remove_duplicates, output_ext);
+        } else {
+            // Audio-only: keep original extension
+            pair.output_filename = format!("{}_normalized.{}", pair.audio.filename_no_ext, pair.audio.extension);
+        }
     }
 
     // Second pass: check for duplicate output names and disambiguate

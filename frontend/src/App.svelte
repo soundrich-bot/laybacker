@@ -121,6 +121,7 @@
     onProcess={app.processAll}
     onCancel={app.cancelProcessing}
     onClear={app.clearAll}
+    audioOnly={app.matchedPairs.length > 0 && app.matchedPairs.every(p => !p.video)}
   />
 </div>
 

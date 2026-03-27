@@ -34,7 +34,7 @@ impl MediaFile {
 #[serde(rename_all = "camelCase")]
 pub struct MatchedPair {
     pub id: String,
-    pub video: MediaFile,
+    pub video: Option<MediaFile>,
     pub audio: MediaFile,
     pub output_filename: String,
     pub normalization_enabled: bool,

@@ -94,21 +94,31 @@ pub fn process_pair(
     }
 
     // Step 2: Build and run ffmpeg command
+    let is_audio_only = pair.video.is_none();
     progress_callback(ProcessingProgress {
         pair_id: pair_id.clone(),
         state: "muxing".to_string(),
         progress: 0.5,
-        message: "Muxing video and audio...".to_string(),
+        message: if is_audio_only { "Processing audio...".to_string() } else { "Muxing video and audio...".to_string() },
     });
 
-    let args = ffmpeg::build_mux_command(
-        &pair.video.path,
-        &pair.audio.path,
-        &output_path,
-        settings,
-        audio_gain_db,
-        pair.timecode_offset_secs,
-    );
+    let args = if let Some(ref video) = pair.video {
+        ffmpeg::build_mux_command(
+            &video.path,
+            &pair.audio.path,
+            &output_path,
+            settings,
+            audio_gain_db,
+            pair.timecode_offset_secs,
+        )
+    } else {
+        ffmpeg::build_audio_only_command(
+            &pair.audio.path,
+            &output_path,
+            settings,
+            audio_gain_db,
+        )
+    };
 
     match ffmpeg::run_ffmpeg(&args) {
         Ok(()) => {
@@ -189,11 +199,18 @@ fn resolve_output_path(pair: &MatchedPair, settings: &ExportSettings) -> String 
     };
 
     let filename = if pair.output_filename.is_empty() {
-        format!(
-            "{}_with audio.{}",
-            pair.video.filename_no_ext,
-            settings.output_extension()
-        )
+        if let Some(ref video) = pair.video {
+            format!(
+                "{}_with audio.{}",
+                video.filename_no_ext,
+                settings.output_extension()
+            )
+        } else {
+            format!(
+                "{}_normalized.wav",
+                pair.audio.filename_no_ext,
+            )
+        }
     } else {
         pair.output_filename.clone()
     };
