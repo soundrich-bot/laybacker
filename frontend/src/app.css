@@ -163,7 +163,7 @@ select {
 /* Fix selection in tame mode */
 :root.tame ::selection {
   background: var(--neon-pink);
-  color: #fff;
+  color: #fff7f0;
 }
 
 /* Scrollbar in tame mode */

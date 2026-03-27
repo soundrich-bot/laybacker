@@ -228,6 +228,10 @@
     text-shadow: 0 0 6px rgba(57, 255, 20, 0.5);
   }
 
+  :global(:root.tame) .checkmark {
+    text-shadow: none;
+  }
+
   .waiting-text {
     font-family: var(--font-display);
     font-size: 18px;
@@ -235,6 +239,10 @@
     color: var(--neon-cyan);
     margin-bottom: var(--gap-xs);
     text-shadow: 0 0 12px rgba(8, 247, 254, 0.3);
+  }
+
+  :global(:root.tame) .waiting-text {
+    text-shadow: none;
   }
 
   .waiting-hint {

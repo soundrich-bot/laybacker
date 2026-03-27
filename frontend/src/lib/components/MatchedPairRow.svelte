@@ -360,6 +360,14 @@
     border-color: rgba(255, 46, 99, 0.3);
   }
 
+  :global(:root.tame) .pair-card.complete {
+    border-color: rgba(106, 154, 90, 0.4);
+  }
+
+  :global(:root.tame) .pair-card.failed {
+    border-color: rgba(224, 122, 95, 0.4);
+  }
+
   /* === Row 1: Source files === */
   .source-row {
     display: flex;
@@ -552,13 +560,17 @@
     background: rgba(255, 46, 99, 0.1);
   }
 
+  :global(:root.tame) .remove-btn:hover {
+    background: rgba(224, 122, 95, 0.12);
+  }
+
   /* === Row 2: Output name + status === */
   .output-row {
     display: flex;
     align-items: center;
     gap: var(--gap-sm);
     padding: 4px var(--gap-md) 8px;
-    border-top: 1px solid rgba(255, 255, 255, 0.03);
+    border-top: 1px solid var(--border-color);
     margin: 0 4px;
     min-height: 40px;
     height: 40px;
@@ -745,6 +757,14 @@
     color: var(--neon-pink);
   }
 
+  :global(:root.tame) .result-badge.success {
+    background: rgba(106, 154, 90, 0.15);
+  }
+
+  :global(:root.tame) .result-badge.error {
+    background: rgba(224, 122, 95, 0.15);
+  }
+
   /* === Normalization detail panel === */
   .norm-detail-row {
     display: flex;
@@ -908,5 +928,15 @@
     border: 1px solid rgba(57, 255, 20, 0.15);
     border-radius: var(--radius-sm);
     width: fit-content;
+  }
+
+  :global(:root.tame) .norm-detail-row {
+    background: rgba(201, 162, 39, 0.06);
+    border-color: rgba(201, 162, 39, 0.2);
+  }
+
+  :global(:root.tame) .norm-measured {
+    background: rgba(106, 154, 90, 0.08);
+    border-color: rgba(106, 154, 90, 0.2);
   }
 </style>

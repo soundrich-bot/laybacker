@@ -128,10 +128,19 @@
 
   :global(:root.tame) .process-btn {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    color: #fff;
+    color: #fff7f0;
   }
 
   :global(:root.tame) .process-btn:hover:not(:disabled) {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  }
+
+  :global(:root.tame) .cancel-btn {
+    color: #fff7f0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+
+  :global(:root.tame) .cancel-btn:hover {
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
   }
 </style>

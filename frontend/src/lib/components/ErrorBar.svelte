@@ -33,6 +33,11 @@
     border-radius: var(--radius-sm);
   }
 
+  :global(:root.tame) .error-item {
+    background: rgba(224, 122, 95, 0.1);
+    border-color: rgba(224, 122, 95, 0.25);
+  }
+
   .error-icon {
     font-family: var(--font-display);
     font-size: 12px;

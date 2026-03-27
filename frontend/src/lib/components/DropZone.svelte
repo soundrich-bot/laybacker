@@ -131,4 +131,13 @@
   @keyframes spin {
     to { transform: rotate(360deg); }
   }
+
+  :global(:root.tame) .drop-zone.dragging {
+    background: rgba(90, 138, 122, 0.06);
+    box-shadow: none;
+  }
+
+  :global(:root.tame) .dragging .drop-text {
+    text-shadow: none;
+  }
 </style>

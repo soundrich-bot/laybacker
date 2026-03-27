@@ -218,6 +218,10 @@
     border-color: rgba(8, 247, 254, 0.3);
   }
 
+  :global(:root.tame) .cog-btn.open {
+    border-color: rgba(90, 138, 122, 0.35);
+  }
+
   .cog-dropdown {
     position: absolute;
     right: 0;
@@ -272,5 +276,9 @@
   .dropdown-item.active {
     background: rgba(8, 247, 254, 0.08);
     color: var(--neon-cyan);
+  }
+
+  :global(:root.tame) .dropdown-item.active {
+    background: rgba(90, 138, 122, 0.1);
   }
 </style>

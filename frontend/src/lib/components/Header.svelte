@@ -232,6 +232,16 @@
     box-shadow: 0 0 10px rgba(255, 46, 99, 0.15);
   }
 
+  :global(:root.tame) .donate-btn {
+    background: rgba(224, 122, 95, 0.1);
+    border-color: rgba(224, 122, 95, 0.35);
+  }
+
+  :global(:root.tame) .donate-btn:hover {
+    background: rgba(224, 122, 95, 0.18);
+    box-shadow: none;
+  }
+
   .feedback-btn {
     display: flex;
     align-items: center;
@@ -254,6 +264,16 @@
     background: rgba(0, 255, 255, 0.12);
     border-color: var(--neon-cyan);
     box-shadow: 0 0 10px rgba(0, 255, 255, 0.12);
+  }
+
+  :global(:root.tame) .feedback-btn {
+    background: rgba(90, 138, 122, 0.08);
+    border-color: rgba(90, 138, 122, 0.3);
+  }
+
+  :global(:root.tame) .feedback-btn:hover {
+    background: rgba(90, 138, 122, 0.15);
+    box-shadow: none;
   }
 
   .about-tech {
@@ -377,6 +397,21 @@
     background: rgba(255, 46, 99, 0.15);
     color: var(--neon-pink);
     border: 1px solid rgba(255, 46, 99, 0.3);
+  }
+
+  :global(:root.tame) .status-badge.good {
+    background: rgba(106, 154, 90, 0.15);
+    border-color: rgba(106, 154, 90, 0.3);
+  }
+
+  :global(:root.tame) .status-badge.bad {
+    background: rgba(224, 122, 95, 0.15);
+    border-color: rgba(224, 122, 95, 0.3);
+  }
+
+  :global(:root.tame) .about-panel,
+  :global(:root.tame) .help-panel {
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
   }
 
 </style>

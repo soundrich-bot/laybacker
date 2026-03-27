@@ -218,6 +218,19 @@
     background: rgba(255, 46, 99, 0.1);
   }
 
+  :global(:root.tame) .modal-overlay {
+    background: rgba(0, 0, 0, 0.5);
+  }
+
+  :global(:root.tame) .modal-content {
+    box-shadow: 0 16px 64px rgba(0, 0, 0, 0.15);
+  }
+
+  :global(:root.tame) .close-btn:hover {
+    border-color: rgba(224, 122, 95, 0.3);
+    background: rgba(224, 122, 95, 0.1);
+  }
+
   .media-area {
     background: #000;
     display: flex;
