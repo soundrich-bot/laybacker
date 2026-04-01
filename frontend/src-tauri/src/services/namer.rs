@@ -66,8 +66,14 @@ pub fn generate_names(pairs: &mut [MatchedPair], remove_duplicates: bool, output
             if count > 1 {
                 let idx = name_indices.entry(pair.output_filename.clone()).or_insert(0);
                 *idx += 1;
-                let stem = pair.output_filename.trim_end_matches(&format!(".{}", output_ext));
-                pair.output_filename = format!("{}_{}.{}", stem, idx, output_ext);
+                // Split on the actual extension in the filename, not the video output_ext
+                if let Some(dot_pos) = pair.output_filename.rfind('.') {
+                    let stem = &pair.output_filename[..dot_pos];
+                    let ext = &pair.output_filename[dot_pos + 1..];
+                    pair.output_filename = format!("{}_{}.{}", stem, idx, ext);
+                } else {
+                    pair.output_filename = format!("{}_{}", pair.output_filename, idx);
+                }
             }
         }
     }

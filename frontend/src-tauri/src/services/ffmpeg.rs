@@ -135,6 +135,9 @@ pub fn build_audio_only_command(
     args.extend(["-y".to_string()]);
     args.extend(["-i".to_string(), audio_path.to_string()]);
 
+    // Strip any video streams (e.g. album art in M4A/MP3)
+    args.push("-vn".to_string());
+
     // Audio filter chain
     let mut audio_filters: Vec<String> = Vec::new();
 
@@ -150,10 +153,25 @@ pub fn build_audio_only_command(
 
     let has_audio_filters = !audio_filters.is_empty();
 
+    // Choose codec based on output format and container compatibility
+    let output_ext = std::path::Path::new(output_path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+
     match settings.audio_format {
         AudioFormatOption::Original => {
             if has_audio_filters {
-                args.extend(["-c:a".to_string(), "pcm_s24le".to_string()]);
+                // Can't stream copy with filters — pick a lossless codec
+                // that matches the output container
+                let codec = match output_ext.as_str() {
+                    "aif" | "aiff" => "pcm_s24be",
+                    "flac" => "flac",
+                    "m4a" | "mp4" => "alac",
+                    _ => "pcm_s24le", // WAV, BWF, and others
+                };
+                args.extend(["-c:a".to_string(), codec.to_string()]);
             } else {
                 args.extend(["-c:a".to_string(), "copy".to_string()]);
             }
@@ -230,11 +248,15 @@ pub fn parse_loudness_output(stderr: &str) -> Option<(f64, f64)> {
     Some((lufs, true_peak))
 }
 
-/// Run an ffmpeg command and return success/failure
+/// Run an ffmpeg command and return success/failure.
+/// On failure, removes any 0-byte output file left behind by ffmpeg's -y flag.
 pub fn run_ffmpeg(args: &[String]) -> Result<(), String> {
     let ffmpeg = find_ffmpeg();
 
     log::info!("Running: {} {}", ffmpeg, args.join(" "));
+
+    // The output path is the last argument
+    let output_path = args.last().map(|s| s.as_str());
 
     let output = Command::new(&ffmpeg)
         .args(args)
@@ -242,8 +264,28 @@ pub fn run_ffmpeg(args: &[String]) -> Result<(), String> {
         .map_err(|e| format!("Failed to run ffmpeg: {}", e))?;
 
     if !output.status.success() {
+        // Clean up empty/broken output file left by -y flag
+        if let Some(path) = output_path {
+            let p = std::path::Path::new(path);
+            if p.exists() {
+                if let Ok(meta) = p.metadata() {
+                    if meta.len() == 0 {
+                        let _ = std::fs::remove_file(p);
+                    }
+                }
+            }
+        }
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(format!("ffmpeg failed: {}", stderr));
+    }
+
+    // Also check that the output file was actually created and is non-empty
+    if let Some(path) = output_path {
+        let p = std::path::Path::new(path);
+        if !p.exists() || p.metadata().map(|m| m.len() == 0).unwrap_or(true) {
+            let _ = std::fs::remove_file(p);
+            return Err("ffmpeg produced an empty output file".to_string());
+        }
     }
 
     Ok(())
