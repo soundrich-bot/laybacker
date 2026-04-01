@@ -27,7 +27,7 @@
 
   async function sendFeedback(e) {
     e.stopPropagation();
-    const subject = encodeURIComponent('Laybacker Feedback v0.1.0');
+    const subject = encodeURIComponent('Laybacker Feedback v0.1.3');
     const url = `mailto:${FEEDBACK_EMAIL}?subject=${subject}`;
     try {
       await invoke('open_url', { url });
@@ -57,7 +57,7 @@
 
     {#if showAbout}
       <div class="about-panel">
-        <div class="about-version">v0.1.0</div>
+        <div class="about-version">v0.1.3</div>
         <div class="about-divider"></div>
         <div class="about-copy">&copy; 2026 Soundrich Ltd.</div>
         <div class="about-note">All media is processed locally on your machine. Nothing is uploaded.</div>
