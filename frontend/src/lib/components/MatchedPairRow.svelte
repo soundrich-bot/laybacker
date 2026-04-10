@@ -410,7 +410,7 @@
 
   .audio-only-badge {
     font-family: var(--font-display);
-    font-size: 8px;
+    font-size: 9px;
     letter-spacing: 0.12em;
     color: var(--neon-cyan);
     background: rgba(8, 247, 254, 0.08);
@@ -455,7 +455,7 @@
 
   .file-duration {
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 700;
     color: var(--text-primary);
     flex-shrink: 0;
@@ -463,7 +463,7 @@
 
   .file-name {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text-secondary);
     word-break: break-all;
     line-height: 1.3;
@@ -506,7 +506,7 @@
     background: var(--bg-dark);
     color: var(--text-muted);
     font-family: var(--font-display);
-    font-size: 9px;
+    font-size: 10px;
     letter-spacing: 0.1em;
     cursor: pointer;
     transition: all 0.2s;
@@ -526,7 +526,7 @@
 
   .norm-settings-btn {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: 11px;
     color: var(--neon-yellow);
     background: rgba(237, 255, 33, 0.08);
     border: 1px solid rgba(237, 255, 33, 0.3);
@@ -547,7 +547,7 @@
     background: none;
     border: none;
     color: var(--text-muted);
-    font-size: 18px;
+    font-size: 19px;
     cursor: pointer;
     padding: 4px 8px;
     border-radius: var(--radius-sm);
@@ -578,7 +578,7 @@
 
   .output-label {
     font-family: var(--font-display);
-    font-size: 8px;
+    font-size: 9px;
     letter-spacing: 0.12em;
     color: var(--text-muted);
     flex-shrink: 0;
@@ -610,7 +610,7 @@
 
   .output-name-text {
     font-family: var(--font-mono);
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 700;
     color: var(--text-primary);
     word-break: break-all;
@@ -651,7 +651,7 @@
 
   .name-edit {
     width: 100%;
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 700;
     font-family: var(--font-mono);
     padding: 4px 10px;
@@ -699,7 +699,7 @@
 
   .progress-label {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: 10px;
     color: var(--text-muted);
     white-space: nowrap;
   }
@@ -715,7 +715,7 @@
     align-items: center;
     gap: 4px;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.05em;
     color: var(--neon-cyan);
@@ -739,7 +739,7 @@
 
   .result-badge {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 700;
     padding: 4px 10px;
     border-radius: var(--radius-sm);
@@ -772,7 +772,7 @@
     gap: var(--gap-md);
     padding: var(--gap-md) var(--gap-lg);
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text-secondary);
     background: rgba(237, 255, 33, 0.03);
     border: 1px solid rgba(237, 255, 33, 0.15);
@@ -794,7 +794,7 @@
 
   .mode-btn {
     font-family: var(--font-display);
-    font-size: 9px;
+    font-size: 10px;
     letter-spacing: 0.1em;
     padding: 6px 14px;
     border: none;
@@ -823,7 +823,7 @@
   }
 
   .mode-description {
-    font-size: 10px;
+    font-size: 11px;
     color: var(--text-muted);
     margin: 0;
     font-style: italic;
@@ -836,7 +836,7 @@
 
   .preset-btn {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
     padding: 6px 12px;
     border: 1px solid var(--border-accent);
@@ -864,7 +864,7 @@
   }
 
   .preset-sub {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 400;
     opacity: 0.6;
     letter-spacing: 0.05em;
@@ -882,13 +882,13 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    font-size: 10px;
+    font-size: 11px;
     color: var(--text-muted);
   }
 
   .custom-label {
     font-family: var(--font-display);
-    font-size: 9px;
+    font-size: 10px;
     letter-spacing: 0.1em;
     color: var(--neon-yellow);
     opacity: 0.7;
@@ -897,7 +897,7 @@
 
   .custom-input input[type="number"] {
     width: 65px;
-    font-size: 11px;
+    font-size: 12px;
     font-family: var(--font-mono);
     padding: 4px 6px;
     background: var(--bg-dark);
@@ -915,13 +915,13 @@
 
   .unit {
     color: var(--text-muted);
-    font-size: 10px;
+    font-size: 11px;
   }
 
   /* Measured result display */
   .norm-measured {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: 11px;
     color: var(--neon-green);
     padding: var(--gap-xs) var(--gap-sm);
     background: rgba(57, 255, 20, 0.05);

@@ -62,7 +62,7 @@ html, body {
   background: var(--bg-dark);
   color: var(--text-primary);
   font-family: var(--font-body);
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.5;
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
@@ -105,7 +105,7 @@ select, input[type="number"], input[type="text"] {
   border-radius: var(--radius-sm);
   padding: 6px 10px;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 13px;
   outline: none;
   transition: border-color 0.2s;
 }

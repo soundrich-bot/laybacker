@@ -40,7 +40,7 @@
 
   .error-icon {
     font-family: var(--font-display);
-    font-size: 12px;
+    font-size: 13px;
     color: var(--neon-pink);
     width: 20px;
     height: 20px;
@@ -54,7 +54,7 @@
 
   .error-text {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: 12px;
     color: var(--neon-pink);
     flex: 1;
   }
@@ -63,7 +63,7 @@
     background: none;
     border: none;
     color: var(--neon-pink);
-    font-size: 16px;
+    font-size: 17px;
     cursor: pointer;
     padding: 2px 6px;
     opacity: 0.6;

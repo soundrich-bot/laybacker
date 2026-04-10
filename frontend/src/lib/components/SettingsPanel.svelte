@@ -144,7 +144,7 @@
 
   .setting-label {
     font-family: var(--font-display);
-    font-size: 10px;
+    font-size: 11px;
     letter-spacing: 0.15em;
     color: var(--text-muted);
     min-width: 50px;
@@ -162,7 +162,7 @@
 
   .option-btn {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
     padding: 4px 12px;
     border: none;
@@ -238,7 +238,7 @@
   .dropdown-label {
     display: block;
     font-family: var(--font-display);
-    font-size: 8px;
+    font-size: 9px;
     letter-spacing: 0.15em;
     color: var(--text-muted);
     padding: 4px 12px 2px;
@@ -256,7 +256,7 @@
     width: 100%;
     text-align: left;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.05em;
     padding: 5px 12px;

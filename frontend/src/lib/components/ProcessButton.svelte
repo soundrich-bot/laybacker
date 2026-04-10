@@ -46,7 +46,7 @@
 
   .clear-btn {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: 11px;
     letter-spacing: 0.1em;
     color: var(--text-muted);
     background: none;
@@ -69,7 +69,7 @@
 
   .process-btn {
     font-family: var(--font-display);
-    font-size: 16px;
+    font-size: 17px;
     letter-spacing: 0.2em;
     color: var(--bg-dark);
     background: var(--neon-green);
@@ -105,7 +105,7 @@
 
   .cancel-btn {
     font-family: var(--font-display);
-    font-size: 16px;
+    font-size: 17px;
     letter-spacing: 0.2em;
     color: #fff;
     background: var(--neon-pink);

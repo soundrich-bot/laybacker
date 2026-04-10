@@ -111,7 +111,7 @@
 
   .pairs-count {
     font-family: var(--font-display);
-    font-size: 11px;
+    font-size: 12px;
     letter-spacing: 0.15em;
     color: var(--neon-cyan);
   }
@@ -125,7 +125,7 @@
 
   .col-label {
     font-family: var(--font-display);
-    font-size: 9px;
+    font-size: 10px;
     letter-spacing: 0.15em;
     color: var(--text-muted);
     opacity: 0.6;
@@ -143,7 +143,7 @@
 
   .col-norm-btn {
     font-family: var(--font-display);
-    font-size: 9px;
+    font-size: 10px;
     letter-spacing: 0.1em;
     color: var(--text-muted);
     background: none;
@@ -200,7 +200,7 @@
 
   .empty-text {
     font-family: var(--font-display);
-    font-size: 14px;
+    font-size: 15px;
     letter-spacing: 0.15em;
     color: var(--text-muted);
     margin-bottom: var(--gap-xs);
@@ -208,7 +208,7 @@
 
   .empty-hint {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text-muted);
   }
 
@@ -223,7 +223,7 @@
     position: absolute;
     bottom: -2px;
     right: -6px;
-    font-size: 14px;
+    font-size: 15px;
     color: var(--neon-green);
     text-shadow: 0 0 6px rgba(57, 255, 20, 0.5);
   }
@@ -234,7 +234,7 @@
 
   .waiting-text {
     font-family: var(--font-display);
-    font-size: 18px;
+    font-size: 19px;
     letter-spacing: 0.15em;
     color: var(--neon-cyan);
     margin-bottom: var(--gap-xs);
@@ -247,7 +247,7 @@
 
   .waiting-hint {
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: 13px;
     color: var(--text-secondary);
     letter-spacing: 0.03em;
   }

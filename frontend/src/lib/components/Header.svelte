@@ -146,7 +146,7 @@
 
   .logo {
     font-family: var(--font-display);
-    font-size: 28px;
+    font-size: 29px;
     letter-spacing: 0.15em;
     color: var(--neon-pink);
     margin: 0;
@@ -185,7 +185,7 @@
 
   .about-version {
     font-family: var(--font-display);
-    font-size: 13px;
+    font-size: 14px;
     letter-spacing: 0.12em;
     color: var(--neon-cyan);
   }
@@ -198,14 +198,14 @@
 
   .about-copy {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text-secondary);
     letter-spacing: 0.03em;
   }
 
   .about-note {
     font-family: var(--font-body);
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text-muted);
     line-height: 1.4;
   }
@@ -217,7 +217,7 @@
     gap: 6px;
     width: 100%;
     font-family: var(--font-display);
-    font-size: 10px;
+    font-size: 11px;
     letter-spacing: 0.12em;
     color: var(--neon-pink);
     background: rgba(255, 46, 99, 0.08);
@@ -251,7 +251,7 @@
     gap: 6px;
     width: 100%;
     font-family: var(--font-display);
-    font-size: 10px;
+    font-size: 11px;
     letter-spacing: 0.12em;
     color: var(--neon-cyan);
     background: rgba(0, 255, 255, 0.06);
@@ -280,7 +280,7 @@
 
   .about-tech {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: 10px;
     color: var(--text-muted);
     opacity: 0.6;
     letter-spacing: 0.05em;
@@ -288,7 +288,7 @@
 
   .about-disclaimer {
     font-family: var(--font-body);
-    font-size: 9px;
+    font-size: 10px;
     color: var(--text-muted);
     line-height: 1.5;
     opacity: 0.5;
@@ -296,7 +296,7 @@
 
   .tagline {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text-muted);
     letter-spacing: 0.1em;
     text-transform: lowercase;
@@ -345,7 +345,7 @@
 
   .help-title {
     font-family: var(--font-display);
-    font-size: 12px;
+    font-size: 13px;
     letter-spacing: 0.12em;
     color: var(--neon-cyan);
   }
@@ -358,7 +358,7 @@
 
   .help-intro {
     font-family: var(--font-body);
-    font-size: 13px;
+    font-size: 14px;
     color: var(--text-primary);
     margin: 0 0 12px 0;
     font-weight: 600;
@@ -366,7 +366,7 @@
 
   .help-steps {
     font-family: var(--font-body);
-    font-size: 12px;
+    font-size: 13px;
     color: var(--text-secondary);
     line-height: 1.5;
     padding-left: 18px;
@@ -382,14 +382,14 @@
 
   .help-note {
     font-family: var(--font-body);
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text-muted);
     line-height: 1.4;
   }
 
   .status-badge {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: 11px;
     padding: 3px 8px;
     border-radius: var(--radius-sm);
     letter-spacing: 0.05em;

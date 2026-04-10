@@ -182,7 +182,7 @@
 
   .modal-type {
     font-family: var(--font-display);
-    font-size: 9px;
+    font-size: 10px;
     letter-spacing: 0.12em;
     color: var(--neon-cyan);
     flex-shrink: 0;
@@ -190,7 +190,7 @@
 
   .modal-filename {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text-secondary);
     flex: 1;
     min-width: 0;
@@ -203,7 +203,7 @@
     background: none;
     border: 1px solid var(--border-color);
     color: var(--text-muted);
-    font-size: 20px;
+    font-size: 21px;
     line-height: 1;
     cursor: pointer;
     padding: 2px 8px;
@@ -275,7 +275,7 @@
 
   .error-msg {
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: 13px;
     color: var(--neon-pink);
     padding: 32px;
   }
@@ -350,7 +350,7 @@
 
   .time-display {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: 11px;
     color: var(--text-muted);
     flex-shrink: 0;
     min-width: 80px;

@@ -93,7 +93,7 @@
 
   .drop-text {
     font-family: var(--font-display);
-    font-size: 16px;
+    font-size: 17px;
     letter-spacing: 0.15em;
     color: var(--text-secondary);
     margin-bottom: var(--gap-xs);
@@ -106,14 +106,14 @@
 
   .drop-hint {
     font-family: var(--font-body);
-    font-size: 12px;
+    font-size: 13px;
     color: var(--text-secondary);
     margin-bottom: var(--gap-xs);
   }
 
   .drop-formats {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: 11px;
     color: var(--text-muted);
     letter-spacing: 0.05em;
   }
