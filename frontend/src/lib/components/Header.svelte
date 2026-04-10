@@ -99,6 +99,7 @@
             <li><strong>Edit filenames</strong> — The Smart Filename is a blend of both filenames with duplicate information removed. Click to rename your new file. Use the clock icon to add a timestamp.</li>
             <li><strong>Normalise</strong> — Click NORM on a file (or NORM ALL) to enable loudness or True Peak derived normalisation. Click the badge to choose a standard (EBU R128, streaming, full scale).</li>
             <li><strong>Choose format</strong> — Pick ORIGINAL to leave the format untouched or H.264/AAC to make file sizes more manageable.</li>
+            <li><strong>6 Fr (Broadcast Silence)</strong> — Click 6 Fr on any file to enforce 6 frames of digital silence at the head and tail of the audio, as required by UK broadcasters. Laybacker checks your file and shows a warning if audio is present in those regions. On export, the silence is applied automatically with a short fade to prevent clicks.</li>
             <li><strong>Layback</strong> — Hit the green button. Output files are saved alongside your audio files.</li>
           </ol>
           <div class="help-divider"></div>
