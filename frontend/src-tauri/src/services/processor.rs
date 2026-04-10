@@ -102,6 +102,12 @@ pub fn process_pair(
         message: if is_audio_only { "Processing audio...".to_string() } else { "Muxing video and audio...".to_string() },
     });
 
+    let compliance = if pair.silence_compliance {
+        Some((pair.audio.duration_secs, pair.silence_ms, pair.fade_ms))
+    } else {
+        None
+    };
+
     let args = if let Some(ref video) = pair.video {
         ffmpeg::build_mux_command(
             &video.path,
@@ -110,6 +116,7 @@ pub fn process_pair(
             settings,
             audio_gain_db,
             pair.timecode_offset_secs,
+            compliance,
         )
     } else {
         ffmpeg::build_audio_only_command(
@@ -117,6 +124,7 @@ pub fn process_pair(
             &output_path,
             settings,
             audio_gain_db,
+            compliance,
         )
     };
 

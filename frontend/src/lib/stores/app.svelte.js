@@ -109,6 +109,9 @@ async function autoMatch() {
         normalizationSettings: { targetLufs: 0.0, truePeakLimit: -1.0 },
         timecodeOffsetSecs: 0,
         matchConfidence: 1.0,
+        silenceCompliance: false,
+        silenceMs: 240.0,
+        fadeMs: 5.0,
       }));
     } else {
       pairs = await invoke('match_files', { files });
@@ -195,6 +198,15 @@ function updatePairNormalization(pairId, enabled, settings) {
   });
 }
 
+function updatePairCompliance(pairId, enabled) {
+  matchedPairs = matchedPairs.map(p => {
+    if (p.id === pairId) {
+      return { ...p, silenceCompliance: enabled };
+    }
+    return p;
+  });
+}
+
 function updatePairFilename(pairId, filename) {
   matchedPairs = matchedPairs.map(p => {
     if (p.id === pairId) {
@@ -263,6 +275,7 @@ export function getAppState() {
     cancelProcessing,
     updateProgress,
     updatePairNormalization,
+    updatePairCompliance,
     updatePairFilename,
     removePair,
     toggleAllNorm,

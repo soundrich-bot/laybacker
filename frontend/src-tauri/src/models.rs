@@ -41,6 +41,9 @@ pub struct MatchedPair {
     pub normalization_settings: NormalizationSettings,
     pub timecode_offset_secs: f64,
     pub match_confidence: f64,
+    pub silence_compliance: bool,
+    pub silence_ms: f64,
+    pub fade_ms: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

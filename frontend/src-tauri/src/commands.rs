@@ -143,6 +143,16 @@ pub fn get_resource_path(app: tauri::AppHandle, resource: String) -> Result<Stri
     Ok(path.to_string_lossy().to_string())
 }
 
+/// Check silence compliance on an audio file (head/tail silence for broadcast)
+#[tauri::command]
+pub async fn check_silence(audio_path: String, duration_secs: f64, silence_ms: f64) -> Result<(bool, bool, f64, f64), String> {
+    tokio::task::spawn_blocking(move || {
+        ffmpeg::check_silence_compliance(&audio_path, duration_secs, silence_ms)
+    })
+    .await
+    .map_err(|e| format!("Task failed: {}", e))?
+}
+
 /// Play a sound file (for completion notification)
 #[tauri::command]
 pub fn play_sound(path: String) -> Result<(), String> {

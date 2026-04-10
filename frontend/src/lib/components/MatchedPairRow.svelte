@@ -1,12 +1,15 @@
 <script>
   import MediaPreview from './MediaPreview.svelte';
 
+  import { invoke } from '@tauri-apps/api/core';
+
   let {
     pair,
     progress = null,
     result = null,
     onUpdateNormalization,
     onUpdateFilename,
+    onUpdateCompliance,
     onRemove,
     onReveal,
     timestampFormat = 'YYYYMMDD_HHmm',
@@ -16,6 +19,8 @@
   let editingName = $state(false);
   let editName = $state('');
   let previewFile = $state(null); // { path, filename, mediaType }
+  let silenceCheck = $state(null); // { headHasAudio, tailHasAudio, headPeak, tailPeak }
+  let checkingSilence = $state(false);
 
   // Norm mode: 'broadcast' (LUFS target) or 'fullscale' (true peak only)
   // We infer from settings: if targetLufs is 0 or very high, it's full scale
@@ -77,6 +82,31 @@
   let isFailed = $derived(result?.success === false);
 
   let isAudioOnly = $derived(!pair.video);
+
+  async function toggleCompliance() {
+    const newEnabled = !pair.silenceCompliance;
+    onUpdateCompliance(pair.id, newEnabled);
+    if (newEnabled && !silenceCheck) {
+      await runSilenceCheck();
+    }
+  }
+
+  async function runSilenceCheck() {
+    checkingSilence = true;
+    try {
+      const [headHasAudio, tailHasAudio, headPeak, tailPeak] = await invoke('check_silence', {
+        audioPath: pair.audio.path,
+        durationSecs: pair.audio.durationSecs,
+        silenceMs: pair.silenceMs ?? 240.0,
+      });
+      silenceCheck = { headHasAudio, tailHasAudio, headPeak, tailPeak };
+    } catch (e) {
+      console.error('Silence check failed:', e);
+      silenceCheck = null;
+    } finally {
+      checkingSilence = false;
+    }
+  }
 
   // Duration mismatch detection (tolerance of 0.5s)
   let durationDiff = $derived(pair.video ? pair.audio.durationSecs - pair.video.durationSecs : 0);
@@ -182,6 +212,31 @@
         </button>
       {/if}
     </div>
+
+    <!-- Silence compliance -->
+    <button
+      class="silence-toggle"
+      class:active={pair.silenceCompliance}
+      onclick={toggleCompliance}
+      title={pair.silenceCompliance ? "6-frame silence check ON — click to disable" : "Check for 6-frame silence at head/tail (UK broadcast)"}
+    >
+      6F
+    </button>
+    {#if pair.silenceCompliance && silenceCheck}
+      {#if silenceCheck.headHasAudio || silenceCheck.tailHasAudio}
+        <span class="silence-warn" title={`Audio detected in ${silenceCheck.headHasAudio ? 'head' : ''}${silenceCheck.headHasAudio && silenceCheck.tailHasAudio ? ' & ' : ''}${silenceCheck.tailHasAudio ? 'tail' : ''} — will be fixed on export`}>
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M7 1L13 12H1L7 1Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
+            <path d="M7 5.5V8.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+            <circle cx="7" cy="10.5" r="0.5" fill="currentColor"/>
+          </svg>
+        </span>
+      {:else}
+        <span class="silence-pass" title="Head and tail silence OK">&#10003;</span>
+      {/if}
+    {:else if pair.silenceCompliance && checkingSilence}
+      <span class="silence-checking">...</span>
+    {/if}
 
     <!-- Remove -->
     {#if !progress && !result}
@@ -541,6 +596,54 @@
 
   .norm-settings-btn:hover {
     background: rgba(237, 255, 33, 0.15);
+  }
+
+  .silence-toggle {
+    padding: 4px 8px;
+    border-radius: var(--radius-sm);
+    border: 2px solid var(--border-accent);
+    background: var(--bg-dark);
+    color: var(--text-muted);
+    font-family: var(--font-display);
+    font-size: 10px;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }
+
+  .silence-toggle:hover {
+    border-color: var(--neon-orange);
+    color: var(--text-secondary);
+  }
+
+  .silence-toggle.active {
+    border-color: var(--neon-orange);
+    color: var(--bg-dark);
+    background: var(--neon-orange);
+    box-shadow: 0 0 8px rgba(255, 110, 39, 0.3);
+  }
+
+  .silence-warn {
+    flex-shrink: 0;
+    color: var(--neon-orange);
+    display: flex;
+    align-items: center;
+    cursor: help;
+  }
+
+  .silence-pass {
+    flex-shrink: 0;
+    color: var(--neon-green);
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  .silence-checking {
+    flex-shrink: 0;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 10px;
   }
 
   .remove-btn {

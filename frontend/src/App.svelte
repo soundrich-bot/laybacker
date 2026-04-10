@@ -99,6 +99,7 @@
     videoCount={app.getVideos().length}
     audioCount={app.getAudios().length}
     onUpdateNormalization={app.updatePairNormalization}
+    onUpdateCompliance={app.updatePairCompliance}
     onUpdateFilename={app.updatePairFilename}
     onRemove={app.removePair}
     onReveal={app.revealInFinder}

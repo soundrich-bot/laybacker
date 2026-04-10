@@ -68,6 +68,9 @@ pub fn match_files(files: &[MediaFile]) -> Vec<MatchedPair> {
             normalization_settings: NormalizationSettings::default(),
             timecode_offset_secs: 0.0,
             match_confidence: *combined,
+            silence_compliance: false,
+            silence_ms: 240.0,
+            fade_ms: 5.0,
         });
     }
 

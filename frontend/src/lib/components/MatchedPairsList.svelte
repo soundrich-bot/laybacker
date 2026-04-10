@@ -8,6 +8,7 @@
     videoCount = 0,
     audioCount = 0,
     onUpdateNormalization,
+    onUpdateCompliance,
     onUpdateFilename,
     onRemove,
     onReveal,
@@ -82,6 +83,7 @@
           progress={progressMap[pair.id] ?? null}
           result={getResult(pair.id)}
           {onUpdateNormalization}
+          {onUpdateCompliance}
           {onUpdateFilename}
           {onRemove}
           {onReveal}

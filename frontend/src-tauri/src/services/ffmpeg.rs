@@ -49,6 +49,7 @@ pub fn build_mux_command(
     settings: &ExportSettings,
     audio_gain_db: Option<f64>,
     timecode_offset_secs: f64,
+    compliance: Option<(f64, f64, f64)>, // (duration_secs, silence_ms, fade_ms)
 ) -> Vec<String> {
     let mut args: Vec<String> = Vec::new();
 
@@ -90,6 +91,11 @@ pub fn build_mux_command(
         }
     }
 
+    // Silence compliance (UK broadcast: 6 frames silence at head/tail + fade)
+    if let Some((duration, silence_ms, fade_ms)) = compliance {
+        audio_filters.extend(build_compliance_filters(duration, silence_ms, fade_ms));
+    }
+
     if !audio_filters.is_empty() {
         args.extend(["-af".to_string(), audio_filters.join(",")]);
     }
@@ -129,6 +135,7 @@ pub fn build_audio_only_command(
     output_path: &str,
     settings: &ExportSettings,
     audio_gain_db: Option<f64>,
+    compliance: Option<(f64, f64, f64)>,
 ) -> Vec<String> {
     let mut args: Vec<String> = Vec::new();
 
@@ -145,6 +152,11 @@ pub fn build_audio_only_command(
         if gain.abs() > 0.001 {
             audio_filters.push(format!("volume={}dB", gain));
         }
+    }
+
+    // Silence compliance
+    if let Some((duration, silence_ms, fade_ms)) = compliance {
+        audio_filters.extend(build_compliance_filters(duration, silence_ms, fade_ms));
     }
 
     if !audio_filters.is_empty() {
@@ -214,6 +226,80 @@ pub fn extract_thumbnail(video_path: &str, duration_secs: f64) -> Option<String>
 
     let b64 = STANDARD.encode(&output.stdout);
     Some(format!("data:image/jpeg;base64,{}", b64))
+}
+
+/// Check if the first/last N ms of audio contain non-silence.
+/// Returns (head_has_audio, tail_has_audio, head_peak_db, tail_peak_db).
+pub fn check_silence_compliance(audio_path: &str, duration_secs: f64, silence_ms: f64) -> Result<(bool, bool, f64, f64), String> {
+    let ffmpeg = find_ffmpeg();
+    let silence_secs = silence_ms / 1000.0;
+    let threshold_db = -60.0; // anything above -60dB is considered non-silent
+
+    // Check head
+    let head_output = Command::new(&ffmpeg)
+        .args([
+            "-i", audio_path,
+            "-af", &format!("atrim=0:{},astats=metadata=1:reset=1", silence_secs),
+            "-f", "null", "-",
+        ])
+        .output()
+        .map_err(|e| format!("Failed to check head silence: {}", e))?;
+
+    let head_stderr = String::from_utf8_lossy(&head_output.stderr);
+    let head_peak = parse_peak_from_astats(&head_stderr).unwrap_or(-120.0);
+    let head_has_audio = head_peak > threshold_db;
+
+    // Check tail
+    let tail_start = (duration_secs - silence_secs).max(0.0);
+    let tail_output = Command::new(&ffmpeg)
+        .args([
+            "-i", audio_path,
+            "-af", &format!("atrim={}:{},astats=metadata=1:reset=1", tail_start, duration_secs),
+            "-f", "null", "-",
+        ])
+        .output()
+        .map_err(|e| format!("Failed to check tail silence: {}", e))?;
+
+    let tail_stderr = String::from_utf8_lossy(&tail_output.stderr);
+    let tail_peak = parse_peak_from_astats(&tail_stderr).unwrap_or(-120.0);
+    let tail_has_audio = tail_peak > threshold_db;
+
+    Ok((head_has_audio, tail_has_audio, head_peak, tail_peak))
+}
+
+/// Parse the peak level from ffmpeg astats output
+fn parse_peak_from_astats(stderr: &str) -> Option<f64> {
+    // Look for "Peak level dB:" in the astats output
+    for line in stderr.lines() {
+        if line.contains("Peak level dB:") {
+            let val = line.split(':').last()?.trim();
+            if val == "-inf" {
+                return Some(-120.0);
+            }
+            return val.parse::<f64>().ok();
+        }
+    }
+    None
+}
+
+/// Build silence compliance audio filters:
+/// - Replace first/last silence_ms with digital silence
+/// - Apply fade_ms fade up/down to prevent clicks
+pub fn build_compliance_filters(duration_secs: f64, silence_ms: f64, fade_ms: f64) -> Vec<String> {
+    let silence_secs = silence_ms / 1000.0;
+    let fade_secs = fade_ms / 1000.0;
+
+    let mut filters = Vec::new();
+    // Mute the first silence_ms
+    filters.push(format!("volume=enable='lt(t,{:.4})':volume=0", silence_secs));
+    // Mute the last silence_ms
+    filters.push(format!("volume=enable='gt(t,{:.4})':volume=0", duration_secs - silence_secs));
+    // Fade in after the head silence
+    filters.push(format!("afade=t=in:st={:.4}:d={:.4}", silence_secs, fade_secs));
+    // Fade out before the tail silence
+    filters.push(format!("afade=t=out:st={:.4}:d={:.4}", duration_secs - silence_secs - fade_secs, fade_secs));
+
+    filters
 }
 
 /// Build ffmpeg command to measure loudness (used as fallback if Rust measurement has issues)
