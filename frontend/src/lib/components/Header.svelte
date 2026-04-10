@@ -75,6 +75,8 @@
           SEND FEEDBACK
         </button>
         <div class="about-tech">Built with Tauri + Svelte + FFmpeg</div>
+        <div class="about-divider"></div>
+        <div class="about-disclaimer">This software is provided "as is" without warranty of any kind. Soundrich Ltd. accepts no liability for data loss, file corruption, or incorrect output. Always verify your output files before delivery or distribution. You are solely responsible for ensuring your media meets the required specifications.</div>
       </div>
     {/if}
   </div>
@@ -282,6 +284,14 @@
     color: var(--text-muted);
     opacity: 0.6;
     letter-spacing: 0.05em;
+  }
+
+  .about-disclaimer {
+    font-family: var(--font-body);
+    font-size: 9px;
+    color: var(--text-muted);
+    line-height: 1.5;
+    opacity: 0.5;
   }
 
   .tagline {
