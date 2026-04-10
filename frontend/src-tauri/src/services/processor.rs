@@ -48,6 +48,7 @@ pub fn process_pair(
     let mut measured_lufs = None;
     let mut measured_true_peak = None;
     let mut audio_gain_db: Option<f64> = None;
+    let mut loudnorm_filter: Option<String> = None;
 
     // Step 1: Measure and calculate normalization if enabled
     if pair.normalization_enabled {
@@ -58,37 +59,79 @@ pub fn process_pair(
             message: "Measuring loudness...".to_string(),
         });
 
-        match loudness::measure(&pair.audio.path) {
-            Ok(measurement) => {
-                measured_lufs = Some(measurement.integrated_lufs);
-                measured_true_peak = Some(measurement.true_peak_dbtp);
+        let is_broadcast_mode = pair.normalization_settings.target_lufs < 0.0;
 
-                let gain = loudness::calculate_gain(&measurement, &pair.normalization_settings);
-                if gain.abs() > 0.001 {
-                    audio_gain_db = Some(gain);
+        if is_broadcast_mode {
+            // Two-pass loudnorm for precise LUFS targeting
+            match ffmpeg::measure_loudnorm_full(&pair.audio.path) {
+                Ok(measurement) => {
+                    measured_lufs = Some(measurement.input_i);
+                    measured_true_peak = Some(measurement.input_tp);
+
+                    // Build the second-pass loudnorm filter with measured values
+                    loudnorm_filter = Some(ffmpeg::build_loudnorm_filter(
+                        &measurement,
+                        pair.normalization_settings.target_lufs,
+                        pair.normalization_settings.true_peak_limit,
+                    ));
+
+                    progress_callback(ProcessingProgress {
+                        pair_id: pair_id.clone(),
+                        state: "measured".to_string(),
+                        progress: 0.3,
+                        message: format!(
+                            "Measured: {:.1} LUFS, {:.1} dBTP → target {:.0} LUFS",
+                            measurement.input_i,
+                            measurement.input_tp,
+                            pair.normalization_settings.target_lufs,
+                        ),
+                    });
                 }
-
-                progress_callback(ProcessingProgress {
-                    pair_id: pair_id.clone(),
-                    state: "measured".to_string(),
-                    progress: 0.3,
-                    message: format!(
-                        "Measured: {:.1} LUFS, {:.1} dBTP. Gain: {:.1} dB",
-                        measurement.integrated_lufs,
-                        measurement.true_peak_dbtp,
-                        gain
-                    ),
-                });
+                Err(e) => {
+                    return ProcessingResult {
+                        pair_id,
+                        success: false,
+                        output_path: None,
+                        error: Some(format!("Loudness measurement failed: {}", e)),
+                        measured_lufs: None,
+                        measured_true_peak: None,
+                    };
+                }
             }
-            Err(e) => {
-                return ProcessingResult {
-                    pair_id,
-                    success: false,
-                    output_path: None,
-                    error: Some(format!("Loudness measurement failed: {}", e)),
-                    measured_lufs: None,
-                    measured_true_peak: None,
-                };
+        } else {
+            // Full-scale mode: simple gain to true peak limit
+            match loudness::measure(&pair.audio.path) {
+                Ok(measurement) => {
+                    measured_lufs = Some(measurement.integrated_lufs);
+                    measured_true_peak = Some(measurement.true_peak_dbtp);
+
+                    let gain = loudness::calculate_gain(&measurement, &pair.normalization_settings);
+                    if gain.abs() > 0.001 {
+                        audio_gain_db = Some(gain);
+                    }
+
+                    progress_callback(ProcessingProgress {
+                        pair_id: pair_id.clone(),
+                        state: "measured".to_string(),
+                        progress: 0.3,
+                        message: format!(
+                            "Measured: {:.1} LUFS, {:.1} dBTP. Gain: {:.1} dB",
+                            measurement.integrated_lufs,
+                            measurement.true_peak_dbtp,
+                            gain
+                        ),
+                    });
+                }
+                Err(e) => {
+                    return ProcessingResult {
+                        pair_id,
+                        success: false,
+                        output_path: None,
+                        error: Some(format!("Loudness measurement failed: {}", e)),
+                        measured_lufs: None,
+                        measured_true_peak: None,
+                    };
+                }
             }
         }
     }
@@ -115,6 +158,7 @@ pub fn process_pair(
             &output_path,
             settings,
             audio_gain_db,
+            loudnorm_filter.as_deref(),
             pair.timecode_offset_secs,
             compliance,
         )
@@ -124,6 +168,7 @@ pub fn process_pair(
             &output_path,
             settings,
             audio_gain_db,
+            loudnorm_filter.as_deref(),
             compliance,
         )
     };

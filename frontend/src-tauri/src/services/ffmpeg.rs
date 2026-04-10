@@ -48,6 +48,7 @@ pub fn build_mux_command(
     output_path: &str,
     settings: &ExportSettings,
     audio_gain_db: Option<f64>,
+    loudnorm_filter: Option<&str>,
     timecode_offset_secs: f64,
     compliance: Option<(f64, f64, f64)>, // (duration_secs, silence_ms, fade_ms)
 ) -> Vec<String> {
@@ -84,8 +85,10 @@ pub fn build_mux_command(
         audio_filters.push(format!("adelay={}|{}", delay_ms, delay_ms));
     }
 
-    // Gain adjustment for normalization
-    if let Some(gain) = audio_gain_db {
+    // Normalization: two-pass loudnorm (LUFS mode) or simple gain (full-scale mode)
+    if let Some(filter) = loudnorm_filter {
+        audio_filters.push(filter.to_string());
+    } else if let Some(gain) = audio_gain_db {
         if gain.abs() > 0.001 {
             audio_filters.push(format!("volume={}dB", gain));
         }
@@ -135,6 +138,7 @@ pub fn build_audio_only_command(
     output_path: &str,
     settings: &ExportSettings,
     audio_gain_db: Option<f64>,
+    loudnorm_filter: Option<&str>,
     compliance: Option<(f64, f64, f64)>,
 ) -> Vec<String> {
     let mut args: Vec<String> = Vec::new();
@@ -148,7 +152,10 @@ pub fn build_audio_only_command(
     // Audio filter chain
     let mut audio_filters: Vec<String> = Vec::new();
 
-    if let Some(gain) = audio_gain_db {
+    // Normalization: two-pass loudnorm (LUFS mode) or simple gain (full-scale mode)
+    if let Some(filter) = loudnorm_filter {
+        audio_filters.push(filter.to_string());
+    } else if let Some(gain) = audio_gain_db {
         if gain.abs() > 0.001 {
             audio_filters.push(format!("volume={}dB", gain));
         }
@@ -315,6 +322,34 @@ pub fn build_loudness_measure_command(audio_path: &str) -> Vec<String> {
     ]
 }
 
+/// Parse loudness measurement from ffmpeg loudnorm output (first pass)
+/// Returns (integrated_lufs, true_peak, lra, threshold) for use in second pass
+pub fn parse_loudness_output_full(stderr: &str) -> Option<LoudnormMeasurement> {
+    let json_start = stderr.rfind('{')?;
+    let json_end = stderr.rfind('}')? + 1;
+    let json_str = &stderr[json_start..json_end];
+
+    let json: serde_json::Value = serde_json::from_str(json_str).ok()?;
+
+    Some(LoudnormMeasurement {
+        input_i: json["input_i"].as_str()?.parse::<f64>().ok()?,
+        input_tp: json["input_tp"].as_str()?.parse::<f64>().ok()?,
+        input_lra: json["input_lra"].as_str()?.parse::<f64>().ok()?,
+        input_thresh: json["input_thresh"].as_str()?.parse::<f64>().ok()?,
+        target_offset: json["target_offset"].as_str()?.parse::<f64>().ok()?,
+    })
+}
+
+/// Measurement data from loudnorm first pass
+#[derive(Debug, Clone)]
+pub struct LoudnormMeasurement {
+    pub input_i: f64,
+    pub input_tp: f64,
+    pub input_lra: f64,
+    pub input_thresh: f64,
+    pub target_offset: f64,
+}
+
 /// Parse loudness measurement from ffmpeg loudnorm output
 pub fn parse_loudness_output(stderr: &str) -> Option<(f64, f64)> {
     // ffmpeg loudnorm outputs JSON in stderr
@@ -332,6 +367,40 @@ pub fn parse_loudness_output(stderr: &str) -> Option<(f64, f64)> {
         .and_then(|s| s.parse::<f64>().ok())?;
 
     Some((lufs, true_peak))
+}
+
+/// Build the two-pass loudnorm filter string for precise LUFS targeting.
+/// Uses the measurements from pass 1 to inform pass 2.
+pub fn build_loudnorm_filter(
+    measurement: &LoudnormMeasurement,
+    target_lufs: f64,
+    true_peak_limit: f64,
+) -> String {
+    format!(
+        "loudnorm=I={}:TP={}:LRA=11:measured_I={}:measured_TP={}:measured_LRA={}:measured_thresh={}:offset={}:linear=true:print_format=summary",
+        target_lufs,
+        true_peak_limit,
+        measurement.input_i,
+        measurement.input_tp,
+        measurement.input_lra,
+        measurement.input_thresh,
+        measurement.target_offset,
+    )
+}
+
+/// Run loudnorm first pass and return full measurement data
+pub fn measure_loudnorm_full(audio_path: &str) -> Result<LoudnormMeasurement, String> {
+    let ffmpeg = find_ffmpeg();
+    let args = build_loudness_measure_command(audio_path);
+
+    let output = Command::new(&ffmpeg)
+        .args(&args)
+        .output()
+        .map_err(|e| format!("Failed to run ffmpeg for loudness measurement: {}", e))?;
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    parse_loudness_output_full(&stderr)
+        .ok_or_else(|| "Failed to parse loudnorm measurement output".to_string())
 }
 
 /// Run an ffmpeg command and return success/failure.
