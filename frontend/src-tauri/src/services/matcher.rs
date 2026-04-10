@@ -3,7 +3,6 @@ use strsim::normalized_levenshtein;
 use uuid::Uuid;
 
 const DURATION_TOLERANCE: f64 = 2.0; // seconds — audio may be slightly longer/shorter
-const SIMILARITY_THRESHOLD: f64 = 0.3; // lenient — users choose what they drop
 
 /// Match audio files to video files by duration, then by name similarity
 pub fn match_files(files: &[MediaFile]) -> Vec<MatchedPair> {
@@ -46,7 +45,7 @@ pub fn match_files(files: &[MediaFile]) -> Vec<MatchedPair> {
     let mut assigned_audios: std::collections::HashSet<usize> = std::collections::HashSet::new();
     let mut pairs = Vec::new();
 
-    for (vi, ai, duration_delta, name_sim, combined) in &candidates {
+    for (vi, ai, _duration_delta, _name_sim, combined) in &candidates {
         if assigned_audios.contains(ai) {
             continue;
         }

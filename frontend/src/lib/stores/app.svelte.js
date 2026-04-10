@@ -61,18 +61,14 @@ async function scanFiles(paths) {
   isScanning = true;
   errors = [];
   try {
-    console.log('[store] invoking scan_files with', paths.length, 'paths');
     const scanned = await invoke('scan_files', { paths });
-    console.log('[store] scan returned', scanned.length, 'files');
 
     // Merge new files with existing, deduplicating by full path
     const existingPaths = new Set(files.map(f => f.path));
     const newFiles = scanned.filter(f => !existingPaths.has(f.path));
     files = [...files, ...newFiles];
-    console.log('[store] total files:', files.length);
 
     await autoMatch();
-    console.log('[store] autoMatch done, pairs:', matchedPairs.length);
   } catch (e) {
     console.error('[store] SCAN ERROR:', e);
     errors = [...errors, `Scan failed: ${e}`];
@@ -196,6 +192,7 @@ function updatePairNormalization(pairId, enabled, settings) {
     }
     return p;
   });
+  regenerateNames();
 }
 
 function updatePairCompliance(pairId, enabled) {
@@ -218,16 +215,22 @@ function updatePairFilename(pairId, filename) {
 
 function toggleAllNorm() {
   const allEnabled = matchedPairs.every(p => p.normalizationEnabled);
-  console.log('[store] toggleAllNorm, allEnabled:', allEnabled, '-> setting to:', !allEnabled);
   matchedPairs = matchedPairs.map(p => ({
     ...p,
     normalizationEnabled: !allEnabled,
   }));
-  console.log('[store] after toggle, pairs:', matchedPairs.map(p => `${p.id}: norm=${p.normalizationEnabled}`));
 }
 
 function removePair(pairId) {
+  const pairToRemove = matchedPairs.find(p => p.id === pairId);
   matchedPairs = matchedPairs.filter(p => p.id !== pairId);
+  // Also remove the associated files so they don't get re-matched
+  if (pairToRemove) {
+    const pathsToRemove = new Set();
+    if (pairToRemove.video) pathsToRemove.add(pairToRemove.video.path);
+    if (pairToRemove.audio) pathsToRemove.add(pairToRemove.audio.path);
+    files = files.filter(f => !pathsToRemove.has(f.path));
+  }
 }
 
 function clearAll() {

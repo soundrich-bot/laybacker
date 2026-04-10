@@ -49,15 +49,21 @@ pub fn generate_names(pairs: &mut [MatchedPair], remove_duplicates: bool, output
             pair.output_filename = generate_name(video, &pair.audio, remove_duplicates, output_ext);
         } else {
             // Audio-only: include norm spec in filename if enabled
+            // Strip any existing _normalised_* suffix to avoid doubling
+            let base_name = if let Some(idx) = pair.audio.filename_no_ext.find("_normalised_") {
+                &pair.audio.filename_no_ext[..idx]
+            } else {
+                &pair.audio.filename_no_ext
+            };
             if pair.normalization_enabled {
                 let spec = if pair.normalization_settings.target_lufs >= 0.0 {
                     format!("{}dBTP", pair.normalization_settings.true_peak_limit)
                 } else {
                     format!("{}LUFS_{}dBTP", pair.normalization_settings.target_lufs, pair.normalization_settings.true_peak_limit)
                 };
-                pair.output_filename = format!("{}_normalised_{}.{}", pair.audio.filename_no_ext, spec, pair.audio.extension);
+                pair.output_filename = format!("{}_normalised_{}.{}", base_name, spec, pair.audio.extension);
             } else {
-                pair.output_filename = format!("{}.{}", pair.audio.filename_no_ext, pair.audio.extension);
+                pair.output_filename = format!("{}.{}", base_name, pair.audio.extension);
             }
         }
     }
@@ -184,5 +190,84 @@ mod tests {
             "ITV_TheNeighbourhood_50_240326_1530",
         );
         assert_eq!(unique, "1530", "Expected '1530', got: '{}'", unique);
+    }
+
+    fn make_pair(video_name: Option<&str>, audio_name: &str, norm_enabled: bool, target_lufs: f64, tp_limit: f64) -> MatchedPair {
+        MatchedPair {
+            id: "test".into(),
+            video: video_name.map(|n| make_video(n)),
+            audio: make_audio(audio_name),
+            output_filename: String::new(),
+            normalization_enabled: norm_enabled,
+            normalization_settings: NormalizationSettings {
+                target_lufs,
+                true_peak_limit: tp_limit,
+            },
+            timecode_offset_secs: 0.0,
+            match_confidence: 1.0,
+            silence_compliance: false,
+            silence_ms: 240.0,
+            fade_ms: 5.0,
+        }
+    }
+
+    #[test]
+    fn test_audio_only_no_norm() {
+        let mut pairs = vec![make_pair(None, "MyMix_Final", false, 0.0, -1.0)];
+        generate_names(&mut pairs, true, "wav");
+        assert_eq!(pairs[0].output_filename, "MyMix_Final.wav");
+    }
+
+    #[test]
+    fn test_audio_only_lufs_norm() {
+        let mut pairs = vec![make_pair(None, "MyMix_Final", true, -23.0, -1.0)];
+        generate_names(&mut pairs, true, "wav");
+        assert_eq!(pairs[0].output_filename, "MyMix_Final_normalised_-23LUFS_-1dBTP.wav");
+    }
+
+    #[test]
+    fn test_audio_only_fullscale_norm() {
+        let mut pairs = vec![make_pair(None, "MyMix_Final", true, 0.0, -1.0)];
+        generate_names(&mut pairs, true, "wav");
+        assert_eq!(pairs[0].output_filename, "MyMix_Final_normalised_-1dBTP.wav");
+    }
+
+    #[test]
+    fn test_audio_only_strips_existing_norm_suffix() {
+        // Simulates re-processing a file that already has a norm suffix
+        let mut pairs = vec![make_pair(None, "MyMix_Final_normalised_-23LUFS_-1dBTP", true, -16.0, -1.0)];
+        generate_names(&mut pairs, true, "wav");
+        // Should NOT double up the suffix
+        assert_eq!(pairs[0].output_filename, "MyMix_Final_normalised_-16LUFS_-1dBTP.wav");
+        assert!(!pairs[0].output_filename.contains("normalised_-23"));
+    }
+
+    #[test]
+    fn test_audio_only_strips_suffix_when_norm_disabled() {
+        let mut pairs = vec![make_pair(None, "MyMix_normalised_-1dBTP", false, 0.0, -1.0)];
+        generate_names(&mut pairs, true, "wav");
+        assert_eq!(pairs[0].output_filename, "MyMix.wav");
+    }
+
+    #[test]
+    fn test_duplicate_filenames_get_disambiguated() {
+        let mut pairs = vec![
+            make_pair(Some("Commercial_30s"), "Mix_A", false, 0.0, -1.0),
+            make_pair(Some("Commercial_30s"), "Mix_B", false, 0.0, -1.0),
+        ];
+        // With these names, remove_duplicates will produce identical output names
+        // since both audio names differ from video. But the disambiguation pass should handle it.
+        generate_names(&mut pairs, false, "mov");
+        // Both should have unique names
+        assert_ne!(pairs[0].output_filename, pairs[1].output_filename);
+    }
+
+    #[test]
+    fn test_audio_only_preserves_original_extension() {
+        let mut pair = make_pair(None, "MyTrack", true, -23.0, -1.0);
+        pair.audio.extension = "aiff".to_string();
+        let mut pairs = vec![pair];
+        generate_names(&mut pairs, true, "mov"); // output_ext shouldn't matter for audio-only
+        assert!(pairs[0].output_filename.ends_with(".aiff"));
     }
 }

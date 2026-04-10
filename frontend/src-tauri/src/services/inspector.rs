@@ -182,31 +182,7 @@ fn probe_file(path: &str) -> Result<ProbeResult, String> {
     })
 }
 
-/// Find ffprobe binary - check common locations
+/// Find ffprobe binary (delegates to shared cached lookup)
 fn find_ffprobe() -> String {
-    let candidates = if cfg!(target_os = "windows") {
-        vec![
-            "ffprobe".to_string(),
-            "C:\\ffmpeg\\bin\\ffprobe.exe".to_string(),
-        ]
-    } else {
-        vec![
-            "ffprobe".to_string(),
-            "/usr/local/bin/ffprobe".to_string(),
-            "/opt/homebrew/bin/ffprobe".to_string(),
-            "/usr/bin/ffprobe".to_string(),
-        ]
-    };
-
-    for candidate in &candidates {
-        if Command::new(candidate)
-            .arg("-version")
-            .output()
-            .is_ok()
-        {
-            return candidate.clone();
-        }
-    }
-
-    "ffprobe".to_string() // Fall back to PATH lookup
+    ffmpeg::find_ffprobe()
 }

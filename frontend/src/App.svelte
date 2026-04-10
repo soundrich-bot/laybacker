@@ -31,37 +31,29 @@
   }
 
   onMount(async () => {
-    console.log('[mount] starting...');
-
     // Resolve bundled completion sound
     try {
       const soundPath = await invoke('get_resource_path', { resource: 'resources/LaybackComplete.wav' });
       app.completionSoundPath = soundPath;
-      console.log('[mount] sound path resolved');
     } catch { /* sound is optional */ }
 
     // Check for FFmpeg on startup
     await app.checkFfmpeg();
-    console.log('[mount] ffmpeg checked');
 
     // Listen for processing progress events from Rust backend
     await listen('processing-progress', (event) => {
       app.updateProgress(event.payload);
     });
-    console.log('[mount] progress listener set');
 
     // Listen for native Tauri drag-drop events (gives us full file paths)
     const currentWindow = getCurrentWindow();
-    console.log('[mount] got window, setting up drag-drop...');
 
     await currentWindow.onDragDropEvent((event) => {
-      console.log('[drop] event:', event.payload.type);
       if (event.payload.type === 'over') {
         isDraggingOver = true;
       } else if (event.payload.type === 'drop') {
         isDraggingOver = false;
         const paths = event.payload.paths;
-        console.log('[drop] paths:', paths);
         if (paths && paths.length > 0) {
           app.scanFiles(paths);
         }
@@ -69,7 +61,6 @@
         isDraggingOver = false;
       }
     });
-    console.log('[mount] drag-drop listener set — ready!');
   });
 
   function handleFilesDropped(paths) {

@@ -1,20 +1,22 @@
 use std::process::Command;
+use std::sync::OnceLock;
 
 use crate::models::*;
 
-/// Find the ffmpeg binary
-pub fn find_ffmpeg() -> String {
+/// Find a binary by name, checking common installation paths.
+/// Result is cached so subprocess is only spawned once per binary per session.
+pub fn find_binary(name: &str) -> String {
     let candidates = if cfg!(target_os = "windows") {
         vec![
-            "ffmpeg".to_string(),
-            "C:\\ffmpeg\\bin\\ffmpeg.exe".to_string(),
+            name.to_string(),
+            format!("C:\\ffmpeg\\bin\\{}.exe", name),
         ]
     } else {
         vec![
-            "ffmpeg".to_string(),
-            "/usr/local/bin/ffmpeg".to_string(),
-            "/opt/homebrew/bin/ffmpeg".to_string(),
-            "/usr/bin/ffmpeg".to_string(),
+            name.to_string(),
+            format!("/usr/local/bin/{}", name),
+            format!("/opt/homebrew/bin/{}", name),
+            format!("/usr/bin/{}", name),
         ]
     };
 
@@ -24,7 +26,20 @@ pub fn find_ffmpeg() -> String {
         }
     }
 
-    "ffmpeg".to_string()
+    name.to_string()
+}
+
+static FFMPEG_PATH: OnceLock<String> = OnceLock::new();
+static FFPROBE_PATH: OnceLock<String> = OnceLock::new();
+
+/// Find the ffmpeg binary (cached)
+pub fn find_ffmpeg() -> String {
+    FFMPEG_PATH.get_or_init(|| find_binary("ffmpeg")).clone()
+}
+
+/// Find the ffprobe binary (cached)
+pub fn find_ffprobe() -> String {
+    FFPROBE_PATH.get_or_init(|| find_binary("ffprobe")).clone()
 }
 
 /// Check if ffmpeg is available
@@ -309,13 +324,14 @@ pub fn build_compliance_filters(duration_secs: f64, silence_ms: f64, fade_ms: f6
     filters
 }
 
-/// Build ffmpeg command to measure loudness (used as fallback if Rust measurement has issues)
-pub fn build_loudness_measure_command(audio_path: &str) -> Vec<String> {
+/// Build ffmpeg command to measure loudness with specific target for two-pass loudnorm.
+/// Pass 1 must use the same target as pass 2 so that target_offset is correct.
+pub fn build_loudness_measure_command_targeted(audio_path: &str, target_lufs: f64, true_peak_limit: f64) -> Vec<String> {
     vec![
         "-i".to_string(),
         audio_path.to_string(),
         "-af".to_string(),
-        "loudnorm=print_format=json".to_string(),
+        format!("loudnorm=I={}:TP={}:LRA=11:print_format=json", target_lufs, true_peak_limit),
         "-f".to_string(),
         "null".to_string(),
         "-".to_string(),
@@ -350,34 +366,17 @@ pub struct LoudnormMeasurement {
     pub target_offset: f64,
 }
 
-/// Parse loudness measurement from ffmpeg loudnorm output
-pub fn parse_loudness_output(stderr: &str) -> Option<(f64, f64)> {
-    // ffmpeg loudnorm outputs JSON in stderr
-    let json_start = stderr.rfind('{')?;
-    let json_end = stderr.rfind('}')? + 1;
-    let json_str = &stderr[json_start..json_end];
-
-    let json: serde_json::Value = serde_json::from_str(json_str).ok()?;
-
-    let lufs = json["input_i"]
-        .as_str()
-        .and_then(|s| s.parse::<f64>().ok())?;
-    let true_peak = json["input_tp"]
-        .as_str()
-        .and_then(|s| s.parse::<f64>().ok())?;
-
-    Some((lufs, true_peak))
-}
-
 /// Build the two-pass loudnorm filter string for precise LUFS targeting.
 /// Uses the measurements from pass 1 to inform pass 2.
+/// Build the two-pass loudnorm filter string.
+/// Caller is responsible for applying any calibration offset to `target_lufs` before calling.
 pub fn build_loudnorm_filter(
     measurement: &LoudnormMeasurement,
     target_lufs: f64,
     true_peak_limit: f64,
 ) -> String {
     format!(
-        "loudnorm=I={}:TP={}:LRA=11:measured_I={}:measured_TP={}:measured_LRA={}:measured_thresh={}:offset={}:linear=true:print_format=summary",
+        "loudnorm=I={}:TP={}:LRA=11:measured_I={}:measured_TP={}:measured_LRA={}:measured_thresh={}:offset={}:print_format=summary",
         target_lufs,
         true_peak_limit,
         measurement.input_i,
@@ -388,10 +387,11 @@ pub fn build_loudnorm_filter(
     )
 }
 
-/// Run loudnorm first pass and return full measurement data
-pub fn measure_loudnorm_full(audio_path: &str) -> Result<LoudnormMeasurement, String> {
+/// Run loudnorm first pass and return full measurement data.
+/// Uses the actual target values so that target_offset is calculated correctly for pass 2.
+pub fn measure_loudnorm_full(audio_path: &str, target_lufs: f64, true_peak_limit: f64) -> Result<LoudnormMeasurement, String> {
     let ffmpeg = find_ffmpeg();
-    let args = build_loudness_measure_command(audio_path);
+    let args = build_loudness_measure_command_targeted(audio_path, target_lufs, true_peak_limit);
 
     let output = Command::new(&ffmpeg)
         .args(&args)
@@ -446,10 +446,21 @@ pub fn run_ffmpeg(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
-/// Measure loudness using ffmpeg's loudnorm filter
+/// Measure loudness using ffmpeg's ebur128 filter (ITU-R BS.1770-4 compliant)
+/// This is more precise than loudnorm's built-in measurement
 pub fn measure_loudness_ffmpeg(audio_path: &str) -> Result<(f64, f64), String> {
     let ffmpeg = find_ffmpeg();
-    let args = build_loudness_measure_command(audio_path);
+
+    // Use ebur128 for integrated loudness + true peak measurement
+    let args = vec![
+        "-i".to_string(),
+        audio_path.to_string(),
+        "-af".to_string(),
+        "ebur128=peak=true".to_string(),
+        "-f".to_string(),
+        "null".to_string(),
+        "-".to_string(),
+    ];
 
     let output = Command::new(&ffmpeg)
         .args(&args)
@@ -457,6 +468,353 @@ pub fn measure_loudness_ffmpeg(audio_path: &str) -> Result<(f64, f64), String> {
         .map_err(|e| format!("Failed to run ffmpeg for loudness measurement: {}", e))?;
 
     let stderr = String::from_utf8_lossy(&output.stderr);
-    parse_loudness_output(&stderr)
-        .ok_or_else(|| "Failed to parse loudness measurement output".to_string())
+    parse_ebur128_output(&stderr)
+        .ok_or_else(|| "Failed to parse ebur128 measurement output".to_string())
+}
+
+/// Parse the summary block from ebur128 filter output.
+/// Only reads values from the "Summary:" section at the end to avoid
+/// picking up per-frame values from the running output.
+pub fn parse_ebur128_output(stderr: &str) -> Option<(f64, f64)> {
+    // Find the Summary section
+    let summary_start = stderr.find("Summary:")?;
+    let summary = &stderr[summary_start..];
+
+    let mut integrated_lufs: Option<f64> = None;
+    let mut true_peak_dbtp: Option<f64> = None;
+
+    for line in summary.lines() {
+        let trimmed = line.trim();
+        // "I:         -31.9 LUFS"
+        if trimmed.starts_with("I:") && trimmed.contains("LUFS") {
+            let parts: Vec<&str> = trimmed.split_whitespace().collect();
+            if parts.len() >= 2 {
+                if let Ok(v) = parts[1].parse::<f64>() {
+                    integrated_lufs = Some(v);
+                }
+            }
+        }
+        // "Peak:      -15.3 dBFS"
+        if trimmed.starts_with("Peak:") && trimmed.contains("dBFS") {
+            let parts: Vec<&str> = trimmed.split_whitespace().collect();
+            if parts.len() >= 2 {
+                if let Ok(v) = parts[1].parse::<f64>() {
+                    true_peak_dbtp = Some(v);
+                }
+            }
+        }
+    }
+
+    match (integrated_lufs, true_peak_dbtp) {
+        (Some(lufs), Some(tp)) => Some((lufs, tp)),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn default_settings() -> ExportSettings {
+        ExportSettings::default()
+    }
+
+    fn aac_settings() -> ExportSettings {
+        ExportSettings {
+            audio_format: AudioFormatOption::Aac,
+            aac_bitrate: 320000,
+            ..ExportSettings::default()
+        }
+    }
+
+    // ── build_mux_command ──
+
+    #[test]
+    fn test_mux_command_basic_copy() {
+        let args = build_mux_command(
+            "/video.mov", "/audio.wav", "/out.mov",
+            &default_settings(), None, None, 0.0, None,
+        );
+        assert!(args.contains(&"-y".to_string()));
+        assert!(args.contains(&"/video.mov".to_string()));
+        assert!(args.contains(&"/audio.wav".to_string()));
+        assert!(args.contains(&"copy".to_string())); // video copy
+        assert!(args.contains(&"-shortest".to_string()));
+        assert_eq!(args.last().unwrap(), "/out.mov");
+        // No -af when no filters
+        assert!(!args.contains(&"-af".to_string()));
+    }
+
+    #[test]
+    fn test_mux_command_with_gain() {
+        let args = build_mux_command(
+            "/video.mov", "/audio.wav", "/out.mov",
+            &default_settings(), Some(3.5), None, 0.0, None,
+        );
+        assert!(args.contains(&"-af".to_string()));
+        let af_idx = args.iter().position(|a| a == "-af").unwrap();
+        assert_eq!(args[af_idx + 1], "volume=3.5dB");
+        // With filters, codec should be pcm_s24le not copy
+        assert!(args.contains(&"pcm_s24le".to_string()));
+    }
+
+    #[test]
+    fn test_mux_command_with_loudnorm_filter() {
+        let filter = "loudnorm=I=-23.1:TP=-1:LRA=11:measured_I=-20:measured_TP=-3:measured_LRA=8:measured_thresh=-30:offset=0.5:print_format=summary";
+        let args = build_mux_command(
+            "/video.mov", "/audio.wav", "/out.mov",
+            &default_settings(), None, Some(filter), 0.0, None,
+        );
+        let af_idx = args.iter().position(|a| a == "-af").unwrap();
+        assert_eq!(args[af_idx + 1], filter);
+    }
+
+    #[test]
+    fn test_mux_command_loudnorm_takes_precedence_over_gain() {
+        let filter = "loudnorm=I=-23:TP=-1:LRA=11";
+        let args = build_mux_command(
+            "/video.mov", "/audio.wav", "/out.mov",
+            &default_settings(), Some(5.0), Some(filter), 0.0, None,
+        );
+        let af_idx = args.iter().position(|a| a == "-af").unwrap();
+        // Should use loudnorm, not volume gain
+        assert!(args[af_idx + 1].starts_with("loudnorm="));
+        assert!(!args[af_idx + 1].contains("volume="));
+    }
+
+    #[test]
+    fn test_mux_command_with_timecode_offset() {
+        let args = build_mux_command(
+            "/video.mov", "/audio.wav", "/out.mov",
+            &default_settings(), None, None, 0.5, None,
+        );
+        let af_idx = args.iter().position(|a| a == "-af").unwrap();
+        assert!(args[af_idx + 1].contains("adelay=500|500"));
+    }
+
+    #[test]
+    fn test_mux_command_h264_encoding() {
+        let settings = ExportSettings {
+            video_codec: VideoCodecOption::H264,
+            ..ExportSettings::default()
+        };
+        let args = build_mux_command(
+            "/video.mov", "/audio.wav", "/out.mov",
+            &settings, None, None, 0.0, None,
+        );
+        assert!(args.contains(&"libx264".to_string()));
+        assert!(args.contains(&"yuv420p".to_string()));
+    }
+
+    #[test]
+    fn test_mux_command_aac_audio() {
+        let args = build_mux_command(
+            "/video.mov", "/audio.wav", "/out.mp4",
+            &aac_settings(), None, None, 0.0, None,
+        );
+        assert!(args.contains(&"aac".to_string()));
+        assert!(args.contains(&"320000".to_string()));
+    }
+
+    #[test]
+    fn test_mux_command_with_compliance() {
+        let args = build_mux_command(
+            "/video.mov", "/audio.wav", "/out.mov",
+            &default_settings(), None, None, 0.0,
+            Some((30.0, 240.0, 5.0)),
+        );
+        let af_idx = args.iter().position(|a| a == "-af").unwrap();
+        let filters = &args[af_idx + 1];
+        assert!(filters.contains("volume=enable="));
+        assert!(filters.contains("afade=t=in"));
+        assert!(filters.contains("afade=t=out"));
+    }
+
+    // ── build_audio_only_command ──
+
+    #[test]
+    fn test_audio_only_basic() {
+        let args = build_audio_only_command(
+            "/audio.wav", "/out.wav",
+            &default_settings(), None, None, None,
+        );
+        assert!(args.contains(&"-vn".to_string())); // strip video
+        assert!(args.contains(&"copy".to_string())); // no filters = copy
+        assert!(!args.contains(&"-af".to_string()));
+    }
+
+    #[test]
+    fn test_audio_only_with_gain_wav() {
+        let args = build_audio_only_command(
+            "/audio.wav", "/out.wav",
+            &default_settings(), Some(-2.5), None, None,
+        );
+        let af_idx = args.iter().position(|a| a == "-af").unwrap();
+        assert_eq!(args[af_idx + 1], "volume=-2.5dB");
+        assert!(args.contains(&"pcm_s24le".to_string()));
+    }
+
+    #[test]
+    fn test_audio_only_with_gain_aiff() {
+        let args = build_audio_only_command(
+            "/audio.aiff", "/out.aiff",
+            &default_settings(), Some(1.0), None, None,
+        );
+        assert!(args.contains(&"pcm_s24be".to_string()));
+    }
+
+    #[test]
+    fn test_audio_only_tiny_gain_ignored() {
+        let args = build_audio_only_command(
+            "/audio.wav", "/out.wav",
+            &default_settings(), Some(0.0005), None, None,
+        );
+        // Gain too small — should be treated as no-op
+        assert!(!args.contains(&"-af".to_string()));
+        assert!(args.contains(&"copy".to_string()));
+    }
+
+    // ── build_loudnorm_filter ──
+
+    #[test]
+    fn test_loudnorm_filter_string() {
+        let measurement = LoudnormMeasurement {
+            input_i: -20.0,
+            input_tp: -3.0,
+            input_lra: 8.5,
+            input_thresh: -31.2,
+            target_offset: 0.3,
+        };
+        let filter = build_loudnorm_filter(&measurement, -23.1, -1.0);
+        assert!(filter.starts_with("loudnorm="));
+        assert!(filter.contains("I=-23.1"));
+        assert!(filter.contains("TP=-1"));
+        assert!(filter.contains("measured_I=-20"));
+        assert!(filter.contains("measured_TP=-3"));
+        assert!(filter.contains("measured_LRA=8.5"));
+        assert!(filter.contains("measured_thresh=-31.2"));
+        assert!(filter.contains("offset=0.3"));
+    }
+
+    // ── build_loudness_measure_command_targeted ──
+
+    #[test]
+    fn test_loudness_measure_command_uses_target() {
+        let args = build_loudness_measure_command_targeted("/audio.wav", -23.1, -1.0);
+        let af_idx = args.iter().position(|a| a == "-af").unwrap();
+        assert!(args[af_idx + 1].contains("I=-23.1"));
+        assert!(args[af_idx + 1].contains("TP=-1"));
+        assert!(args[af_idx + 1].contains("print_format=json"));
+    }
+
+    // ── parse_ebur128_output ──
+
+    #[test]
+    fn test_parse_ebur128_output_normal() {
+        let stderr = r#"
+[Parsed_ebur128_0 @ 0x600001234] t: 0.0  M: -120.7  S: -120.7
+[Parsed_ebur128_0 @ 0x600001234] t: 0.4  M:  -25.3  S:  -25.3
+
+Summary:
+
+  Integrated loudness:
+    I:         -23.0 LUFS
+    Threshold: -33.0 LUFS
+
+  Loudness range:
+    LRA:         8.5 LU
+    Threshold:  -43.0 LUFS
+    LRA low:   -28.0 LUFS
+    LRA high:  -19.5 LUFS
+
+  True peak:
+    Peak:       -1.5 dBFS
+"#;
+        let result = parse_ebur128_output(stderr);
+        assert!(result.is_some());
+        let (lufs, tp) = result.unwrap();
+        assert!((lufs - (-23.0)).abs() < 0.01);
+        assert!((tp - (-1.5)).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_parse_ebur128_output_no_summary() {
+        let stderr = "some random ffmpeg output without summary";
+        assert!(parse_ebur128_output(stderr).is_none());
+    }
+
+    #[test]
+    fn test_parse_ebur128_output_missing_peak() {
+        let stderr = "Summary:\n  Integrated loudness:\n    I: -23.0 LUFS\n";
+        assert!(parse_ebur128_output(stderr).is_none());
+    }
+
+    // ── parse_loudness_output_full ──
+
+    #[test]
+    fn test_parse_loudnorm_json() {
+        let stderr = r#"
+[Parsed_loudnorm_0 @ 0x12345]
+{
+    "input_i" : "-20.50",
+    "input_tp" : "-3.20",
+    "input_lra" : "8.40",
+    "input_thresh" : "-31.00",
+    "output_i" : "-23.10",
+    "output_tp" : "-1.00",
+    "output_lra" : "7.50",
+    "output_thresh" : "-33.50",
+    "normalization_type" : "dynamic",
+    "target_offset" : "0.10"
+}
+"#;
+        let result = parse_loudness_output_full(stderr);
+        assert!(result.is_some());
+        let m = result.unwrap();
+        assert!((m.input_i - (-20.5)).abs() < 0.01);
+        assert!((m.input_tp - (-3.2)).abs() < 0.01);
+        assert!((m.input_lra - 8.4).abs() < 0.01);
+        assert!((m.input_thresh - (-31.0)).abs() < 0.01);
+        assert!((m.target_offset - 0.1).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_parse_loudnorm_invalid_json() {
+        assert!(parse_loudness_output_full("no json here").is_none());
+    }
+
+    // ── build_compliance_filters ──
+
+    #[test]
+    fn test_compliance_filters_structure() {
+        let filters = build_compliance_filters(30.0, 240.0, 5.0);
+        assert_eq!(filters.len(), 4);
+        // Head silence (first 0.24s)
+        assert!(filters[0].contains("volume=enable='lt(t,0.2400)':volume=0"));
+        // Tail silence (last 0.24s of 30s)
+        assert!(filters[1].contains("volume=enable='gt(t,29.7600)':volume=0"));
+        // Fade in after head
+        assert!(filters[2].contains("afade=t=in:st=0.2400:d=0.0050"));
+        // Fade out before tail
+        assert!(filters[3].contains("afade=t=out:st=29.7550:d=0.0050"));
+    }
+
+    // ── parse_peak_from_astats ──
+
+    #[test]
+    fn test_parse_peak_from_astats_normal() {
+        let stderr = "Peak level dB:   -12.5\n";
+        assert!((parse_peak_from_astats(stderr).unwrap() - (-12.5)).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_parse_peak_from_astats_silence() {
+        let stderr = "Peak level dB: -inf\n";
+        assert!((parse_peak_from_astats(stderr).unwrap() - (-120.0)).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_parse_peak_from_astats_missing() {
+        assert!(parse_peak_from_astats("no peak info here").is_none());
+    }
 }

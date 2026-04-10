@@ -34,6 +34,12 @@
   function toggleNorm() {
     const newEnabled = !pair.normalizationEnabled;
     onUpdateNormalization(pair.id, newEnabled, pair.normalizationSettings);
+    // Show settings when enabling normalization
+    if (newEnabled) {
+      showNormSettings = true;
+    } else {
+      showNormSettings = false;
+    }
   }
 
   function saveName() {
@@ -220,7 +226,7 @@
       onclick={toggleCompliance}
       title={pair.silenceCompliance ? "6-frame silence check ON — click to disable" : "Check for 6-frame silence at head/tail (UK broadcast)"}
     >
-      6F
+      6 Fr
     </button>
     {#if pair.silenceCompliance && silenceCheck}
       {#if silenceCheck.headHasAudio || silenceCheck.tailHasAudio}
@@ -590,6 +596,8 @@
     cursor: pointer;
     display: flex;
     align-items: center;
+    justify-content: center;
+    min-width: 90px;
     transition: all 0.15s;
     white-space: nowrap;
   }
@@ -1031,6 +1039,13 @@
     border: 1px solid rgba(57, 255, 20, 0.15);
     border-radius: var(--radius-sm);
     width: fit-content;
+  }
+
+  :global(:root.tame) .norm-settings-btn {
+    color: #8b6914;
+    background: rgba(201, 162, 39, 0.12);
+    border-color: rgba(201, 162, 39, 0.4);
+    font-weight: 600;
   }
 
   :global(:root.tame) .norm-detail-row {

@@ -1,6 +1,6 @@
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use crate::models::*;
 use crate::services::{ffmpeg, loudness};
@@ -51,6 +51,11 @@ pub fn process_pair(
     let mut loudnorm_filter: Option<String> = None;
 
     // Step 1: Measure and calculate normalization if enabled
+    log::info!("Processing pair: normalization_enabled={}, target_lufs={}, true_peak_limit={}",
+        pair.normalization_enabled,
+        pair.normalization_settings.target_lufs,
+        pair.normalization_settings.true_peak_limit,
+    );
     if pair.normalization_enabled {
         progress_callback(ProcessingProgress {
             pair_id: pair_id.clone(),
@@ -59,28 +64,39 @@ pub fn process_pair(
             message: "Measuring loudness...".to_string(),
         });
 
-        let is_broadcast_mode = pair.normalization_settings.target_lufs < 0.0;
+        let is_lufs_mode = pair.normalization_settings.target_lufs < 0.0;
 
-        if is_broadcast_mode {
-            // Two-pass loudnorm for precise LUFS targeting
-            match ffmpeg::measure_loudnorm_full(&pair.audio.path) {
+        if is_lufs_mode {
+            // LUFS mode: use FFmpeg's loudnorm filter (two-pass) for gating-accurate targeting.
+            // FFmpeg's loudnorm reads ~0.1dB louder than industry-standard meters (YouLean, Nugen),
+            // so we target 0.1dB quieter to compensate.
+            const LOUDNORM_CALIBRATION_OFFSET: f64 = 0.1;
+            let calibrated_target = pair.normalization_settings.target_lufs - LOUDNORM_CALIBRATION_OFFSET;
+
+            // Both passes must use the same calibrated target for consistency
+            match ffmpeg::measure_loudnorm_full(
+                &pair.audio.path,
+                calibrated_target,
+                pair.normalization_settings.true_peak_limit,
+            ) {
                 Ok(measurement) => {
                     measured_lufs = Some(measurement.input_i);
                     measured_true_peak = Some(measurement.input_tp);
 
-                    // Build the second-pass loudnorm filter with measured values
-                    loudnorm_filter = Some(ffmpeg::build_loudnorm_filter(
+                    let filter = ffmpeg::build_loudnorm_filter(
                         &measurement,
-                        pair.normalization_settings.target_lufs,
+                        calibrated_target,
                         pair.normalization_settings.true_peak_limit,
-                    ));
+                    );
+                    log::info!("Loudnorm two-pass filter: {}", &filter);
+                    loudnorm_filter = Some(filter);
 
                     progress_callback(ProcessingProgress {
                         pair_id: pair_id.clone(),
                         state: "measured".to_string(),
                         progress: 0.3,
                         message: format!(
-                            "Measured: {:.1} LUFS, {:.1} dBTP → target {:.0} LUFS",
+                            "Measured: {:.1} LUFS, {:.1} dBTP → target {:.0} LUFS (loudnorm)",
                             measurement.input_i,
                             measurement.input_tp,
                             pair.normalization_settings.target_lufs,
@@ -99,13 +115,16 @@ pub fn process_pair(
                 }
             }
         } else {
-            // Full-scale mode: simple gain to true peak limit
+            // Full-scale mode: simple gain to true peak limit (this works perfectly)
             match loudness::measure(&pair.audio.path) {
                 Ok(measurement) => {
                     measured_lufs = Some(measurement.integrated_lufs);
                     measured_true_peak = Some(measurement.true_peak_dbtp);
 
                     let gain = loudness::calculate_gain(&measurement, &pair.normalization_settings);
+                    log::info!("Full-scale mode: {:.2} LUFS, {:.2} dBTP. Gain: {:.3} dB",
+                        measurement.integrated_lufs, measurement.true_peak_dbtp, gain);
+
                     if gain.abs() > 0.001 {
                         audio_gain_db = Some(gain);
                     }
@@ -209,13 +228,13 @@ pub fn process_batch(
     progress_callback: impl Fn(ProcessingProgress) + Send + Sync + 'static,
 ) -> Vec<ProcessingResult> {
     let callback = Arc::new(progress_callback);
-    let results = Arc::new(Mutex::new(Vec::new()));
+    let mut results = Vec::new();
 
     reset_cancel();
 
     for pair in pairs {
         if is_cancelled() {
-            results.lock().unwrap().push(ProcessingResult {
+            results.push(ProcessingResult {
                 pair_id: pair.id.clone(),
                 success: false,
                 output_path: None,
@@ -227,13 +246,10 @@ pub fn process_batch(
         }
         let cb = callback.clone();
         let result = process_pair(pair, settings, move |p| cb(p));
-        results.lock().unwrap().push(result);
+        results.push(result);
     }
 
-    Arc::try_unwrap(results)
-        .unwrap_or_else(|_| panic!("Failed to unwrap results"))
-        .into_inner()
-        .unwrap()
+    results
 }
 
 fn resolve_output_path(pair: &MatchedPair, settings: &ExportSettings) -> String {
@@ -275,4 +291,140 @@ fn resolve_output_path(pair: &MatchedPair, settings: &ExportSettings) -> String 
     };
 
     format!("{}/{}", directory, filename)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_audio(name: &str, path: &str) -> MediaFile {
+        MediaFile {
+            id: "1".into(),
+            path: path.to_string(),
+            filename: format!("{}.wav", name),
+            filename_no_ext: name.to_string(),
+            extension: "wav".into(),
+            media_type: MediaType::Audio,
+            duration_secs: 30.0,
+            codec_info: None,
+            sample_rate: None,
+            channel_count: None,
+            thumbnail_data: None,
+        }
+    }
+
+    fn make_video(name: &str, path: &str) -> MediaFile {
+        MediaFile {
+            id: "2".into(),
+            path: path.to_string(),
+            filename: format!("{}.mov", name),
+            filename_no_ext: name.to_string(),
+            extension: "mov".into(),
+            media_type: MediaType::Video,
+            duration_secs: 30.0,
+            codec_info: None,
+            sample_rate: None,
+            channel_count: None,
+            thumbnail_data: None,
+        }
+    }
+
+    fn make_pair(video: Option<MediaFile>, audio: MediaFile, output_filename: &str) -> MatchedPair {
+        MatchedPair {
+            id: "test".into(),
+            video,
+            audio,
+            output_filename: output_filename.to_string(),
+            normalization_enabled: false,
+            normalization_settings: NormalizationSettings::default(),
+            timecode_offset_secs: 0.0,
+            match_confidence: 1.0,
+            silence_compliance: false,
+            silence_ms: 240.0,
+            fade_ms: 5.0,
+        }
+    }
+
+    #[test]
+    fn test_output_path_uses_audio_directory() {
+        let pair = make_pair(
+            Some(make_video("Video", "/projects/Video.mov")),
+            make_audio("Audio", "/projects/Audio.wav"),
+            "Output.mov",
+        );
+        let settings = ExportSettings { use_audio_file_location: true, ..ExportSettings::default() };
+        let path = resolve_output_path(&pair, &settings);
+        assert_eq!(path, "/projects/Output.mov");
+    }
+
+    #[test]
+    fn test_output_path_uses_custom_directory() {
+        let pair = make_pair(
+            Some(make_video("Video", "/projects/Video.mov")),
+            make_audio("Audio", "/projects/Audio.wav"),
+            "Output.mov",
+        );
+        let settings = ExportSettings {
+            use_audio_file_location: false,
+            output_directory: Some("/custom/output".to_string()),
+            ..ExportSettings::default()
+        };
+        let path = resolve_output_path(&pair, &settings);
+        assert_eq!(path, "/custom/output/Output.mov");
+    }
+
+    #[test]
+    fn test_output_path_fallback_when_no_custom_dir() {
+        let pair = make_pair(
+            Some(make_video("Video", "/projects/Video.mov")),
+            make_audio("Audio", "/projects/Audio.wav"),
+            "Output.mov",
+        );
+        let settings = ExportSettings {
+            use_audio_file_location: false,
+            output_directory: None,
+            ..ExportSettings::default()
+        };
+        let path = resolve_output_path(&pair, &settings);
+        // Falls back to audio file location
+        assert_eq!(path, "/projects/Output.mov");
+    }
+
+    #[test]
+    fn test_output_path_generates_name_when_empty() {
+        let pair = make_pair(
+            Some(make_video("MyVideo", "/projects/MyVideo.mov")),
+            make_audio("Audio", "/projects/Audio.wav"),
+            "", // empty = auto-generate
+        );
+        let settings = ExportSettings::default();
+        let path = resolve_output_path(&pair, &settings);
+        assert!(path.contains("MyVideo_with audio.mov"));
+    }
+
+    #[test]
+    fn test_output_path_audio_only_no_norm() {
+        let pair = make_pair(
+            None,
+            make_audio("MyMix", "/projects/MyMix.wav"),
+            "",
+        );
+        let settings = ExportSettings::default();
+        let path = resolve_output_path(&pair, &settings);
+        assert_eq!(path, "/projects/MyMix.wav");
+    }
+
+    #[test]
+    fn test_output_path_audio_only_with_norm() {
+        let mut pair = make_pair(
+            None,
+            make_audio("MyMix", "/projects/MyMix.wav"),
+            "",
+        );
+        pair.normalization_enabled = true;
+        pair.normalization_settings = NormalizationSettings { target_lufs: -23.0, true_peak_limit: -1.0 };
+        let settings = ExportSettings::default();
+        let path = resolve_output_path(&pair, &settings);
+        assert_eq!(path, "/projects/MyMix_normalised_-23LUFS_-1dBTP.wav");
+    }
 }

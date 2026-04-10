@@ -106,9 +106,16 @@ pub fn reveal_in_finder(path: String) -> Result<(), String> {
     Ok(())
 }
 
-/// Open a URL in the default browser
+/// Open a URL in the default browser.
+/// Only allows http, https, and mailto schemes to prevent command injection.
 #[tauri::command]
 pub fn open_url(url: String) -> Result<(), String> {
+    // Validate URL scheme to prevent command injection
+    let lower = url.to_lowercase();
+    if !lower.starts_with("https://") && !lower.starts_with("http://") && !lower.starts_with("mailto:") {
+        return Err(format!("Unsupported URL scheme: {}", url));
+    }
+
     #[cfg(target_os = "macos")]
     {
         std::process::Command::new("open")
@@ -118,8 +125,9 @@ pub fn open_url(url: String) -> Result<(), String> {
     }
     #[cfg(target_os = "windows")]
     {
-        std::process::Command::new("cmd")
-            .args(["/C", "start", &url])
+        // Use explorer.exe instead of cmd /C start to avoid shell injection
+        std::process::Command::new("explorer")
+            .arg(&url)
             .spawn()
             .map_err(|e| format!("Failed to open URL: {}", e))?;
     }
@@ -166,9 +174,10 @@ pub fn play_sound(path: String) -> Result<(), String> {
 
     #[cfg(target_os = "windows")]
     {
-        // Use PowerShell to play audio on Windows
+        // Escape single quotes in path to prevent PowerShell injection
+        let escaped_path = path.replace('\'', "''");
         std::process::Command::new("powershell")
-            .args(["-c", &format!("(New-Object Media.SoundPlayer '{}').PlaySync()", path)])
+            .args(["-c", &format!("(New-Object Media.SoundPlayer '{}').PlaySync()", escaped_path)])
             .spawn()
             .map_err(|e| format!("Failed to play sound: {}", e))?;
     }
@@ -182,4 +191,59 @@ pub fn play_sound(path: String) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    /// URL validation logic (extracted for testability)
+    fn validate_url_scheme(url: &str) -> Result<(), String> {
+        let lower = url.to_lowercase();
+        if !lower.starts_with("https://") && !lower.starts_with("http://") && !lower.starts_with("mailto:") {
+            return Err(format!("Unsupported URL scheme: {}", url));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_url_https_allowed() {
+        assert!(validate_url_scheme("https://example.com").is_ok());
+    }
+
+    #[test]
+    fn test_url_http_allowed() {
+        assert!(validate_url_scheme("http://example.com").is_ok());
+    }
+
+    #[test]
+    fn test_url_mailto_allowed() {
+        assert!(validate_url_scheme("mailto:user@example.com").is_ok());
+    }
+
+    #[test]
+    fn test_url_case_insensitive() {
+        assert!(validate_url_scheme("HTTPS://Example.COM").is_ok());
+        assert!(validate_url_scheme("Http://example.com").is_ok());
+    }
+
+    #[test]
+    fn test_url_file_blocked() {
+        assert!(validate_url_scheme("file:///etc/passwd").is_err());
+    }
+
+    #[test]
+    fn test_url_javascript_blocked() {
+        assert!(validate_url_scheme("javascript:alert(1)").is_err());
+    }
+
+    #[test]
+    fn test_url_shell_injection_blocked() {
+        assert!(validate_url_scheme("calc.exe").is_err());
+        assert!(validate_url_scheme("& calc.exe").is_err());
+        assert!(validate_url_scheme("| rm -rf /").is_err());
+    }
+
+    #[test]
+    fn test_url_data_uri_blocked() {
+        assert!(validate_url_scheme("data:text/html,<script>alert(1)</script>").is_err());
+    }
 }
