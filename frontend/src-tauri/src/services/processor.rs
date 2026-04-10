@@ -214,10 +214,16 @@ fn resolve_output_path(pair: &MatchedPair, settings: &ExportSettings) -> String 
                 settings.output_extension()
             )
         } else {
-            format!(
-                "{}_normalized.wav",
-                pair.audio.filename_no_ext,
-            )
+            if pair.normalization_enabled {
+                let spec = if pair.normalization_settings.target_lufs >= 0.0 {
+                    format!("{}dBTP", pair.normalization_settings.true_peak_limit)
+                } else {
+                    format!("{}LUFS_{}dBTP", pair.normalization_settings.target_lufs, pair.normalization_settings.true_peak_limit)
+                };
+                format!("{}_normalised_{}.wav", pair.audio.filename_no_ext, spec)
+            } else {
+                format!("{}.wav", pair.audio.filename_no_ext)
+            }
         }
     } else {
         pair.output_filename.clone()

@@ -48,8 +48,17 @@ pub fn generate_names(pairs: &mut [MatchedPair], remove_duplicates: bool, output
         if let Some(ref video) = pair.video {
             pair.output_filename = generate_name(video, &pair.audio, remove_duplicates, output_ext);
         } else {
-            // Audio-only: keep original extension
-            pair.output_filename = format!("{}_normalized.{}", pair.audio.filename_no_ext, pair.audio.extension);
+            // Audio-only: include norm spec in filename if enabled
+            if pair.normalization_enabled {
+                let spec = if pair.normalization_settings.target_lufs >= 0.0 {
+                    format!("{}dBTP", pair.normalization_settings.true_peak_limit)
+                } else {
+                    format!("{}LUFS_{}dBTP", pair.normalization_settings.target_lufs, pair.normalization_settings.true_peak_limit)
+                };
+                pair.output_filename = format!("{}_normalised_{}.{}", pair.audio.filename_no_ext, spec, pair.audio.extension);
+            } else {
+                pair.output_filename = format!("{}.{}", pair.audio.filename_no_ext, pair.audio.extension);
+            }
         }
     }
 
