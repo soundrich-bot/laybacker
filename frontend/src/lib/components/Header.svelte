@@ -90,12 +90,12 @@
         <div class="help-panel">
           <div class="help-title">HOW IT WORKS</div>
           <div class="help-divider"></div>
-          <p class="help-intro">This tool does one thing — it replaces the audio on a video file.</p>
+          <p class="help-intro">This tool batch replaces audio on video files and normalises audio for delivery.</p>
           <ol class="help-steps">
             <li><strong>Drop files</strong> — Drag video and audio files onto the window. Drop them all at once or one at a time. Laybacker pairs them by duration and filename similarity. You can mix durations and file types. Laybacker will figure it out.</li>
-            <li><strong>Check pairs</strong> — Each card shows a video + audio pairing. Use the play buttons to preview. If a pair is wrong, remove it and re-drop.</li>
+            <li><strong>Preview Files</strong> — Each card shows a video + audio pairing. Use the play buttons to preview. If a pair is wrong, remove it and re-drop.</li>
             <li><strong>Edit filenames</strong> — The Smart Filename is a blend of both filenames with duplicate information removed. Click to rename your new file. Use the clock icon to add a timestamp.</li>
-            <li><strong>Normalise</strong> — Click NORM on a pair (or NORM ALL) to enable loudness normalisation. Click the badge to choose a standard (EBU R128, streaming, full scale).</li>
+            <li><strong>Normalise</strong> — Click NORM on a file (or NORM ALL) to enable loudness or True Peak derived normalisation. Click the badge to choose a standard (EBU R128, streaming, full scale).</li>
             <li><strong>Choose format</strong> — Pick ORIGINAL to leave the format untouched or H.264/AAC to make file sizes more manageable.</li>
             <li><strong>Layback</strong> — Hit the green button. Output files are saved alongside your audio files.</li>
           </ol>
