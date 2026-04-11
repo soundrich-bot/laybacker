@@ -1,0 +1,23 @@
+FFmpeg License Notice
+=====================
+
+This application bundles FFmpeg (https://ffmpeg.org), which is licensed
+under the GNU General Public License version 3 (GPLv3).
+
+FFmpeg is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free
+Software Foundation; either version 3 of the License, or (at your option)
+any later version.
+
+FFmpeg is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE. See the GNU General Public License for more
+details.
+
+You should have received a copy of the GNU General Public License along
+with FFmpeg. If not, see <https://www.gnu.org/licenses/>.
+
+FFmpeg source code is available at: https://git.ffmpeg.org/ffmpeg.git
+
+The bundled macOS static builds are from: https://evermeet.cx/ffmpeg/
+The bundled Windows static builds are from: https://www.gyan.dev/ffmpeg/builds/

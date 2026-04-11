@@ -3,9 +3,30 @@ use std::sync::OnceLock;
 
 use crate::models::*;
 
-/// Find a binary by name, checking common installation paths.
+/// Find a binary by name, checking the bundled sidecar location first,
+/// then common system installation paths.
 /// Result is cached so subprocess is only spawned once per binary per session.
 pub fn find_binary(name: &str) -> String {
+    // Check for bundled sidecar binary next to the executable first
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            let sidecar = if cfg!(target_os = "windows") {
+                exe_dir.join(format!("{}.exe", name))
+            } else {
+                exe_dir.join(name)
+            };
+            if sidecar.exists() {
+                if let Some(path_str) = sidecar.to_str() {
+                    if Command::new(path_str).arg("-version").output().is_ok() {
+                        log::info!("{}: using bundled sidecar at {}", name, path_str);
+                        return path_str.to_string();
+                    }
+                }
+            }
+        }
+    }
+
+    // Fall back to system-installed binaries
     let candidates = if cfg!(target_os = "windows") {
         vec![
             name.to_string(),
@@ -22,6 +43,7 @@ pub fn find_binary(name: &str) -> String {
 
     for candidate in &candidates {
         if Command::new(candidate).arg("-version").output().is_ok() {
+            log::info!("{}: using system binary at {}", name, candidate);
             return candidate.clone();
         }
     }

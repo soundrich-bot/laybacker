@@ -108,7 +108,7 @@
       {/if}
     </div>
     {#if ffmpegStatus.available}
-      <span class="status-badge good">FFmpeg OK</span>
+      <span class="status-badge good" title={ffmpegStatus.version}>FFmpeg OK</span>
     {:else}
       <span class="status-badge bad">FFmpeg Missing</span>
     {/if}

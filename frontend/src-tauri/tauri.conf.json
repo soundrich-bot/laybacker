@@ -41,7 +41,8 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": ["resources/LaybackComplete.wav"],
+    "resources": ["resources/LaybackComplete.wav", "binaries/FFMPEG_LICENSE.txt"],
+    "externalBin": ["binaries/ffmpeg", "binaries/ffprobe"],
     "category": "Utility",
     "shortDescription": "Replace audio on video files. Fast.",
     "longDescription": "Laybacker is a tool for sound post-production professionals. Drag video and audio files, match them up, normalize loudness, and export. Simple.",

@@ -22,6 +22,10 @@ frontend/.vite/
 .env
 .env.*
 
+# Bundled FFmpeg sidecar binaries (too large for git, ~77MB each)
+frontend/src-tauri/binaries/ffmpeg-*
+frontend/src-tauri/binaries/ffprobe-*
+
 # Build artifacts
 *.dmg
 *.app

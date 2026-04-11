@@ -13,7 +13,23 @@ pub fn cancel_processing() {
 #[tauri::command]
 pub fn check_ffmpeg() -> Result<String, String> {
     if ffmpeg::is_ffmpeg_available() {
-        ffmpeg::get_ffmpeg_version().ok_or_else(|| "FFmpeg found but version unknown".into())
+        let version = ffmpeg::get_ffmpeg_version()
+            .unwrap_or_else(|| "unknown".into());
+        let path = ffmpeg::find_ffmpeg();
+        let source = if let Ok(exe) = std::env::current_exe() {
+            if let Some(dir) = exe.parent() {
+                if path.starts_with(&dir.to_string_lossy().as_ref()) {
+                    "bundled"
+                } else {
+                    "system"
+                }
+            } else {
+                "system"
+            }
+        } else {
+            "system"
+        };
+        Ok(format!("{} ({})", version, source))
     } else {
         Err("FFmpeg not found. Please install FFmpeg to use Laybacker.".into())
     }
