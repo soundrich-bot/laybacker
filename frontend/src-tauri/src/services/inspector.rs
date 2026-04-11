@@ -109,7 +109,7 @@ struct ProbeResult {
 fn probe_file(path: &str) -> Result<ProbeResult, String> {
     let ffprobe = find_ffprobe();
 
-    let output = Command::new(&ffprobe)
+    let output = ffmpeg::silent_command(&ffprobe)
         .args([
             "-v", "quiet",
             "-print_format", "json",

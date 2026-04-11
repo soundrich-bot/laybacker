@@ -3,6 +3,18 @@ use std::sync::OnceLock;
 
 use crate::models::*;
 
+/// Create a Command that hides the console window on Windows.
+/// On macOS/Linux this is just a normal Command.
+pub fn silent_command(program: &str) -> Command {
+    let mut cmd = Command::new(program);
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    cmd
+}
+
 /// Find a binary by name, checking the bundled sidecar location first,
 /// then common system installation paths.
 /// Result is cached so subprocess is only spawned once per binary per session.
@@ -17,7 +29,7 @@ pub fn find_binary(name: &str) -> String {
             };
             if sidecar.exists() {
                 if let Some(path_str) = sidecar.to_str() {
-                    if Command::new(path_str).arg("-version").output().is_ok() {
+                    if silent_command(path_str).arg("-version").output().is_ok() {
                         log::info!("{}: using bundled sidecar at {}", name, path_str);
                         return path_str.to_string();
                     }
@@ -42,7 +54,7 @@ pub fn find_binary(name: &str) -> String {
     };
 
     for candidate in &candidates {
-        if Command::new(candidate).arg("-version").output().is_ok() {
+        if silent_command(candidate).arg("-version").output().is_ok() {
             log::info!("{}: using system binary at {}", name, candidate);
             return candidate.clone();
         }
@@ -67,13 +79,13 @@ pub fn find_ffprobe() -> String {
 /// Check if ffmpeg is available
 pub fn is_ffmpeg_available() -> bool {
     let ffmpeg = find_ffmpeg();
-    Command::new(&ffmpeg).arg("-version").output().is_ok()
+    silent_command(&ffmpeg).arg("-version").output().is_ok()
 }
 
 /// Get ffmpeg version string
 pub fn get_ffmpeg_version() -> Option<String> {
     let ffmpeg = find_ffmpeg();
-    let output = Command::new(&ffmpeg).arg("-version").output().ok()?;
+    let output = silent_command(&ffmpeg).arg("-version").output().ok()?;
     let stdout = String::from_utf8_lossy(&output.stdout);
     stdout.lines().next().map(|l| l.to_string())
 }
@@ -250,7 +262,7 @@ pub fn extract_thumbnail(video_path: &str, duration_secs: f64) -> Option<String>
     // Seek to 10% of duration or 1 second, whichever is larger
     let seek_secs = (duration_secs * 0.1).max(1.0).min(duration_secs - 0.1);
 
-    let output = Command::new(&ffmpeg)
+    let output = silent_command(&ffmpeg)
         .args([
             "-ss", &format!("{:.2}", seek_secs),
             "-i", video_path,
@@ -280,7 +292,7 @@ pub fn check_silence_compliance(audio_path: &str, duration_secs: f64, silence_ms
     let threshold_db = -60.0; // anything above -60dB is considered non-silent
 
     // Check head
-    let head_output = Command::new(&ffmpeg)
+    let head_output = silent_command(&ffmpeg)
         .args([
             "-i", audio_path,
             "-af", &format!("atrim=0:{},astats=metadata=1:reset=1", silence_secs),
@@ -295,7 +307,7 @@ pub fn check_silence_compliance(audio_path: &str, duration_secs: f64, silence_ms
 
     // Check tail
     let tail_start = (duration_secs - silence_secs).max(0.0);
-    let tail_output = Command::new(&ffmpeg)
+    let tail_output = silent_command(&ffmpeg)
         .args([
             "-i", audio_path,
             "-af", &format!("atrim={}:{},astats=metadata=1:reset=1", tail_start, duration_secs),
@@ -415,7 +427,7 @@ pub fn measure_loudnorm_full(audio_path: &str, target_lufs: f64, true_peak_limit
     let ffmpeg = find_ffmpeg();
     let args = build_loudness_measure_command_targeted(audio_path, target_lufs, true_peak_limit);
 
-    let output = Command::new(&ffmpeg)
+    let output = silent_command(&ffmpeg)
         .args(&args)
         .output()
         .map_err(|e| format!("Failed to run ffmpeg for loudness measurement: {}", e))?;
@@ -435,7 +447,7 @@ pub fn run_ffmpeg(args: &[String]) -> Result<(), String> {
     // The output path is the last argument
     let output_path = args.last().map(|s| s.as_str());
 
-    let output = Command::new(&ffmpeg)
+    let output = silent_command(&ffmpeg)
         .args(args)
         .output()
         .map_err(|e| format!("Failed to run ffmpeg: {}", e))?;
@@ -484,7 +496,7 @@ pub fn measure_loudness_ffmpeg(audio_path: &str) -> Result<(f64, f64), String> {
         "-".to_string(),
     ];
 
-    let output = Command::new(&ffmpeg)
+    let output = silent_command(&ffmpeg)
         .args(&args)
         .output()
         .map_err(|e| format!("Failed to run ffmpeg for loudness measurement: {}", e))?;

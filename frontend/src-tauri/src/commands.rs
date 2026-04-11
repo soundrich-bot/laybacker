@@ -192,7 +192,7 @@ pub fn play_sound(path: String) -> Result<(), String> {
     {
         // Escape single quotes in path to prevent PowerShell injection
         let escaped_path = path.replace('\'', "''");
-        std::process::Command::new("powershell")
+        ffmpeg::silent_command("powershell")
             .args(["-c", &format!("(New-Object Media.SoundPlayer '{}').PlaySync()", escaped_path)])
             .spawn()
             .map_err(|e| format!("Failed to play sound: {}", e))?;
