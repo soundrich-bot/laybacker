@@ -68,15 +68,11 @@ pub fn process_pair(
 
         if is_lufs_mode {
             // LUFS mode: use FFmpeg's loudnorm filter (two-pass) for gating-accurate targeting.
-            // FFmpeg's loudnorm reads ~0.1dB louder than industry-standard meters (YouLean, Nugen),
-            // so we target 0.1dB quieter to compensate.
-            const LOUDNORM_CALIBRATION_OFFSET: f64 = 0.1;
-            let calibrated_target = pair.normalization_settings.target_lufs - LOUDNORM_CALIBRATION_OFFSET;
-
-            // Both passes must use the same calibrated target for consistency
+            // No calibration offset — FFmpeg's loudnorm is ITU-R BS.1770-4 compliant
+            // and any ±0.1dB variation vs third-party meters is within spec tolerance.
             match ffmpeg::measure_loudnorm_full(
                 &pair.audio.path,
-                calibrated_target,
+                pair.normalization_settings.target_lufs,
                 pair.normalization_settings.true_peak_limit,
             ) {
                 Ok(measurement) => {
@@ -85,7 +81,7 @@ pub fn process_pair(
 
                     let filter = ffmpeg::build_loudnorm_filter(
                         &measurement,
-                        calibrated_target,
+                        pair.normalization_settings.target_lufs,
                         pair.normalization_settings.true_peak_limit,
                     );
                     log::info!("Loudnorm two-pass filter: {}", &filter);

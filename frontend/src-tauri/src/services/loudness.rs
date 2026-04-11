@@ -35,9 +35,7 @@ pub fn calculate_gain(
     }
 
     // Maximum gain before true peak limit is exceeded.
-    // Compensate for ebur128 reading true peak ~0.1dB lower than industry meters
-    // (YouLean, Nugen) by adding 0.1dB to the measured peak.
-    let max_gain = settings.true_peak_limit - (measurement.true_peak_dbtp + 0.1);
+    let max_gain = settings.true_peak_limit - measurement.true_peak_dbtp;
 
     if settings.target_lufs >= 0.0 {
         // Full Scale Review mode: push as loud as possible up to true peak limit
@@ -86,8 +84,8 @@ mod tests {
         };
 
         let gain = calculate_gain(&measurement, &settings);
-        // Want +7 dB but true peak allows: -1.0 - (-2.0 + 0.1) = 0.9 dB
-        assert_eq!(gain, 0.9);
+        // Want +7 dB but true peak allows: -1.0 - (-2.0) = 1.0 dB
+        assert_eq!(gain, 1.0);
     }
 
     #[test]
@@ -102,8 +100,8 @@ mod tests {
         };
 
         let gain = calculate_gain(&measurement, &settings);
-        // max_gain = -1.0 - (-1.96 + 0.1) = -1.0 + 1.86 = 0.86
-        assert_eq!(gain, 0.86);
+        // max_gain = -1.0 - (-1.96) = 0.96
+        assert_eq!(gain, 0.96);
     }
 
     #[test]
@@ -118,8 +116,8 @@ mod tests {
         };
 
         let gain = calculate_gain(&measurement, &settings);
-        // max_gain = -1.0 - (-12.0 + 0.1) = -1.0 + 11.9 = 10.9
-        assert_eq!(gain, 10.9);
+        // max_gain = -1.0 - (-12.0) = 11.0
+        assert_eq!(gain, 11.0);
     }
 
     #[test]
@@ -145,20 +143,18 @@ mod tests {
     }
 
     #[test]
-    fn test_gain_includes_true_peak_calibration() {
-        // ebur128 reads true peak ~0.1dB lower than industry meters.
-        // With TP at -1.0 dBTP (measured) and limit at -1.0 dBTP,
-        // naive calc would say 0 gain, but with +0.1 calibration it should be -0.1.
+    fn test_gain_at_true_peak_limit() {
+        // When measured peak is exactly at the limit, gain should be 0.
         let measurement = LoudnessMeasurement {
             integrated_lufs: -23.0,
             true_peak_dbtp: -1.0,
         };
         let settings = NormalizationSettings { target_lufs: -23.0, true_peak_limit: -1.0 };
         let gain = calculate_gain(&measurement, &settings);
-        // max_gain = -1.0 - (-1.0 + 0.1) = -0.1
+        // max_gain = -1.0 - (-1.0) = 0.0
         // desired_gain = -23.0 - (-23.0) = 0.0
-        // gain = min(0.0, -0.1) = -0.1
-        assert_eq!(gain, -0.1);
+        // gain = min(0.0, 0.0) = 0.0
+        assert_eq!(gain, 0.0);
     }
 
     #[test]
@@ -170,8 +166,8 @@ mod tests {
         };
         let settings = NormalizationSettings { target_lufs: 0.0, true_peak_limit: -1.0 };
         let gain = calculate_gain(&measurement, &settings);
-        // max_gain = -1.0 - (-6.0 + 0.1) = -1.0 + 5.9 = 4.9
-        assert_eq!(gain, 4.9);
+        // max_gain = -1.0 - (-6.0) = 5.0
+        assert_eq!(gain, 5.0);
     }
 
     #[test]
@@ -184,8 +180,8 @@ mod tests {
         let settings = NormalizationSettings { target_lufs: -23.0, true_peak_limit: -1.0 };
         let gain = calculate_gain(&measurement, &settings);
         // desired = -23 - (-20) = -3.0 (reduce)
-        // max = -1.0 - (-0.5 + 0.1) = -1.0 + 0.4 = -0.6
-        // gain = min(-3.0, -0.6) = -3.0 (desired is smaller, i.e. more reduction)
+        // max = -1.0 - (-0.5) = -0.5
+        // gain = min(-3.0, -0.5) = -3.0 (desired is smaller, i.e. more reduction)
         assert_eq!(gain, -3.0);
     }
 }
