@@ -1,8 +1,19 @@
 <script>
   import { invoke } from '@tauri-apps/api/core';
+  import { getVersion } from '@tauri-apps/api/app';
+  import { onMount } from 'svelte';
   let { ffmpegStatus } = $props();
   let showAbout = $state(false);
   let showHelp = $state(false);
+  let appVersion = $state('');
+
+  onMount(async () => {
+    try {
+      appVersion = await getVersion();
+    } catch {
+      /* version display is non-critical */
+    }
+  });
 
   const DONATE_URL = 'https://monzo.com/pay/r/soundrich-limited_2qhNYp1kvgAICv';
   const FEEDBACK_EMAIL = 'soundrich+laybacker@gmail.com';
@@ -27,7 +38,7 @@
 
   async function sendFeedback(e) {
     e.stopPropagation();
-    const subject = encodeURIComponent('Laybacker Feedback v0.1.3');
+    const subject = encodeURIComponent(`Laybacker Feedback v${appVersion}`);
     const url = `mailto:${FEEDBACK_EMAIL}?subject=${subject}`;
     try {
       await invoke('open_url', { url });
@@ -57,7 +68,7 @@
 
     {#if showAbout}
       <div class="about-panel">
-        <div class="about-version">v0.1.3</div>
+        <div class="about-version">v{appVersion}</div>
         <div class="about-divider"></div>
         <div class="about-copy">&copy; 2026 Soundrich Ltd.</div>
         <div class="about-note">All media is processed locally on your machine. Nothing is uploaded.</div>
