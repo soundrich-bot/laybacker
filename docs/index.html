@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Laybacker — Replace audio on video files. Fast.</title>
+  <meta name="description" content="Laybacker lays back audio onto video for sound post-production. Drag video and audio, auto-match, normalise loudness to broadcast spec, and export. Free, runs locally, FFmpeg bundled." />
+  <meta property="og:title" content="Laybacker — Replace audio on video files. Fast." />
+  <meta property="og:description" content="A tool for sound post-production professionals. Drag, match, normalise, export. Free and local." />
+  <meta property="og:type" content="website" />
+  <style>
+    :root {
+      --bg-dark: #08080c;
+      --bg-panel: #11121a;
+      --bg-raised: #181a25;
+      --border: #23252f;
+      --text: #eef0f6;
+      --text-2: #aeb2c0;
+      --text-mut: #6b7080;
+      --pink: #ff2e63;
+      --cyan: #08f7fe;
+      --green: #39ff14;
+      --yellow: #edff21;
+      --mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
+      --disp: "Helvetica Neue", Arial, system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: radial-gradient(1200px 600px at 50% -10%, #15131f 0%, var(--bg-dark) 60%) fixed;
+      color: var(--text);
+      font-family: var(--mono);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      min-height: 100vh;
+    }
+    .wrap { max-width: 880px; margin: 0 auto; padding: 0 24px; }
+
+    header { text-align: center; padding: 80px 0 48px; }
+    .logo {
+      font-family: var(--disp);
+      font-weight: 800;
+      font-size: clamp(48px, 11vw, 104px);
+      letter-spacing: 0.04em;
+      background: linear-gradient(90deg, var(--pink), var(--cyan));
+      -webkit-background-clip: text; background-clip: text;
+      -webkit-text-fill-color: transparent;
+      line-height: 1;
+    }
+    .tagline {
+      font-size: clamp(13px, 2.6vw, 16px);
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      color: var(--cyan);
+      margin-top: 18px;
+    }
+    .lead {
+      color: var(--text-2);
+      font-size: 16px;
+      max-width: 560px;
+      margin: 22px auto 0;
+    }
+
+    /* Downloads */
+    .downloads {
+      display: flex; flex-wrap: wrap; gap: 14px; justify-content: center;
+      margin: 40px 0 14px;
+    }
+    .dl {
+      display: flex; flex-direction: column; align-items: center; gap: 4px;
+      min-width: 210px;
+      padding: 16px 26px;
+      border-radius: 12px;
+      text-decoration: none;
+      font-weight: 700;
+      transition: transform .15s ease, box-shadow .15s ease;
+      border: 1px solid transparent;
+    }
+    .dl small { font-weight: 400; font-size: 11px; letter-spacing: 0.08em; opacity: 0.85; }
+    .dl-primary { background: var(--green); color: #04130a; box-shadow: 0 0 28px rgba(57,255,20,0.28); }
+    .dl-secondary { background: var(--bg-raised); color: var(--text); border-color: var(--border); }
+    .dl:hover { transform: translateY(-2px) scale(1.02); }
+    .dl-primary:hover { box-shadow: 0 0 40px rgba(57,255,20,0.4); }
+    .dl-secondary:hover { border-color: var(--cyan); color: var(--cyan); }
+    .dl .os { font-family: var(--disp); font-size: 17px; letter-spacing: 0.02em; }
+    .version-line { text-align: center; color: var(--text-mut); font-size: 12px; letter-spacing: 0.06em; }
+    .version-line a { color: var(--text-2); }
+
+    /* First-launch note */
+    .firstrun {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--yellow);
+      border-radius: 10px;
+      padding: 16px 20px;
+      margin: 40px auto 0;
+      max-width: 620px;
+      font-size: 13.5px;
+      color: var(--text-2);
+    }
+    .firstrun b { color: var(--yellow); font-family: var(--disp); letter-spacing: 0.05em; }
+    .firstrun code { background: var(--bg-raised); padding: 1px 6px; border-radius: 4px; color: var(--text); }
+
+    /* Features */
+    section { padding: 56px 0; }
+    h2 {
+      font-family: var(--disp); font-weight: 800;
+      font-size: 13px; letter-spacing: 0.22em; text-transform: uppercase;
+      color: var(--text-mut); text-align: center; margin-bottom: 32px;
+    }
+    .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+    .feature {
+      background: var(--bg-panel); border: 1px solid var(--border);
+      border-radius: 12px; padding: 22px;
+    }
+    .feature h3 { font-family: var(--disp); font-size: 16px; color: var(--text); margin-bottom: 6px; letter-spacing: 0.02em; }
+    .feature .dot { color: var(--pink); }
+    .feature p { color: var(--text-2); font-size: 13.5px; }
+
+    /* Footer */
+    footer { border-top: 1px solid var(--border); padding: 40px 0 64px; text-align: center; color: var(--text-mut); font-size: 13px; }
+    footer a { color: var(--text-2); text-decoration: none; border-bottom: 1px solid var(--border); }
+    footer a:hover { color: var(--cyan); border-color: var(--cyan); }
+    .foot-links { display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; margin-bottom: 18px; }
+    .coffee {
+      display: inline-block; margin-top: 6px; padding: 9px 20px; border-radius: 8px;
+      background: rgba(255,46,99,0.1); border: 1px solid rgba(255,46,99,0.35);
+      color: var(--pink); text-decoration: none; font-weight: 700; font-size: 13px;
+    }
+    .coffee:hover { background: rgba(255,46,99,0.18); }
+    .privacy { color: var(--green); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="logo">LAYBACKER</div>
+      <div class="tagline">batch relay sound to video</div>
+      <p class="lead">Replace the audio on your video files — fast. Drag in video and audio, Laybacker auto-matches the pairs, normalises loudness to broadcast spec, and exports. Built for sound post-production.</p>
+
+      <div class="downloads">
+        <a class="dl dl-primary" id="dl-mac-arm" href="https://github.com/soundrich-bot/laybacker/releases/latest">
+          <span class="os">Mac · Apple Silicon</span>
+          <small>M1 / M2 / M3 / M4 · .dmg</small>
+        </a>
+        <a class="dl dl-secondary" id="dl-mac-intel" href="https://github.com/soundrich-bot/laybacker/releases/latest">
+          <span class="os">Mac · Intel</span>
+          <small>x86_64 · .dmg</small>
+        </a>
+        <a class="dl dl-secondary" id="dl-win" href="https://github.com/soundrich-bot/laybacker/releases/latest">
+          <span class="os">Windows</span>
+          <small>x64 · installer (.exe)</small>
+        </a>
+      </div>
+      <p class="version-line">
+        <span id="version">latest release</span> ·
+        <a href="https://github.com/soundrich-bot/laybacker/releases">all versions &amp; release notes</a>
+      </p>
+
+      <div class="firstrun">
+        <b>First launch?</b> Laybacker is free and open-source but not paid-signed (just like Shutter Encoder), so your computer asks once:<br>
+        • <b style="color:var(--cyan)">Mac:</b> right-click the app → <code>Open</code> → <code>Open</code>.<br>
+        • <b style="color:var(--cyan)">Windows:</b> on the blue SmartScreen box click <code>More info</code> → <code>Run anyway</code>.
+      </div>
+    </header>
+
+    <section>
+      <h2>What it does</h2>
+      <div class="features">
+        <div class="feature"><h3><span class="dot">▸</span> Drag, drop, done</h3><p>Drop video and audio together — Laybacker matches them by duration and name, and lets you fix any pairing by hand.</p></div>
+        <div class="feature"><h3><span class="dot">▸</span> Broadcast-spec loudness</h3><p>Normalise to LUFS targets (EBU R128 −23, streaming −16, ATSC A/85) or full-scale peak, measured to ITU-R BS.1770-4.</p></div>
+        <div class="feature"><h3><span class="dot">▸</span> 6-frame silence check</h3><p>Verify and fix head/tail silence for UK broadcast delivery, with clean fades to avoid clicks.</p></div>
+        <div class="feature"><h3><span class="dot">▸</span> Smart export</h3><p>Keep the original streams or re-encode to H.264 / AAC. Smart filenames with optional date stamps.</p></div>
+        <div class="feature"><h3><span class="dot">▸</span> FFmpeg included</h3><p>No separate install — a pinned, bundled FFmpeg ships inside the app. Nothing else to set up.</p></div>
+        <div class="feature"><h3><span class="dot">▸</span> <span class="privacy">Fully local &amp; private</span></h3><p>Every file is processed on your own machine. Nothing is ever uploaded.</p></div>
+      </div>
+    </section>
+  </div>
+
+  <footer>
+    <div class="wrap">
+      <div class="foot-links">
+        <a href="https://github.com/soundrich-bot/laybacker">Source code (GitHub)</a>
+        <a href="https://github.com/soundrich-bot/laybacker/blob/main/LICENSE">Licence (GPL-3.0)</a>
+        <a href="https://github.com/soundrich-bot/laybacker/releases">Releases</a>
+        <a href="mailto:soundrich+laybacker@gmail.com">Feedback</a>
+      </div>
+      <div>Laybacker is built on <a href="https://ffmpeg.org">FFmpeg</a> (licensed under the GPL). Free to use — support is welcome:</div>
+      <a class="coffee" href="https://monzo.com/pay/r/soundrich-limited_2qhNYp1kvgAICv">☕ Buy us a coffee</a>
+      <div style="margin-top:22px; opacity:0.7;">© 2026 Soundrich Ltd.</div>
+    </div>
+  </footer>
+
+  <script>
+    // Point the download buttons at the latest release's assets so they never
+    // go stale when a new version ships. Falls back to the releases page.
+    (function () {
+      var REPO = 'soundrich-bot/laybacker';
+      function setHref(id, url) { if (url) { var el = document.getElementById(id); if (el) el.href = url; } }
+      fetch('https://api.github.com/repos/' + REPO + '/releases/latest')
+        .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+        .then(function (rel) {
+          var a = rel.assets || [];
+          function find(suffix) {
+            var m = a.find(function (x) { return x.name.toLowerCase().endsWith(suffix); });
+            return m && m.browser_download_url;
+          }
+          setHref('dl-mac-arm', find('aarch64.dmg'));
+          setHref('dl-mac-intel', find('x64.dmg'));
+          setHref('dl-win', find('-setup.exe') || find('.msi'));
+          if (rel.tag_name) {
+            var v = document.getElementById('version');
+            if (v) v.textContent = 'Latest: ' + rel.tag_name;
+          }
+        })
+        .catch(function () { /* keep fallback hrefs */ });
+    })();
+  </script>
+</body>
+</html>
