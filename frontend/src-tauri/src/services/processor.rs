@@ -286,7 +286,70 @@ fn resolve_output_path(pair: &MatchedPair, settings: &ExportSettings) -> String 
         pair.output_filename.clone()
     };
 
-    format!("{}/{}", directory, filename)
+    let candidate = format!("{}/{}", directory, filename);
+    avoid_source_collision(candidate, pair)
+}
+
+/// Normalise a path for comparison: canonicalise the parent directory (so
+/// different spellings of the same folder match) and lowercase the whole thing
+/// (macOS and Windows filesystems are case-insensitive). Falls back to a plain
+/// lowercase of the input when the parent can't be canonicalised (e.g. it
+/// doesn't exist on disk yet).
+fn normalize_path(path: &str) -> String {
+    let p = Path::new(path);
+    match p.parent().and_then(|parent| parent.canonicalize().ok()) {
+        Some(dir) => dir
+            .join(p.file_name().unwrap_or_default())
+            .to_string_lossy()
+            .to_lowercase(),
+        None => path.to_lowercase(),
+    }
+}
+
+/// Never let an output file land on top of one of this pair's own source files.
+/// FFmpeg cannot read from and write to the same file in-place — the job would
+/// fail (and older FFmpeg builds would destroy the source). This happens when a
+/// previously-generated output is re-added and processed again with the same
+/// settings. If a collision is detected, append `_1`, `_2`, … until the output
+/// path is clear of every source.
+fn avoid_source_collision(path: String, pair: &MatchedPair) -> String {
+    let mut sources = vec![normalize_path(&pair.audio.path)];
+    if let Some(ref video) = pair.video {
+        sources.push(normalize_path(&video.path));
+    }
+    let collides = |candidate: &str| {
+        let normalized = normalize_path(candidate);
+        sources.iter().any(|s| s == &normalized)
+    };
+
+    if !collides(&path) {
+        return path;
+    }
+
+    let p = Path::new(&path);
+    let dir = p.parent().map(|d| d.to_string_lossy().to_string());
+    let stem = p
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("output")
+        .to_string();
+    let ext = p.extension().and_then(|e| e.to_str());
+
+    let mut n = 1;
+    loop {
+        let name = match ext {
+            Some(e) => format!("{}_{}.{}", stem, n, e),
+            None => format!("{}_{}", stem, n),
+        };
+        let candidate = match &dir {
+            Some(d) if !d.is_empty() => format!("{}/{}", d, name),
+            _ => name,
+        };
+        if !collides(&candidate) {
+            return candidate;
+        }
+        n += 1;
+    }
 }
 
 #[cfg(test)]
@@ -407,7 +470,53 @@ mod tests {
         );
         let settings = ExportSettings::default();
         let path = resolve_output_path(&pair, &settings);
-        assert_eq!(path, "/projects/MyMix.wav");
+        // Passthrough with no norm would resolve to the source path itself; the
+        // guard bumps it so FFmpeg never edits the file in-place.
+        assert_eq!(path, "/projects/MyMix_1.wav");
+    }
+
+    #[test]
+    fn test_output_path_never_overwrites_own_audio_source() {
+        // Re-adding a previously-normalised file and processing it again with the
+        // same settings produces an output name identical to the source. The guard
+        // must bump it so FFmpeg never tries to edit the file in-place.
+        let pair = make_pair(
+            None,
+            make_audio(
+                "MyMix_normalised_-1dBTP",
+                "/projects/MyMix_normalised_-1dBTP.wav",
+            ),
+            "MyMix_normalised_-1dBTP.wav", // namer would regenerate this exact name
+        );
+        let settings = ExportSettings::default();
+        let path = resolve_output_path(&pair, &settings);
+        assert_eq!(path, "/projects/MyMix_normalised_-1dBTP_1.wav");
+    }
+
+    #[test]
+    fn test_output_path_never_overwrites_video_source() {
+        // A laid-back output named after the video must not overwrite the video itself.
+        let pair = make_pair(
+            Some(make_video("Clip", "/projects/Clip.mov")),
+            make_audio("Mix", "/projects/Mix.wav"),
+            "Clip.mov", // collides with the source video
+        );
+        let settings = ExportSettings::default();
+        let path = resolve_output_path(&pair, &settings);
+        assert_eq!(path, "/projects/Clip_1.mov");
+    }
+
+    #[test]
+    fn test_output_path_no_collision_passes_through() {
+        // Normal case: output differs from sources, returned unchanged.
+        let pair = make_pair(
+            Some(make_video("Clip", "/projects/Clip.mov")),
+            make_audio("Mix", "/projects/Mix.wav"),
+            "Clip_with audio.mov",
+        );
+        let settings = ExportSettings::default();
+        let path = resolve_output_path(&pair, &settings);
+        assert_eq!(path, "/projects/Clip_with audio.mov");
     }
 
     #[test]

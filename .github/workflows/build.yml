@@ -45,6 +45,15 @@ jobs:
         working-directory: frontend
         run: npm install
 
+      - name: Fetch FFmpeg sidecars (macOS)
+        if: runner.os == 'macOS'
+        run: bash scripts/download-ffmpeg.sh
+
+      - name: Fetch FFmpeg sidecars (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: bash scripts/download-ffmpeg.sh --windows
+
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
         env:

@@ -195,6 +195,64 @@ fn test_batch_processes_multiple_pairs() {
     cleanup(&output2);
 }
 
+// ── Regression: re-processing a generated output ──
+
+#[test]
+fn test_reprocessing_generated_output_does_not_fail() {
+    // Re-adding a file Laybacker previously generated and processing it again
+    // with the same settings used to resolve the output path to the file itself.
+    // FFmpeg refuses to edit a file in-place, so the job failed. The collision
+    // guard must bump the name so the job succeeds and the source is untouched.
+    let dir = output_dir();
+    let src_name = "regress_normalised_-1dBTP.wav";
+    let src_path = format!("{}/{}", dir, src_name);
+    std::fs::copy(test_fixture("test_tone.wav"), &src_path).unwrap();
+    let before_len = std::fs::metadata(&src_path).unwrap().len();
+
+    let pair = MatchedPair {
+        id: "regress".into(),
+        video: None,
+        audio: MediaFile {
+            id: "a".into(),
+            path: src_path.clone(),
+            filename: src_name.into(),
+            filename_no_ext: "regress_normalised_-1dBTP".into(),
+            extension: "wav".into(),
+            media_type: MediaType::Audio,
+            duration_secs: 2.0,
+            codec_info: None,
+            sample_rate: Some(48000.0),
+            channel_count: Some(2),
+            thumbnail_data: None,
+        },
+        output_filename: src_name.into(), // namer regenerates a name identical to the source
+        normalization_enabled: true,
+        normalization_settings: NormalizationSettings { target_lufs: 0.0, true_peak_limit: -1.0 },
+        timecode_offset_secs: 0.0,
+        match_confidence: 1.0,
+        silence_compliance: false,
+        silence_ms: 240.0,
+        fade_ms: 5.0,
+    };
+    let settings = ExportSettings::default();
+    let result = processor::process_pair(&pair, &settings, |_| {});
+
+    assert!(result.success, "Reprocessing should succeed, got error: {:?}", result.error);
+    let out = result.output_path.clone().expect("output path");
+    assert!(out.ends_with("regress_normalised_-1dBTP_1.wav"), "Output should be bumped, got: {}", out);
+    assert!(Path::new(&out).exists(), "Bumped output not created");
+    assert!(Path::new(&out).metadata().unwrap().len() > 0, "Bumped output is empty");
+    // The original source must be left completely untouched.
+    assert_eq!(
+        std::fs::metadata(&src_path).unwrap().len(),
+        before_len,
+        "Source file was modified — guard failed to protect it",
+    );
+
+    cleanup(&src_path);
+    cleanup(&out);
+}
+
 // ── Compliance check ──
 
 #[test]
