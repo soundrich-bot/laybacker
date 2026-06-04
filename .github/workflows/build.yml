@@ -84,6 +84,30 @@ jobs:
           tauriScript: npx tauri
           args: --target ${{ matrix.target }}
 
+      # Wrap the .app into a .pkg installer. An unsigned .pkg gets the standard
+      # "unidentified developer" Gatekeeper prompt (recoverable via System
+      # Settings → Open Anyway) instead of the harsh "damaged" error that a
+      # downloaded .app/.dmg triggers on Apple Silicon. A pkg-installed app also
+      # lands without the quarantine flag, so it launches cleanly thereafter.
+      - name: Build .pkg installer (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          MACOS_DIR="frontend/src-tauri/target/${{ matrix.target }}/release/bundle/macos"
+          APP=$(find "$MACOS_DIR" -maxdepth 1 -name '*.app' | head -1)
+          VER="${GITHUB_REF_NAME#v}"
+          case "${{ matrix.target }}" in
+            aarch64-apple-darwin) ARCH=aarch64 ;;
+            x86_64-apple-darwin)  ARCH=x64 ;;
+            *)                    ARCH="${{ matrix.target }}" ;;
+          esac
+          PKG="$MACOS_DIR/Laybacker_${VER}_${ARCH}.pkg"
+          productbuild --component "$APP" /Applications "$PKG"
+          ls -lh "$PKG"
+          gh release upload "${{ github.ref_name }}" "$PKG" --clobber
+
       # ── Independent trust artifacts ──────────────────────────────────────
       # Publish SHA-256 checksums so users can verify a download is untampered.
       - name: Generate and publish SHA-256 checksums
@@ -97,7 +121,7 @@ jobs:
           hash() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$@"; else shasum -a 256 "$@"; fi; }
           while IFS= read -r f; do
             ( cd "$(dirname "$f")" && hash "$(basename "$f")" ) >> "$GITHUB_WORKSPACE/$OUT"
-          done < <(find "$BUNDLE" \( -name '*.dmg' -o -name '*-setup.exe' -o -name '*.msi' \) -type f)
+          done < <(find "$BUNDLE" \( -name '*.dmg' -o -name '*.pkg' -o -name '*-setup.exe' -o -name '*.msi' \) -type f)
           echo "----- $OUT -----"; cat "$OUT"
           gh release upload "${{ github.ref_name }}" "$OUT" --clobber
 
@@ -109,6 +133,7 @@ jobs:
         with:
           subject-path: |
             frontend/src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
+            frontend/src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.pkg
             frontend/src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*-setup.exe
             frontend/src-tauri/target/${{ matrix.target }}/release/bundle/msi/*.msi
 
@@ -123,6 +148,7 @@ jobs:
           update_release_body: false   # the finalize job sets notes race-free
           files: |
             frontend/src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
+            frontend/src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.pkg
             frontend/src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*-setup.exe
             frontend/src-tauri/target/${{ matrix.target }}/release/bundle/msi/*.msi
 
@@ -147,11 +173,11 @@ jobs:
           cat "$TMP"/SHA256SUMS-*.txt > "$TMP/all.txt" 2>/dev/null || true
           {
             echo "Download the installer for your platform:"
-            echo "- **Mac (Apple Silicon, M1–M4)**: \`Laybacker_*_aarch64.dmg\`"
-            echo "- **Mac (Intel)**: \`Laybacker_*_x64.dmg\`"
+            echo "- **Mac (Apple Silicon, M1–M4)**: \`Laybacker_*_aarch64.pkg\`"
+            echo "- **Mac (Intel)**: \`Laybacker_*_x64.pkg\`"
             echo "- **Windows**: \`Laybacker_*_x64-setup.exe\` (or the \`.msi\`)"
             echo ""
-            echo "**First launch?** Mac: right-click the app → Open → Open. Windows: *More info* → *Run anyway*."
+            echo "**First launch (Mac):** double-click the \`.pkg\`; if you see \"Apple could not verify…\", click Done, then **System Settings → Privacy & Security → Open Anyway**. After installing, Laybacker opens normally every time. **Windows:** *More info* → *Run anyway*."
             echo ""
             echo "## ✅ Independently verified safe"
             echo ""

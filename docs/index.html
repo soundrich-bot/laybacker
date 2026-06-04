@@ -174,11 +174,11 @@
       <div class="downloads">
         <a class="dl dl-primary" id="dl-mac-arm" href="https://github.com/soundrich-bot/laybacker/releases/latest">
           <span class="os">Mac · Apple Silicon</span>
-          <small>M1 / M2 / M3 / M4 · .dmg</small>
+          <small>M1 / M2 / M3 / M4 · .pkg installer</small>
         </a>
         <a class="dl dl-secondary" id="dl-mac-intel" href="https://github.com/soundrich-bot/laybacker/releases/latest">
           <span class="os">Mac · Intel</span>
-          <small>x86_64 · .dmg</small>
+          <small>x86_64 · .pkg installer</small>
         </a>
         <a class="dl dl-secondary" id="dl-win" href="https://github.com/soundrich-bot/laybacker/releases/latest">
           <span class="os">Windows</span>
@@ -207,11 +207,15 @@
       <h2>First launch</h2>
 
       <div class="firstrun">
-        <b>First launch?</b> Laybacker is free and open-source but not yet paid-signed by Apple, so the first open needs one quick step:<br>
-        • <b style="color:var(--cyan)">Mac:</b> drag Laybacker into <b>Applications</b>, then open <b>Terminal</b> and paste:<br>
-        &nbsp;&nbsp;<code>xattr -cr /Applications/Laybacker.app</code><br>
-        &nbsp;&nbsp;<span style="opacity:0.85">…then open the app normally. (This clears Apple's download flag — the app isn't actually damaged.)</span><br>
-        • <b style="color:var(--cyan)">Windows:</b> on the blue SmartScreen box click <code>More info</code> → <code>Run anyway</code>.
+        <b>First launch?</b> Laybacker is free and open-source but not paid-signed by Apple, so opening it the first time takes a couple of extra clicks — completely normal for indie apps, and you only do it once.<br>
+        <b style="color:var(--cyan)">Mac:</b>
+        <ol style="margin:6px 0 4px 20px; padding:0;">
+          <li>Double-click the downloaded <code>.pkg</code>.</li>
+          <li>If you see <i>“Apple could not verify…”</i>, click <b>Done</b>.</li>
+          <li>Open  <b>menu → System Settings → Privacy &amp; Security</b>, scroll to <b>Security</b>, and click <b>Open Anyway</b> next to Laybacker — confirm with your password / Touch ID.</li>
+          <li>The installer runs. After that, Laybacker opens normally every time.</li>
+        </ol>
+        <b style="color:var(--cyan)">Windows:</b> on the blue SmartScreen box, click <code>More info</code> → <code>Run anyway</code>.
       </div>
 
       <div class="trust">
@@ -282,8 +286,8 @@
             var m = a.find(function (x) { return x.name.toLowerCase().endsWith(suffix); });
             return m && m.browser_download_url;
           }
-          setHref('dl-mac-arm', find('aarch64.dmg'));
-          setHref('dl-mac-intel', find('x64.dmg'));
+          setHref('dl-mac-arm', find('aarch64.pkg') || find('aarch64.dmg'));
+          setHref('dl-mac-intel', find('x64.pkg') || find('x64.dmg'));
           setHref('dl-win', find('-setup.exe') || find('.msi'));
           if (rel.tag_name) {
             var v = document.getElementById('version');
@@ -306,7 +310,7 @@
           var total = 0;
           rels.forEach(function (rel) {
             (rel.assets || []).forEach(function (a) {
-              if (/\.(dmg|exe|msi)$/i.test(a.name)) total += a.download_count || 0;
+              if (/\.(pkg|dmg|exe|msi)$/i.test(a.name)) total += a.download_count || 0;
             });
           });
           var el = document.getElementById('dl-count');
