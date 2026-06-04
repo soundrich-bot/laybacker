@@ -180,7 +180,7 @@ jobs:
           CHANGELOG=""
           if [ -n "$PREV" ]; then
             CHANGELOG="$(git log --no-merges --pretty='- %s' "${PREV}..${TAG}" \
-              | grep -viE '^- (Release [0-9]|Bump version|Merge )' | head -25 || true)"
+              | grep -viE '^- (Bump version|Merge )' | head -25 || true)"
           fi
           [ -z "$CHANGELOG" ] && CHANGELOG="- Maintenance and improvements."
 
