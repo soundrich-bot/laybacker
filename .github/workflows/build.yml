@@ -13,6 +13,9 @@ permissions:
 jobs:
   build:
     strategy:
+      # Don't let one target's failure cancel the others — each platform
+      # builds and publishes independently.
+      fail-fast: false
       matrix:
         include:
           - platform: macos-latest
@@ -113,6 +116,7 @@ jobs:
       # the release notes. Self-skips until the VT_API_KEY secret is added.
       - name: Scan installers on VirusTotal
         if: ${{ env.VT_API_KEY != '' }}
+        continue-on-error: true   # a VT hiccup must never fail/cancel a release
         uses: crazy-max/ghaction-virustotal@v4
         with:
           vt_api_key: ${{ env.VT_API_KEY }}
