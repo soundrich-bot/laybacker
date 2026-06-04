@@ -207,8 +207,10 @@
       <h2>First launch</h2>
 
       <div class="firstrun">
-        <b>First launch?</b> Laybacker is free and open-source but not paid-signed (just like Shutter Encoder), so your computer asks once:<br>
-        • <b style="color:var(--cyan)">Mac:</b> right-click the app → <code>Open</code> → <code>Open</code>.<br>
+        <b>First launch?</b> Laybacker is free and open-source but not yet paid-signed by Apple, so the first open needs one quick step:<br>
+        • <b style="color:var(--cyan)">Mac:</b> drag Laybacker into <b>Applications</b>, then open <b>Terminal</b> and paste:<br>
+        &nbsp;&nbsp;<code>xattr -cr /Applications/Laybacker.app</code><br>
+        &nbsp;&nbsp;<span style="opacity:0.85">…then open the app normally. (This clears Apple's download flag — the app isn't actually damaged.)</span><br>
         • <b style="color:var(--cyan)">Windows:</b> on the blue SmartScreen box click <code>More info</code> → <code>Run anyway</code>.
       </div>
 
