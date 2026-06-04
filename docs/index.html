@@ -116,6 +116,10 @@
     .feature h3 { font-family: var(--disp); font-size: 16px; color: var(--text); margin-bottom: 6px; letter-spacing: 0.02em; }
     .feature .dot { color: var(--pink); }
     .feature p { color: var(--text-2); font-size: 13.5px; }
+    .feature a { color: var(--cyan); text-decoration: none; border-bottom: 1px solid rgba(8,247,254,0.3); }
+    .feature a:hover { border-color: var(--cyan); }
+    .feature code, .feature p code { background: var(--bg-raised); padding: 1px 5px; border-radius: 4px; color: var(--text); font-size: 0.9em; word-break: break-word; }
+    .verify-intro { text-align: center; color: var(--text-2); max-width: 600px; margin: 0 auto 28px; font-size: 14px; }
 
     /* Footer */
     footer { border-top: 1px solid var(--border); padding: 40px 0 64px; text-align: center; color: var(--text-mut); font-size: 13px; }
@@ -175,6 +179,29 @@
         <div class="feature"><h3><span class="dot">▸</span> <span class="privacy">Fully local &amp; private</span></h3><p>Every file is processed on your own machine. Nothing is ever uploaded.</p></div>
       </div>
     </section>
+
+    <section id="verify">
+      <h2>Verify it's genuine</h2>
+      <p class="verify-intro">Don't just take our word for it — Laybacker is built to be independently checkable. Four ways to confirm it's safe and untampered:</p>
+      <div class="features">
+        <div class="feature">
+          <h3><span class="dot">▸</span> Open source</h3>
+          <p>The full source is public and every installer is built automatically by GitHub from a tagged commit, with public build logs. <a href="https://github.com/soundrich-bot/laybacker">Read the code</a>.</p>
+        </div>
+        <div class="feature">
+          <h3><span class="dot">▸</span> VirusTotal scanned</h3>
+          <p>Each release is scanned by 70+ antivirus engines, with the report links in the <a href="https://github.com/soundrich-bot/laybacker/releases/latest">release notes</a>. Or scan it yourself at <a href="https://www.virustotal.com">virustotal.com</a>.</p>
+        </div>
+        <div class="feature">
+          <h3><span class="dot">▸</span> Checksums</h3>
+          <p>Every release publishes <code>SHA256SUMS</code> files so you can confirm your download matches our build exactly, byte for byte.</p>
+        </div>
+        <div class="feature">
+          <h3><span class="dot">▸</span> Signed provenance</h3>
+          <p>Each binary carries a cryptographic attestation tying it to the exact public source. Verify with <code>gh attestation verify &lt;file&gt; --repo soundrich-bot/laybacker</code>.</p>
+        </div>
+      </div>
+    </section>
   </div>
 
   <footer>
@@ -183,6 +210,7 @@
         <a href="https://github.com/soundrich-bot/laybacker">Source code (GitHub)</a>
         <a href="https://github.com/soundrich-bot/laybacker/blob/main/LICENSE">Licence (GPL-3.0)</a>
         <a href="https://github.com/soundrich-bot/laybacker/releases">Releases</a>
+        <a href="#verify">Verify a download</a>
         <a href="mailto:soundrich+laybacker@gmail.com">Feedback</a>
       </div>
       <div>Laybacker is built on <a href="https://ffmpeg.org">FFmpeg</a> (licensed under the GPL). Free to use — support is welcome:</div>

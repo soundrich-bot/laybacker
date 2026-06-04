@@ -6,7 +6,9 @@ on:
       - 'v*'
 
 permissions:
-  contents: write
+  contents: write       # create the release and upload checksums
+  id-token: write       # OIDC token for build-provenance signing
+  attestations: write   # write the provenance attestation
 
 jobs:
   build:
@@ -21,6 +23,11 @@ jobs:
             target: x86_64-pc-windows-msvc
 
     runs-on: ${{ matrix.platform }}
+
+    # Exposed at job level so the VirusTotal step can self-skip until the
+    # VT_API_KEY secret is added (a step `if:` can read env but not secrets).
+    env:
+      VT_API_KEY: ${{ secrets.VT_API_KEY }}
 
     steps:
       - uses: actions/checkout@v4
@@ -73,3 +80,44 @@ jobs:
           prerelease: false
           tauriScript: npx tauri
           args: --target ${{ matrix.target }}
+
+      # ── Independent trust artifacts ──────────────────────────────────────
+      # Publish SHA-256 checksums so users can verify a download is untampered.
+      - name: Generate and publish SHA-256 checksums
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BUNDLE="frontend/src-tauri/target/${{ matrix.target }}/release/bundle"
+          OUT="SHA256SUMS-${{ matrix.target }}.txt"
+          : > "$OUT"
+          hash() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$@"; else shasum -a 256 "$@"; fi; }
+          while IFS= read -r f; do
+            ( cd "$(dirname "$f")" && hash "$(basename "$f")" ) >> "$GITHUB_WORKSPACE/$OUT"
+          done < <(find "$BUNDLE" \( -name '*.dmg' -o -name '*-setup.exe' -o -name '*.msi' \) -type f)
+          echo "----- $OUT -----"; cat "$OUT"
+          gh release upload "${{ github.ref_name }}" "$OUT" --clobber
+
+      # Cryptographically attest that these binaries were built from this
+      # public source by this CI run (SLSA provenance, verifiable via
+      # `gh attestation verify <file> --repo soundrich-bot/laybacker`).
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            frontend/src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
+            frontend/src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*-setup.exe
+            frontend/src-tauri/target/${{ matrix.target }}/release/bundle/msi/*.msi
+
+      # Scan each installer with 70+ AV engines and append the report links to
+      # the release notes. Self-skips until the VT_API_KEY secret is added.
+      - name: Scan installers on VirusTotal
+        if: ${{ env.VT_API_KEY != '' }}
+        uses: crazy-max/ghaction-virustotal@v4
+        with:
+          vt_api_key: ${{ env.VT_API_KEY }}
+          update_release_body: true
+          files: |
+            frontend/src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
+            frontend/src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*-setup.exe
+            frontend/src-tauri/target/${{ matrix.target }}/release/bundle/msi/*.msi
