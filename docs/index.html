@@ -86,6 +86,35 @@
     .version-line { text-align: center; color: var(--text-mut); font-size: 12px; letter-spacing: 0.06em; }
     .version-line a { color: var(--text-2); }
 
+    /* Trust / certification banner */
+    .trust {
+      display: flex; align-items: center; gap: 20px;
+      max-width: 660px; margin: 36px auto 0;
+      padding: 20px 24px;
+      background: linear-gradient(180deg, rgba(57,255,20,0.08), rgba(57,255,20,0.02));
+      border: 1px solid rgba(57,255,20,0.38);
+      border-radius: 16px;
+      box-shadow: 0 0 36px rgba(57,255,20,0.1);
+      text-align: left;
+    }
+    .trust-seal {
+      flex-shrink: 0; width: 58px; height: 58px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 32px; font-weight: 800; color: #04130a;
+      background: var(--green); box-shadow: 0 0 20px rgba(57,255,20,0.55);
+    }
+    .trust-title { font-family: var(--disp); font-weight: 800; font-size: 18px; letter-spacing: 0.02em; color: var(--green); margin-bottom: 4px; }
+    .trust-sub { font-size: 12.5px; color: var(--text-2); margin-bottom: 11px; }
+    .trust-badges { display: flex; flex-wrap: wrap; gap: 8px; }
+    .badge {
+      font-size: 12px; font-weight: 700; letter-spacing: 0.01em;
+      padding: 5px 12px; border-radius: 999px;
+      background: var(--bg-raised); border: 1px solid var(--border);
+      color: var(--text-2); text-decoration: none; transition: all .15s; white-space: nowrap;
+    }
+    .badge:hover { border-color: var(--green); color: var(--text); }
+    @media (max-width: 540px) { .trust { flex-direction: column; text-align: center; } .trust-badges { justify-content: center; } }
+
     /* First-launch note */
     .firstrun {
       background: var(--bg-panel);
@@ -160,6 +189,20 @@
         <span id="version">latest release</span> ·
         <a href="https://github.com/soundrich-bot/laybacker/releases">all versions &amp; release notes</a>
       </p>
+
+      <div class="trust">
+        <div class="trust-seal" aria-hidden="true">✓</div>
+        <div class="trust-body">
+          <div class="trust-title">Independently verified safe</div>
+          <div class="trust-sub">Every release is scanned, signed, and checksummed — not just trusted.</div>
+          <div class="trust-badges">
+            <a class="badge" id="badge-vt" href="https://github.com/soundrich-bot/laybacker/releases/latest">🛡️ VirusTotal · 70+ engines</a>
+            <a class="badge" href="https://github.com/soundrich-bot/laybacker">◉ Open source</a>
+            <a class="badge" href="#verify">🔐 Cryptographically signed</a>
+            <a class="badge" href="#verify">🔢 Checksum verified</a>
+          </div>
+        </div>
+      </div>
 
       <div class="firstrun">
         <b>First launch?</b> Laybacker is free and open-source but not paid-signed (just like Shutter Encoder), so your computer asks once:<br>
@@ -239,6 +282,13 @@
           if (rel.tag_name) {
             var v = document.getElementById('version');
             if (v) v.textContent = 'Latest: ' + rel.tag_name;
+          }
+          // Point the VirusTotal badge at the actual scan report, parsed from
+          // the release notes (CI appends the links there). Falls back to the
+          // release page if no scan link is present yet.
+          if (rel.body) {
+            var m = rel.body.match(/https?:\/\/www\.virustotal\.com\/gui\/file\/[A-Za-z0-9]+[^\s)\]]*/i);
+            if (m) { var vt = document.getElementById('badge-vt'); if (vt) vt.href = m[0]; }
           }
         })
         .catch(function () { /* keep fallback hrefs */ });
