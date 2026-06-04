@@ -68,19 +68,19 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Sign the updater artifacts so the in-app updater trusts them.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: frontend
           tagName: ${{ github.ref_name }}
           releaseName: 'Laybacker ${{ github.ref_name }}'
-          releaseBody: |
-            Download the installer for your platform:
-            - **Mac (Apple Silicon)**: `.dmg` file (aarch64)
-            - **Mac (Intel)**: `.dmg` file (x86_64)
-            - **Windows**: `.msi` installer
-
-            **First time on Mac?** Right-click the app → Open → click Open again.
+          releaseBody: 'See the assets and notes below.'
           releaseDraft: false
           prerelease: false
+          # The finalize job composes a complete latest.json across all
+          # platforms (per-job updater JSON would clobber in a matrix build).
+          includeUpdaterJson: false
           tauriScript: npx tauri
           args: --target ${{ matrix.target }}
 
@@ -162,22 +162,67 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
-      - name: Compose verified release notes
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history so we can build a changelog
+
+      - name: Compose release notes + updater manifest
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
           TAG: ${{ github.ref_name }}
         run: |
+          VER="${TAG#v}"
           TMP="$(mktemp -d)"
+
+          # --- "What's new": commit subjects since the previous tag ---
+          PREV="$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)"
+          CHANGELOG=""
+          if [ -n "$PREV" ]; then
+            CHANGELOG="$(git log --no-merges --pretty='- %s' "${PREV}..${TAG}" \
+              | grep -viE '^- (Release [0-9]|Bump version|Merge )' | head -25 || true)"
+          fi
+          [ -z "$CHANGELOG" ] && CHANGELOG="- Maintenance and improvements."
+
+          # --- updater manifest (latest.json) from the signed .sig files ---
+          gh release download "$TAG" --repo "$REPO" --dir "$TMP" --pattern "*.sig" || true
+          PLATS='{}'
+          for sig in "$TMP"/*.sig; do
+            [ -e "$sig" ] || continue
+            base="$(basename "$sig" .sig)"
+            case "$base" in
+              *aarch64.app.tar.gz) key=darwin-aarch64 ;;
+              *x64.app.tar.gz)     key=darwin-x86_64 ;;
+              *-setup.exe)         key=windows-x86_64 ;;
+              *) continue ;;
+            esac
+            url="https://github.com/$REPO/releases/download/$TAG/$base"
+            PLATS="$(echo "$PLATS" | jq --arg k "$key" --arg s "$(cat "$sig")" --arg u "$url" \
+              '. + {($k): {signature:$s, url:$u}}')"
+          done
+          if [ "$PLATS" != '{}' ]; then
+            jq -n --arg v "$VER" --arg n "$CHANGELOG" --arg d "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --argjson p "$PLATS" \
+              '{version:$v, notes:$n, pub_date:$d, platforms:$p}' > "$TMP/latest.json"
+            echo "----- latest.json -----"; cat "$TMP/latest.json"
+            gh release upload "$TAG" "$TMP/latest.json" --repo "$REPO" --clobber
+          else
+            echo "No .sig files found — skipping updater manifest."
+          fi
+
+          # --- release notes ---
           gh release download "$TAG" --repo "$REPO" --dir "$TMP" --pattern "SHA256SUMS-*.txt" || true
           cat "$TMP"/SHA256SUMS-*.txt > "$TMP/all.txt" 2>/dev/null || true
           {
-            echo "Download the installer for your platform:"
+            echo "## What's new"
+            echo ""
+            echo "$CHANGELOG"
+            echo ""
+            echo "## Install"
             echo "- **Mac (Apple Silicon, M1–M4)**: \`Laybacker_*_aarch64.pkg\`"
             echo "- **Mac (Intel)**: \`Laybacker_*_x64.pkg\`"
             echo "- **Windows**: \`Laybacker_*_x64-setup.exe\` (or the \`.msi\`)"
             echo ""
-            echo "**First launch (Mac):** double-click the \`.pkg\`; if you see \"Apple could not verify…\", click Done, then **System Settings → Privacy & Security → Open Anyway**. After installing, Laybacker opens normally every time. **Windows:** *More info* → *Run anyway*."
+            echo "**First launch (Mac):** double-click the \`.pkg\`; if you see \"Apple could not verify…\", click Done, then **System Settings → Privacy & Security → Open Anyway**. After installing, Laybacker opens normally — and updates itself automatically from here on. **Windows:** *More info* → *Run anyway*."
             echo ""
             echo "## ✅ Independently verified safe"
             echo ""
@@ -189,9 +234,6 @@ jobs:
               echo "- [\`$file\`](https://www.virustotal.com/gui/file/$hash)"
             done < "$TMP/all.txt"
             echo ""
-            echo "Confirm your download is untampered against the **\`SHA256SUMS-*.txt\`** files below. Every binary also carries a cryptographic **build-provenance attestation** — verify with:"
-            echo '```'
-            echo "gh attestation verify <file> --repo $REPO"
-            echo '```'
+            echo "Confirm a download against the **\`SHA256SUMS-*.txt\`** files below; every binary also carries a **build-provenance attestation** — verify with \`gh attestation verify <file> --repo $REPO\`."
           } > "$TMP/notes.md"
           gh release edit "$TAG" --repo "$REPO" --notes-file "$TMP/notes.md"

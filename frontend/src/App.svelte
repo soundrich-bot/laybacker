@@ -11,6 +11,7 @@
   import SettingsPanel from './lib/components/SettingsPanel.svelte';
   import ProcessButton from './lib/components/ProcessButton.svelte';
   import ErrorBar from './lib/components/ErrorBar.svelte';
+  import UpdateBanner from './lib/components/UpdateBanner.svelte';
 
   const app = getAppState();
   let isDraggingOver = $state(false);
@@ -78,6 +79,8 @@
   <div class="noise-overlay"></div>
 
   <Header ffmpegStatus={app.ffmpegStatus} />
+
+  <UpdateBanner />
 
   <ErrorBar errors={app.errors} onDismiss={app.dismissError} />
 

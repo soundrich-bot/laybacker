@@ -12,6 +12,8 @@
     "shell:default",
     "shell:allow-open",
     "core:window:allow-set-focus",
-    "core:event:default"
+    "core:event:default",
+    "updater:default",
+    "process:default"
   ]
 }
