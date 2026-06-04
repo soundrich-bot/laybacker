@@ -9,12 +9,14 @@
   let state = $state('hidden');     // hidden | available | downloading | ready | error
   let pct = $state(0);
   let showNotes = $state(false);
+  let dismissedVersion = $state('');
 
-  onMount(async () => {
-    // Wait a moment so it doesn't fight the app's own startup work.
+  async function runCheck() {
+    // Don't interrupt an in-progress download / pending restart.
+    if (state === 'downloading' || state === 'ready') return;
     try {
       const u = await check();
-      if (u && u.available) {
+      if (u && u.available && u.version !== dismissedVersion) {
         update = u;
         version = u.version;
         notes = (u.body || '').trim();
@@ -24,6 +26,14 @@
       // Offline or no endpoint — updates are optional, fail silently.
       console.warn('[updater] check failed:', e);
     }
+  }
+
+  onMount(() => {
+    runCheck();                                           // on launch
+    const id = setInterval(runCheck, 2 * 60 * 60 * 1000); // and every 2 hours
+    const onFocus = () => runCheck();                     // and when the window regains focus
+    window.addEventListener('focus', onFocus);
+    return () => { clearInterval(id); window.removeEventListener('focus', onFocus); };
   });
 
   async function install() {
@@ -55,6 +65,7 @@
   }
 
   function dismiss() {
+    dismissedVersion = version;   // don't nag again for this same version
     state = 'hidden';
   }
 </script>
