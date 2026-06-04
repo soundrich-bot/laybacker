@@ -104,7 +104,19 @@ jobs:
             *)                    ARCH="${{ matrix.target }}" ;;
           esac
           PKG="$MACOS_DIR/Laybacker_${VER}_${ARCH}.pkg"
-          productbuild --component "$APP" /Applications "$PKG"
+
+          # Stage under Applications/ and build a NON-relocatable pkg, so it
+          # always installs to /Applications instead of hijacking an existing
+          # copy of the app found elsewhere on disk (bundle relocation).
+          STAGING="$(mktemp -d)/root"
+          mkdir -p "$STAGING/Applications"
+          cp -R "$APP" "$STAGING/Applications/"
+          PLIST="$(mktemp -d)/components.plist"
+          pkgbuild --analyze --root "$STAGING" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Set :0:BundleIsRelocatable false" "$PLIST"
+          pkgbuild --root "$STAGING" --component-plist "$PLIST" \
+            --identifier com.laybacker.app --version "$VER" \
+            --install-location / "$PKG"
           ls -lh "$PKG"
           gh release upload "${{ github.ref_name }}" "$PKG" --clobber
 
