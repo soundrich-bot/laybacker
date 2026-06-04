@@ -187,7 +187,7 @@
       </div>
       <p class="version-line">
         <span id="version">latest release</span> ·
-        <a href="https://github.com/soundrich-bot/laybacker/releases">all versions &amp; release notes</a>
+        <a href="https://github.com/soundrich-bot/laybacker/releases">all versions &amp; release notes</a><span id="dl-count"></span>
       </p>
     </header>
 
@@ -296,6 +296,23 @@
           }
         })
         .catch(function () { /* keep fallback hrefs */ });
+
+      // Total installer downloads across all releases (dmg / exe / msi).
+      fetch('https://api.github.com/repos/' + REPO + '/releases?per_page=100')
+        .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+        .then(function (rels) {
+          var total = 0;
+          rels.forEach(function (rel) {
+            (rel.assets || []).forEach(function (a) {
+              if (/\.(dmg|exe|msi)$/i.test(a.name)) total += a.download_count || 0;
+            });
+          });
+          var el = document.getElementById('dl-count');
+          if (el && total > 0) {
+            el.textContent = ' · ' + total.toLocaleString() + ' download' + (total === 1 ? '' : 's');
+          }
+        })
+        .catch(function () {});
     })();
   </script>
 
