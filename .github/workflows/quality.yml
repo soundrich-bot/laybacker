@@ -1,0 +1,80 @@
+name: Quality
+
+# Independent code-quality + security gates:
+#  - Clippy (official Rust linter), strict: zero warnings allowed
+#  - cargo-audit / npm audit: dependency vulnerability checks
+#  - test coverage -> Codecov
+#  - SonarCloud quality grade (runs once the SONAR_TOKEN secret is added)
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    name: Rust — lint, audit, coverage
+    runs-on: ubuntu-latest
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, llvm-tools-preview
+
+      - name: System dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf ffmpeg
+
+      - name: Clippy (strict — no warnings allowed)
+        working-directory: frontend/src-tauri
+        run: cargo clippy --lib --tests -- -D warnings
+
+      - name: Dependency security audit (cargo-audit)
+        continue-on-error: true   # surface advisories without blocking
+        run: |
+          cargo install cargo-audit --locked
+          cargo audit --file frontend/src-tauri/Cargo.lock
+
+      - name: Test coverage (cargo-llvm-cov)
+        working-directory: frontend/src-tauri
+        run: |
+          cargo install cargo-llvm-cov --locked
+          cargo llvm-cov --lib --tests --lcov --output-path lcov.info
+
+      - name: Upload coverage to Codecov
+        continue-on-error: true
+        uses: codecov/codecov-action@v4
+        with:
+          files: frontend/src-tauri/lcov.info
+          token: ${{ secrets.CODECOV_TOKEN }}   # optional for public repos
+
+      - name: SonarCloud scan
+        if: ${{ env.SONAR_TOKEN != '' }}
+        uses: SonarSource/sonarqube-scan-action@v3
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  js:
+    name: Frontend — dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: npm audit (production dependencies)
+        working-directory: frontend
+        continue-on-error: true
+        run: npm audit --omit=dev

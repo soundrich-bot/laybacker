@@ -98,10 +98,10 @@ pub fn generate_names(pairs: &mut [MatchedPair], remove_duplicates: bool, output
 /// Works on underscore/hyphen-delimited segments to avoid splitting numbers.
 fn remove_duplicate_info(video_name: &str, audio_name: &str) -> String {
     // Split both names into segments by common delimiters
-    let video_segments: Vec<&str> = video_name.split(|c: char| c == '_' || c == '-' || c == ' ')
+    let video_segments: Vec<&str> = video_name.split(['_', '-', ' '])
         .filter(|s| !s.is_empty())
         .collect();
-    let audio_segments: Vec<&str> = audio_name.split(|c: char| c == '_' || c == '-' || c == ' ')
+    let audio_segments: Vec<&str> = audio_name.split(['_', '-', ' '])
         .filter(|s| !s.is_empty())
         .collect();
 
@@ -195,7 +195,7 @@ mod tests {
     fn make_pair(video_name: Option<&str>, audio_name: &str, norm_enabled: bool, target_lufs: f64, tp_limit: f64) -> MatchedPair {
         MatchedPair {
             id: "test".into(),
-            video: video_name.map(|n| make_video(n)),
+            video: video_name.map(make_video),
             audio: make_audio(audio_name),
             output_filename: String::new(),
             normalization_enabled: norm_enabled,

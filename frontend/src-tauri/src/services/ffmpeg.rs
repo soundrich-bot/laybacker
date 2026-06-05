@@ -6,7 +6,7 @@ use crate::models::*;
 /// Create a Command that hides the console window on Windows.
 /// On macOS/Linux this is just a normal Command.
 pub fn silent_command(program: &str) -> Command {
-    let mut cmd = Command::new(program);
+    let cmd = Command::new(program);
     #[cfg(target_os = "windows")]
     {
         use std::os::windows::process::CommandExt;
@@ -91,6 +91,7 @@ pub fn get_ffmpeg_version() -> Option<String> {
 }
 
 /// Build the ffmpeg command arguments for a muxing job
+#[allow(clippy::too_many_arguments)]
 pub fn build_mux_command(
     video_path: &str,
     audio_path: &str,
@@ -328,7 +329,7 @@ fn parse_peak_from_astats(stderr: &str) -> Option<f64> {
     // Look for "Peak level dB:" in the astats output
     for line in stderr.lines() {
         if line.contains("Peak level dB:") {
-            let val = line.split(':').last()?.trim();
+            let val = line.split(':').next_back()?.trim();
             if val == "-inf" {
                 return Some(-120.0);
             }

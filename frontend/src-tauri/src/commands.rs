@@ -18,7 +18,7 @@ pub fn check_ffmpeg() -> Result<String, String> {
         let path = ffmpeg::find_ffmpeg();
         let source = if let Ok(exe) = std::env::current_exe() {
             if let Some(dir) = exe.parent() {
-                if path.starts_with(&dir.to_string_lossy().as_ref()) {
+                if path.starts_with(dir.to_string_lossy().as_ref()) {
                     "bundled"
                 } else {
                     "system"
