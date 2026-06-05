@@ -1,0 +1,19 @@
+version: 2
+updates:
+  # Keep GitHub Actions (pinned by SHA) up to date
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+
+  # Rust backend dependencies
+  - package-ecosystem: cargo
+    directory: /frontend/src-tauri
+    schedule:
+      interval: weekly
+
+  # Frontend (npm) dependencies
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly

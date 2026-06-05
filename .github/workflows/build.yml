@@ -6,9 +6,7 @@ on:
       - 'v*'
 
 permissions:
-  contents: write       # create the release and upload checksums
-  id-token: write       # OIDC token for build-provenance signing
-  attestations: write   # write the provenance attestation
+  contents: read   # least privilege at the top level; jobs elevate as needed
 
 jobs:
   build:
@@ -27,21 +25,26 @@ jobs:
 
     runs-on: ${{ matrix.platform }}
 
+    permissions:
+      contents: write       # create the release and upload installers/checksums
+      id-token: write       # OIDC token for build-provenance signing
+      attestations: write   # write the provenance attestation
+
     # Exposed at job level so the VirusTotal step can self-skip until the
     # VT_API_KEY secret is added (a step `if:` can read env but not secrets).
     env:
       VT_API_KEY: ${{ secrets.VT_API_KEY }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
           targets: ${{ matrix.target }}
 
@@ -65,7 +68,7 @@ jobs:
         run: bash scripts/download-ffmpeg.sh --windows
 
       - name: Build Tauri app
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Sign the updater artifacts so the in-app updater trusts them.
@@ -141,7 +144,7 @@ jobs:
       # public source by this CI run (SLSA provenance, verifiable via
       # `gh attestation verify <file> --repo soundrich-bot/laybacker`).
       - name: Attest build provenance
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
         with:
           subject-path: |
             frontend/src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
@@ -154,7 +157,7 @@ jobs:
       - name: Scan installers on VirusTotal
         if: ${{ env.VT_API_KEY != '' }}
         continue-on-error: true   # a VT hiccup must never fail/cancel a release
-        uses: crazy-max/ghaction-virustotal@v4
+        uses: crazy-max/ghaction-virustotal@d34968c958ae283fe976efed637081b9f9dcf74f # v4
         with:
           vt_api_key: ${{ env.VT_API_KEY }}
           update_release_body: false   # the finalize job sets notes race-free
@@ -173,8 +176,10 @@ jobs:
     if: ${{ always() }}
     runs-on: ubuntu-latest
     continue-on-error: true
+    permissions:
+      contents: write   # edit the release notes and upload latest.json
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0   # full history so we can build a changelog
 
