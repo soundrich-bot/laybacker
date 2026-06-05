@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Laybacker — Replace audio on video files. Fast.</title>
-  <meta name="description" content="Laybacker lays back audio onto video for sound post-production. Drag video and audio, auto-match, normalise loudness to broadcast spec, and export. Free, runs locally, FFmpeg bundled." />
-  <meta property="og:title" content="Laybacker — Replace audio on video files. Fast." />
-  <meta property="og:description" content="A tool for sound post-production professionals. Drag, match, normalise, export. Free and local." />
+  <title>Laybacker — Batch replace audio on video files.</title>
+  <meta name="description" content="Laybacker lays back audio onto video for sound post-production. Drag video and audio, auto-match by duration, normalise loudness to broadcast or online spec, and export. Free, runs locally, FFmpeg bundled." />
+  <meta property="og:title" content="Laybacker — Batch replace audio on video files" />
+  <meta property="og:description" content="A tool for sound post-production professionals. Batch replace audio, check and fix levels, fix frames of silence." />
   <meta property="og:type" content="website" />
   <style>
     :root {
@@ -169,7 +169,7 @@
     <header>
       <div class="logo">LAYBACKER</div>
       <div class="tagline">batch relay sound to video</div>
-      <p class="lead">Replace the audio on your video files — fast. Drag in video and audio, Laybacker auto-matches the pairs, normalises loudness to broadcast spec, and exports. Built for sound post-production.</p>
+      <p class="lead">Replace the audio on your video files. Drag in video and audio, Laybacker auto-matches the pairs, checks and fixes sound levels, and exports. Built for sound post-production.</p>
 
       <div class="downloads">
         <a class="dl dl-primary" id="dl-mac-arm" href="https://github.com/soundrich-bot/laybacker/releases/latest">
@@ -196,7 +196,7 @@
       <div class="features">
         <div class="feature"><h3><span class="dot">▸</span> Drag, drop, done</h3><p>Drop video and audio together — Laybacker matches them by duration and name, and lets you fix any pairing by hand.</p></div>
         <div class="feature"><h3><span class="dot">▸</span> Broadcast-spec loudness</h3><p>Normalise to LUFS targets (EBU R128 −23, streaming −16, ATSC A/85) or full-scale peak, measured to ITU-R BS.1770-4.</p></div>
-        <div class="feature"><h3><span class="dot">▸</span> 6-frame silence check</h3><p>Verify and fix head/tail silence for UK broadcast delivery, with clean fades to avoid clicks.</p></div>
+        <div class="feature"><h3><span class="dot">▸</span> 6-frame silence check</h3><p>Verify and fix head/tail silence for UK commercial broadcast delivery, with clean fades to avoid clicks.</p></div>
         <div class="feature"><h3><span class="dot">▸</span> Smart export</h3><p>Keep the original streams or re-encode to H.264 / AAC. Smart filenames with optional date stamps.</p></div>
         <div class="feature"><h3><span class="dot">▸</span> FFmpeg included</h3><p>No separate install — a pinned, bundled FFmpeg ships inside the app. Nothing else to set up.</p></div>
         <div class="feature"><h3><span class="dot">▸</span> <span class="privacy">Fully local &amp; private</span></h3><p>Every file is processed on your own machine. Nothing is ever uploaded.</p></div>
@@ -207,7 +207,7 @@
       <h2>First launch</h2>
 
       <div class="firstrun">
-        <b>First launch?</b> Laybacker is free and open-source but not paid-signed by Apple, so opening it the first time takes a couple of extra clicks — completely normal for indie apps, and you only do it once.<br>
+        <b>First launch?</b> Laybacker is free and open-source. To keep costs low, it's not part of the Apple Developer Scheme, so opening it the first time takes a couple of extra clicks. This is totally standard, and you only have to do it once. To reassure you it's malware and virus free, each download is checked independently by VirusTotal.<br>
         <b style="color:var(--cyan)">Mac:</b>
         <ol style="margin:6px 0 4px 20px; padding:0;">
           <li>Double-click the downloaded <code>.pkg</code>.</li>
@@ -222,7 +222,7 @@
         <div class="trust-seal" aria-hidden="true">✓</div>
         <div class="trust-body">
           <div class="trust-title">Independently verified safe</div>
-          <div class="trust-sub">Every release is scanned, signed, and checksummed — not just trusted.</div>
+          <div class="trust-sub">Every release is scanned, signed, and checksummed.</div>
           <div class="trust-badges">
             <a class="badge" id="badge-vt" href="https://github.com/soundrich-bot/laybacker/releases/latest">🛡️ VirusTotal · 70+ engines</a>
             <a class="badge" href="https://github.com/soundrich-bot/laybacker">◉ Open source</a>
