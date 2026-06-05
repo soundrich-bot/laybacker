@@ -184,6 +184,18 @@
     }
     .shot-caption { margin-top: 12px; color: var(--text-mut); font-size: 12.5px; }
     .shot-caption b { color: var(--cyan); }
+
+    /* Code-quality badges (under the safety panel) */
+    .quality-block { max-width: 620px; margin: 16px auto 0; text-align: center; }
+    .quality-title {
+      font-family: var(--disp); font-weight: 800; font-size: 12px;
+      letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-mut); margin-bottom: 10px;
+    }
+    .quality-badges { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; align-items: center; }
+    .quality-badges a { display: block; line-height: 0; }
+    .quality-badges img { height: 20px; display: block; }
+    .quality-explain { margin-top: 12px; font-size: 12px; color: var(--text-mut); line-height: 1.65; }
+    .quality-explain b { color: var(--text-2); }
   </style>
 </head>
 <body>
@@ -260,6 +272,26 @@
             <a class="badge" href="#verify">🔢 Checksum verified</a>
           </div>
         </div>
+      </div>
+
+      <div class="quality-block">
+        <div class="quality-title">Independently verified code quality</div>
+        <div class="quality-badges">
+          <a href="https://sonarcloud.io/project/overview?id=soundrich-bot_laybacker" target="_blank" rel="noreferrer"><img src="https://sonarcloud.io/api/project_badges/measure?project=soundrich-bot_laybacker&amp;metric=alert_status" alt="SonarCloud Quality Gate" /></a>
+          <a href="https://sonarcloud.io/project/overview?id=soundrich-bot_laybacker" target="_blank" rel="noreferrer"><img src="https://sonarcloud.io/api/project_badges/measure?project=soundrich-bot_laybacker&amp;metric=reliability_rating" alt="SonarCloud Reliability rating" /></a>
+          <a href="https://sonarcloud.io/project/overview?id=soundrich-bot_laybacker" target="_blank" rel="noreferrer"><img src="https://sonarcloud.io/api/project_badges/measure?project=soundrich-bot_laybacker&amp;metric=security_rating" alt="SonarCloud Security rating" /></a>
+          <a href="https://sonarcloud.io/project/overview?id=soundrich-bot_laybacker" target="_blank" rel="noreferrer"><img src="https://sonarcloud.io/api/project_badges/measure?project=soundrich-bot_laybacker&amp;metric=sqale_rating" alt="SonarCloud Maintainability rating" /></a>
+          <a href="https://codecov.io/gh/soundrich-bot/laybacker" target="_blank" rel="noreferrer"><img src="https://codecov.io/gh/soundrich-bot/laybacker/branch/main/graph/badge.svg" alt="Test coverage" /></a>
+          <a href="https://github.com/soundrich-bot/laybacker/actions/workflows/codeql.yml" target="_blank" rel="noreferrer"><img src="https://github.com/soundrich-bot/laybacker/actions/workflows/codeql.yml/badge.svg" alt="CodeQL security scan" /></a>
+          <a href="https://securityscorecards.dev/viewer/?uri=github.com/soundrich-bot/laybacker" target="_blank" rel="noreferrer"><img src="https://api.securityscorecards.dev/projects/github.com/soundrich-bot/laybacker/badge" alt="OpenSSF Scorecard" /></a>
+        </div>
+        <p class="quality-explain">
+          Beyond download safety, the <b>code itself</b> is graded by independent services on every update.
+          <b>SonarCloud</b> rates reliability, security &amp; maintainability — currently <b>A across the board, with zero bugs and zero vulnerabilities</b>.
+          <b>Codecov</b> shows how much of the code its automated tests exercise.
+          <b>CodeQL</b> is GitHub's own security scanner, and <b>OpenSSF Scorecard</b> (Linux Foundation) rates security best-practices.
+          Click any badge for its live report.
+        </p>
       </div>
     </section>
 
