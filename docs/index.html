@@ -162,6 +162,28 @@
     }
     .coffee:hover { background: rgba(255,46,99,0.18); }
     .privacy { color: var(--green); }
+
+    /* Screenshot showcase (click to toggle light/dark) */
+    .showcase { padding: 8px 0 12px; text-align: center; }
+    .shot-wrap {
+      display: inline-block; position: relative; cursor: pointer;
+      width: 100%; max-width: 760px;
+      border-radius: 12px; overflow: hidden;
+      border: 1px solid var(--border);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+      transition: transform .15s ease, box-shadow .15s ease;
+    }
+    .shot-wrap:hover { transform: translateY(-2px); box-shadow: 0 26px 72px rgba(0,0,0,0.6); }
+    .shot-wrap:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+    .shot-wrap img { display: block; width: 100%; height: auto; }
+    .shot-badge {
+      position: absolute; top: 10px; right: 10px; pointer-events: none;
+      background: rgba(8,8,12,0.66); color: var(--text); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+      font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
+      padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border);
+    }
+    .shot-caption { margin-top: 12px; color: var(--text-mut); font-size: 12.5px; }
+    .shot-caption b { color: var(--cyan); }
   </style>
 </head>
 <body>
@@ -190,6 +212,14 @@
         <a href="https://github.com/soundrich-bot/laybacker/releases">all versions &amp; release notes</a><span id="dl-count"></span>
       </p>
     </header>
+
+    <section class="showcase">
+      <div class="shot-wrap" id="shot" role="button" tabindex="0" aria-label="Toggle light and dark mode screenshot">
+        <img id="shot-img" src="screenshot-dark.png" alt="Laybacker app — dark mode" />
+        <span class="shot-badge" id="shot-badge">Dark mode</span>
+      </div>
+      <p class="shot-caption">👆 Click the screenshot to see <b id="shot-other">light</b> mode</p>
+    </section>
 
     <section>
       <h2>What it does</h2>
@@ -319,6 +349,30 @@
           }
         })
         .catch(function () {});
+    })();
+  </script>
+
+  <!-- Screenshot light/dark toggle -->
+  <script>
+    (function () {
+      var current = 'dark';
+      var img = document.getElementById('shot-img');
+      var badge = document.getElementById('shot-badge');
+      var other = document.getElementById('shot-other');
+      var wrap = document.getElementById('shot');
+      if (!wrap || !img) return;
+      (new Image()).src = 'screenshot-light.png';   // preload the other for an instant swap
+      function render() {
+        img.src = 'screenshot-' + current + '.png';
+        img.alt = 'Laybacker app — ' + current + ' mode';
+        if (badge) badge.textContent = (current === 'dark' ? 'Dark' : 'Light') + ' mode';
+        if (other) other.textContent = (current === 'dark' ? 'light' : 'dark');
+      }
+      function toggle() { current = (current === 'dark' ? 'light' : 'dark'); render(); }
+      wrap.addEventListener('click', toggle);
+      wrap.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+      });
     })();
   </script>
 
