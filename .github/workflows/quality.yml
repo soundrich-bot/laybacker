@@ -34,6 +34,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf ffmpeg
 
+      - name: Provide Linux FFmpeg sidecars (the build script checks they exist)
+        run: |
+          mkdir -p frontend/src-tauri/binaries
+          ln -sf "$(command -v ffmpeg)"  frontend/src-tauri/binaries/ffmpeg-x86_64-unknown-linux-gnu
+          ln -sf "$(command -v ffprobe)" frontend/src-tauri/binaries/ffprobe-x86_64-unknown-linux-gnu
+
       - name: Clippy (strict — no warnings allowed)
         working-directory: frontend/src-tauri
         run: cargo clippy --lib --tests -- -D warnings
