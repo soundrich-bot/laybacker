@@ -142,3 +142,46 @@ pub fn is_audio_extension(ext: &str) -> bool {
 pub fn is_supported_extension(ext: &str) -> bool {
     is_video_extension(ext) || is_audio_extension(ext)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extension_helpers() {
+        assert!(is_video_extension("mp4"));
+        assert!(is_video_extension("MOV")); // case-insensitive
+        assert!(!is_video_extension("wav"));
+        assert!(is_audio_extension("wav"));
+        assert!(is_audio_extension("AIFF"));
+        assert!(!is_audio_extension("mp4"));
+        assert!(is_supported_extension("mov"));
+        assert!(is_supported_extension("flac"));
+        assert!(!is_supported_extension("txt"));
+    }
+
+    #[test]
+    fn test_output_extension() {
+        let mut s = ExportSettings::default();
+        assert_eq!(s.output_extension(), "mov"); // Original
+        s.audio_format = AudioFormatOption::Aac;
+        assert_eq!(s.output_extension(), "mp4");
+    }
+
+    #[test]
+    fn test_defaults_and_new_id() {
+        let n = NormalizationSettings::default();
+        assert_eq!(n.target_lufs, 0.0);
+        assert_eq!(n.true_peak_limit, -1.0);
+
+        let e = ExportSettings::default();
+        assert!(e.use_audio_file_location);
+        assert_eq!(e.aac_bitrate, 320000);
+        assert_eq!(e.video_codec, VideoCodecOption::Original);
+
+        let a = MediaFile::new_id();
+        let b = MediaFile::new_id();
+        assert_ne!(a, b, "ids should be unique");
+        assert_eq!(a.len(), 36, "uuid v4 string is 36 chars");
+    }
+}

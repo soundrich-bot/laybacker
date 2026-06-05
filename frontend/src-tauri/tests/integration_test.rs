@@ -6,7 +6,7 @@
 use std::path::Path;
 
 use app_lib::models::*;
-use app_lib::services::{ffmpeg, loudness, processor};
+use app_lib::services::{ffmpeg, inspector, loudness, processor};
 
 fn test_fixture(name: &str) -> String {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
@@ -265,4 +265,58 @@ fn test_silence_compliance_check() {
     assert!(tail_has_audio, "Test tone should have audio at tail");
     assert!(head_peak > -60.0, "Head peak should be above silence threshold");
     assert!(tail_peak > -60.0, "Tail peak should be above silence threshold");
+}
+
+// ── Inspector (file probing) ──
+
+#[test]
+fn test_inspect_audio_and_scan_directory() {
+    // Inspect a single audio file — covers inspect_file + probe_file (audio path).
+    let path = test_fixture("test_tone.wav");
+    let mf = inspector::inspect_file(&path).expect("inspect audio failed");
+    assert_eq!(mf.media_type, MediaType::Audio);
+    assert_eq!(mf.extension, "wav");
+    assert!((mf.duration_secs - 2.0).abs() < 0.5, "expected ~2s, got {}", mf.duration_secs);
+    assert!(mf.sample_rate.is_some(), "audio should report a sample rate");
+    assert!(mf.thumbnail_data.is_none(), "audio has no thumbnail");
+
+    // Scan the fixtures directory — covers scan_paths' recursive directory walk.
+    let dir = format!("{}/tests/fixtures", env!("CARGO_MANIFEST_DIR"));
+    let files = inspector::scan_paths(&[dir]).expect("scan_paths failed");
+    assert!(
+        files.iter().any(|f| f.filename_no_ext == "test_tone" && f.media_type == MediaType::Audio),
+        "scan should find test_tone.wav",
+    );
+
+    // Unsupported extension returns an error — covers that branch.
+    assert!(inspector::inspect_file("/nonexistent/file.xyz").is_err());
+}
+
+#[test]
+fn test_inspect_video_extracts_thumbnail() {
+    // Generate a small video so we cover inspect_file's video branch + thumbnail.
+    let dir = output_dir();
+    let vid = format!("{}/gen_clip.mp4", dir);
+    cleanup(&vid);
+    let ff = ffmpeg::find_ffmpeg();
+    let ok = std::process::Command::new(&ff)
+        .args([
+            "-y", "-f", "lavfi", "-i", "testsrc=duration=1:size=320x240:rate=10",
+            "-c:v", "mpeg4", &vid,
+        ])
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+    assert!(ok && Path::new(&vid).exists(), "could not generate a test video with ffmpeg");
+
+    let mf = inspector::inspect_file(&vid).expect("inspect video failed");
+    assert_eq!(mf.media_type, MediaType::Video);
+    assert!(mf.duration_secs > 0.5, "video duration should be > 0.5s");
+    let thumb = mf.thumbnail_data.expect("video should have a thumbnail");
+    assert!(
+        thumb.starts_with("data:image/jpeg;base64,"),
+        "thumbnail should be a base64 jpeg data URL",
+    );
+
+    cleanup(&vid);
 }
