@@ -6,7 +6,10 @@ use crate::models::*;
 /// Create a Command that hides the console window on Windows.
 /// On macOS/Linux this is just a normal Command.
 pub fn silent_command(program: &str) -> Command {
-    let cmd = Command::new(program);
+    // `mut` is needed on Windows (creation_flags below mutates cmd); on other
+    // platforms that branch is compiled out, so silence the unused-mut warning.
+    #[cfg_attr(not(target_os = "windows"), allow(unused_mut))]
+    let mut cmd = Command::new(program);
     #[cfg(target_os = "windows")]
     {
         use std::os::windows::process::CommandExt;
