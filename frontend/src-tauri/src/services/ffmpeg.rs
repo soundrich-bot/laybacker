@@ -229,26 +229,26 @@ pub fn build_audio_only_command(
         .unwrap_or("")
         .to_lowercase();
 
-    match settings.audio_format {
-        AudioFormatOption::Original => {
-            if has_audio_filters {
-                // Can't stream copy with filters — pick a lossless codec
-                // that matches the output container
-                let codec = match output_ext.as_str() {
-                    "aif" | "aiff" => "pcm_s24be",
-                    "flac" => "flac",
-                    "m4a" | "mp4" => "alac",
-                    _ => "pcm_s24le", // WAV, BWF, and others
-                };
-                args.extend(["-c:a".to_string(), codec.to_string()]);
-            } else {
-                args.extend(["-c:a".to_string(), "copy".to_string()]);
-            }
-        }
-        AudioFormatOption::Aac => {
-            args.extend(["-c:a".to_string(), "aac".to_string()]);
-            args.extend(["-b:a".to_string(), format!("{}", settings.aac_bitrate)]);
-        }
+    // Only encode AAC when the output container can actually hold it. Forcing
+    // AAC into a .wav (e.g. when the AAC setting lingers from a video layback)
+    // produces a file that won't open, so fall back to a container-appropriate
+    // codec instead.
+    let aac_container = matches!(output_ext.as_str(), "m4a" | "mp4" | "aac");
+
+    if settings.audio_format == AudioFormatOption::Aac && aac_container {
+        args.extend(["-c:a".to_string(), "aac".to_string()]);
+        args.extend(["-b:a".to_string(), format!("{}", settings.aac_bitrate)]);
+    } else if has_audio_filters {
+        // Can't stream copy with filters — pick a lossless codec for the container
+        let codec = match output_ext.as_str() {
+            "aif" | "aiff" => "pcm_s24be",
+            "flac" => "flac",
+            "m4a" | "mp4" => "alac",
+            _ => "pcm_s24le", // WAV, BWF, and others
+        };
+        args.extend(["-c:a".to_string(), codec.to_string()]);
+    } else {
+        args.extend(["-c:a".to_string(), "copy".to_string()]);
     }
 
     args.push(output_path.to_string());
@@ -707,6 +707,33 @@ mod tests {
         // Gain too small — should be treated as no-op
         assert!(!args.contains(&"-af".to_string()));
         assert!(args.contains(&"copy".to_string()));
+    }
+
+    #[test]
+    fn test_audio_only_aac_setting_never_breaks_wav() {
+        // Regression: the AAC audio-format setting (a video-mux concern) must NOT
+        // be forced into a .wav output — AAC-in-WAV produces a file that won't open.
+        let no_gain = build_audio_only_command(
+            "/audio.wav", "/out.wav", &aac_settings(), None, None, None,
+        );
+        assert!(!no_gain.contains(&"aac".to_string()), "must not put AAC in a .wav");
+        assert!(no_gain.contains(&"copy".to_string()), "no filters -> stream copy");
+
+        let with_gain = build_audio_only_command(
+            "/audio.wav", "/out.wav", &aac_settings(), Some(-3.0), None, None,
+        );
+        assert!(!with_gain.contains(&"aac".to_string()));
+        assert!(with_gain.contains(&"pcm_s24le".to_string()), "filtered .wav -> PCM");
+    }
+
+    #[test]
+    fn test_audio_only_aac_to_m4a_still_uses_aac() {
+        // AAC into a container that supports it is fine and stays AAC.
+        let args = build_audio_only_command(
+            "/audio.m4a", "/out.m4a", &aac_settings(), None, None, None,
+        );
+        assert!(args.contains(&"aac".to_string()), "m4a supports AAC");
+        assert!(args.contains(&"320000".to_string()));
     }
 
     // ── build_loudnorm_filter ──
