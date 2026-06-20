@@ -258,6 +258,28 @@ pub fn build_audio_only_command(
     args
 }
 
+/// Build the ffmpeg command to transcode a video into an Apple ProRes 422 .mov
+/// "working file" (with PCM audio) — a smooth-playing guide picture for Pro Tools.
+/// `profile` is the prores_ks profile: 0 = Proxy, 1 = LT, 2 = 422, 3 = HQ.
+pub fn build_prores_command(video_path: &str, output_path: &str, profile: u8) -> Vec<String> {
+    vec![
+        "-y".to_string(),
+        "-i".to_string(),
+        video_path.to_string(),
+        "-c:v".to_string(),
+        "prores_ks".to_string(),
+        "-profile:v".to_string(),
+        profile.to_string(),
+        "-vendor".to_string(),
+        "apl0".to_string(),
+        "-pix_fmt".to_string(),
+        "yuv422p10le".to_string(),
+        "-c:a".to_string(),
+        "pcm_s16le".to_string(), // PCM audio imports cleanly into Pro Tools
+        output_path.to_string(),
+    ]
+}
+
 /// Extract a thumbnail frame from a video file as a base64 JPEG data URL
 pub fn extract_thumbnail(video_path: &str, duration_secs: f64) -> Option<String> {
     use base64::{Engine as _, engine::general_purpose::STANDARD};
@@ -737,6 +759,17 @@ mod tests {
         );
         assert!(args.contains(&"aac".to_string()), "m4a supports AAC");
         assert!(args.contains(&"320000".to_string()));
+    }
+
+    #[test]
+    fn test_prores_command() {
+        let args = build_prores_command("/clip.mp4", "/clip_ProRes_LT.mov", 1);
+        assert!(args.contains(&"prores_ks".to_string()));
+        let p = args.iter().position(|a| a == "-profile:v").unwrap();
+        assert_eq!(args[p + 1], "1");
+        assert!(args.contains(&"yuv422p10le".to_string()));
+        assert!(args.contains(&"pcm_s16le".to_string()));
+        assert_eq!(args.last().unwrap(), "/clip_ProRes_LT.mov");
     }
 
     // ── build_loudnorm_filter ──

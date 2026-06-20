@@ -30,6 +30,7 @@ pub fn run() {
             commands::get_resource_path,
             commands::cancel_processing,
             commands::check_silence,
+            commands::create_prores,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

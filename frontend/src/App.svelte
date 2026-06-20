@@ -17,6 +17,7 @@
   let isDraggingOver = $state(false);
   let tameMode = $state(localStorage.getItem('tameMode') === 'true');
   let timestampFormat = $state(localStorage.getItem('timestampFormat') || 'YYYYMMDD_HHmm');
+  let proresProfile = $state(localStorage.getItem('proresProfile') || 'lt');
 
   // Apply saved tame mode on load
   if (tameMode) document.documentElement.classList.add('tame');
@@ -97,6 +98,7 @@
     onUpdateFilename={app.updatePairFilename}
     onRemove={app.removePair}
     onReveal={app.revealInFinder}
+    onCreateProres={(videoPath) => app.createProres(videoPath, proresProfile)}
     onToggleAllNorm={app.toggleAllNorm}
     {timestampFormat}
   />
@@ -108,6 +110,8 @@
     onToggleTame={toggleTame}
     {timestampFormat}
     onTimestampFormatChange={(fmt) => { timestampFormat = fmt; localStorage.setItem('timestampFormat', fmt); }}
+    {proresProfile}
+    onProresProfileChange={(p) => { proresProfile = p; localStorage.setItem('proresProfile', p); }}
   />
 
   <ProcessButton

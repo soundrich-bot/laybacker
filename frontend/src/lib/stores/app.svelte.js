@@ -253,6 +253,17 @@ async function revealInFinder(path) {
   }
 }
 
+// Transcode a video to a ProRes .mov working file (for Pro Tools).
+// Returns the output path; throws on failure so the caller can show an error.
+async function createProres(videoPath, profile) {
+  try {
+    return await invoke('create_prores', { videoPath, profile });
+  } catch (e) {
+    errors = [...errors, `ProRes export failed: ${e}`];
+    throw e;
+  }
+}
+
 export function getAppState() {
   return {
     get files() { return files; },
@@ -285,6 +296,7 @@ export function getAppState() {
     clearAll,
     dismissError,
     revealInFinder,
+    createProres,
     get completionSoundPath() { return completionSoundPath; },
     set completionSoundPath(v) { completionSoundPath = v; },
   };

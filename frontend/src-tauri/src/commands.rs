@@ -209,6 +209,32 @@ pub fn play_sound(path: String) -> Result<(), String> {
     Ok(())
 }
 
+/// Transcode a video into an Apple ProRes 422 .mov "working file" for Pro Tools,
+/// saved next to the source. Returns the output path.
+#[tauri::command]
+pub async fn create_prores(video_path: String, profile: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        let (num, label) = match profile.as_str() {
+            "proxy" => (0u8, "Proxy"),
+            "422" => (2u8, "422"),
+            "hq" => (3u8, "HQ"),
+            _ => (1u8, "LT"), // default: ProRes 422 LT
+        };
+        let path = std::path::Path::new(&video_path);
+        let dir = path
+            .parent()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|| ".".to_string());
+        let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("video");
+        let output = format!("{}/{}_ProRes_{}.mov", dir, stem, label);
+        let args = ffmpeg::build_prores_command(&video_path, &output, num);
+        ffmpeg::run_ffmpeg(&args)?;
+        Ok(output)
+    })
+    .await
+    .map_err(|e| format!("Task failed: {}", e))?
+}
+
 #[cfg(test)]
 mod tests {
     /// URL validation logic (extracted for testability)

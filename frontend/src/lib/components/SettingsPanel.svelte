@@ -6,6 +6,8 @@
     onToggleTame,
     timestampFormat = 'YYYYMMDD_HHmm',
     onTimestampFormatChange,
+    proresProfile = 'lt',
+    onProresProfileChange,
   } = $props();
 
   let showSettings = $state(false);
@@ -19,6 +21,13 @@
     { value: 'YYYY-MM-DD_HH-mm', label: '2026-03-25_14-30', desc: 'YYYY-MM-DD' },
     { value: 'DD-MM-YYYY_HH-mm', label: '25-03-2026_14-30', desc: 'DD-MM-YYYY' },
     { value: 'MMDDYYYY_HHmm',    label: '03252026_1430', desc: 'MMDDYYYY' },
+  ];
+
+  const proresFlavors = [
+    { value: 'proxy', label: 'ProRes 422 Proxy' },
+    { value: 'lt',    label: 'ProRes 422 LT' },
+    { value: '422',   label: 'ProRes 422' },
+    { value: 'hq',    label: 'ProRes 422 HQ' },
   ];
 </script>
 
@@ -117,6 +126,17 @@
             onclick={() => onTimestampFormatChange(fmt.value)}
           >
             {fmt.label}
+          </button>
+        {/each}
+        <div class="dropdown-divider"></div>
+        <span class="dropdown-label" title="Codec for the ProRes button on each video">PRORES WORKING FILE</span>
+        {#each proresFlavors as fl}
+          <button
+            class="dropdown-item"
+            class:active={proresProfile === fl.value}
+            onclick={() => onProresProfileChange(fl.value)}
+          >
+            {fl.label}
           </button>
         {/each}
       </div>

@@ -12,6 +12,7 @@
     onUpdateFilename,
     onRemove,
     onReveal,
+    onCreateProres,
     onToggleAllNorm,
     timestampFormat = 'YYYYMMDD_HHmm',
   } = $props();
@@ -87,6 +88,7 @@
           {onUpdateFilename}
           {onRemove}
           {onReveal}
+          {onCreateProres}
           {timestampFormat}
         />
       {/each}

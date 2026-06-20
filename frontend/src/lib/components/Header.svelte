@@ -111,6 +111,7 @@
             <li><strong>Normalise</strong> — Click NORM on a file (or NORM ALL) to enable loudness or True Peak derived normalisation. Click the badge to choose a standard (EBU R128, streaming, full scale).</li>
             <li><strong>Choose format</strong> — Pick ORIGINAL to leave the format untouched or H.264/AAC to make file sizes more manageable.</li>
             <li><strong>6 Fr (Broadcast Silence)</strong> — Click 6 Fr on any file to enforce 6 frames of digital silence at the head and tail of the audio, as required by UK broadcasters. Laybacker checks your file and shows a warning if audio is present in those regions. On export, the silence is applied automatically with a short fade to prevent clicks.</li>
+            <li><strong>ProRes (working file)</strong> — On any video, click <strong>ProRes</strong> to make an Apple ProRes 422 <code>.mov</code> copy next to the source — a smooth-playing guide picture to drop into Pro Tools, which doesn't handle H.264/mp4 well. It's separate from the layback and doesn't change your export. Choose the ProRes flavour (Proxy / LT / 422 / HQ) in the settings cog.</li>
             <li><strong>Layback</strong> — Hit the green button. Output files are saved alongside your audio files.</li>
           </ol>
           <div class="help-divider"></div>
