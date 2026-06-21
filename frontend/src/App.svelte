@@ -117,6 +117,7 @@
 
   <ProcessButton
     pairCount={app.matchedPairs.length}
+    fileCount={app.files.length}
     isProcessing={app.isProcessing}
     onProcess={app.processAll}
     onCancel={app.cancelProcessing}

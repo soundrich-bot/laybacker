@@ -1,10 +1,10 @@
 <script>
-  let { pairCount = 0, isProcessing = false, onProcess, onClear, onCancel, audioOnly = false } = $props();
+  let { pairCount = 0, fileCount = 0, isProcessing = false, onProcess, onClear, onCancel, audioOnly = false } = $props();
 </script>
 
 <div class="process-bar">
   <div class="process-bar-left">
-    {#if pairCount > 0}
+    {#if fileCount > 0 || pairCount > 0}
       <button class="clear-btn" onclick={onClear} disabled={isProcessing}>
         CLEAR ALL
       </button>
