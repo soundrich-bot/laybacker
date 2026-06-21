@@ -23,6 +23,7 @@
   let previewFile = $state(null); // { path, filename, mediaType }
   let silenceCheck = $state(null); // { headHasAudio, tailHasAudio, headPeak, tailPeak }
   let checkingSilence = $state(false);
+  let showSilenceDetail = $state(false); // expand the 6 Fr warning into a detail panel
 
   // Norm mode: 'broadcast' (LUFS target) or 'fullscale' (true peak only)
   // We infer from settings: if targetLufs is 0 or very high, it's full scale
@@ -237,13 +238,19 @@
     </button>
     {#if pair.silenceCompliance && silenceCheck}
       {#if silenceCheck.headHasAudio || silenceCheck.tailHasAudio}
-        <span class="silence-warn" title={`Audio detected in ${silenceCheck.headHasAudio ? 'head' : ''}${silenceCheck.headHasAudio && silenceCheck.tailHasAudio ? ' & ' : ''}${silenceCheck.tailHasAudio ? 'tail' : ''} — will be fixed on export`}>
+        <button
+          class="silence-warn"
+          class:open={showSilenceDetail}
+          onclick={() => showSilenceDetail = !showSilenceDetail}
+          aria-expanded={showSilenceDetail}
+          title="Audio found in the silence guard — click for details"
+        >
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
             <path d="M7 1L13 12H1L7 1Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
             <path d="M7 5.5V8.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
             <circle cx="7" cy="10.5" r="0.5" fill="currentColor"/>
           </svg>
-        </span>
+        </button>
       {:else}
         <span class="silence-pass" title="Head and tail silence OK">&#10003;</span>
       {/if}
@@ -312,6 +319,28 @@
     </div>
   </div>
 </div>
+
+{#if showSilenceDetail && pair.silenceCompliance && silenceCheck && (silenceCheck.headHasAudio || silenceCheck.tailHasAudio)}
+  <div class="silence-detail-row">
+    <div class="silence-detail-title">
+      <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
+        <path d="M7 1L13 12H1L7 1Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
+        <path d="M7 5.5V8.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+        <circle cx="7" cy="10.5" r="0.5" fill="currentColor"/>
+      </svg>
+      6-FRAME SILENCE — AUDIO IN THE GUARD REGION
+    </div>
+    <ul class="silence-detail-list">
+      {#if silenceCheck.headHasAudio}
+        <li><span class="sd-where">Head</span> — first {(pair.silenceMs ?? 240).toFixed(0)} ms: peak <strong>{silenceCheck.headPeak.toFixed(1)} dBTP</strong></li>
+      {/if}
+      {#if silenceCheck.tailHasAudio}
+        <li><span class="sd-where">Tail</span> — last {(pair.silenceMs ?? 240).toFixed(0)} ms: peak <strong>{silenceCheck.tailPeak.toFixed(1)} dBTP</strong></li>
+      {/if}
+    </ul>
+    <p class="silence-detail-note">On export these regions are muted to digital silence with a {(pair.fadeMs ?? 5).toFixed(0)} ms fade to prevent clicks, so the delivered file is compliant. Nothing to do — this is just a heads-up.</p>
+  </div>
+{/if}
 
 {#if showNormSettings && pair.normalizationEnabled}
   <div class="norm-detail-row">
@@ -646,7 +675,16 @@
     color: var(--neon-orange);
     display: flex;
     align-items: center;
-    cursor: help;
+    background: none;
+    border: none;
+    padding: 2px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .silence-warn:hover,
+  .silence-warn.open {
+    background: rgba(255, 159, 28, 0.12);
   }
 
   .silence-pass {
@@ -899,6 +937,47 @@
     border-top: none;
     border-radius: 0 0 var(--radius-md) var(--radius-md);
     margin-top: -4px;
+  }
+
+  /* === 6-frame silence detail panel === */
+  .silence-detail-row {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-xs);
+    padding: var(--gap-md) var(--gap-lg);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-secondary);
+    background: rgba(255, 159, 28, 0.05);
+    border: 1px solid rgba(255, 159, 28, 0.2);
+    border-top: none;
+    border-radius: 0 0 var(--radius-md) var(--radius-md);
+    margin-top: -4px;
+  }
+  .silence-detail-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-display);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    color: var(--neon-orange);
+  }
+  .silence-detail-list {
+    margin: 2px 0 0;
+    padding-left: 18px;
+    list-style: none;
+  }
+  .silence-detail-list li { padding: 1px 0; }
+  .silence-detail-list .sd-where {
+    color: var(--neon-orange);
+    font-weight: 700;
+  }
+  .silence-detail-list strong { color: var(--text-primary); }
+  .silence-detail-note {
+    margin: 4px 0 0;
+    color: var(--text-muted);
+    line-height: 1.5;
   }
 
   /* Mode switch (BROADCAST vs FULL SCALE) */
