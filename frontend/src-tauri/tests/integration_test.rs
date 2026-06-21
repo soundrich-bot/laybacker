@@ -320,3 +320,40 @@ fn test_inspect_video_extracts_thumbnail() {
 
     cleanup(&vid);
 }
+
+#[test]
+fn test_run_ffmpeg_with_progress_reports_and_outputs() {
+    // Generate a short clip, transcode it to ProRes through the progress-aware
+    // runner, and confirm it reports progress and produces a valid output.
+    let dir = output_dir();
+    let src = format!("{}/prog_src.mp4", dir);
+    let out = format!("{}/prog_src_ProRes_Proxy.mov", dir);
+    cleanup(&src);
+    cleanup(&out);
+
+    let ff = ffmpeg::find_ffmpeg();
+    let made = std::process::Command::new(&ff)
+        .args([
+            "-y", "-f", "lavfi", "-i", "testsrc=duration=3:size=320x240:rate=15",
+            "-c:v", "mpeg4", &src,
+        ])
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+    assert!(made && Path::new(&src).exists(), "could not generate a test video");
+
+    let args = ffmpeg::build_prores_command(&src, &out, 0); // 0 = ProRes Proxy (fastest)
+    let calls = std::cell::RefCell::new(Vec::<f64>::new());
+    let result = ffmpeg::run_ffmpeg_with_progress(&args, 3.0, |p| calls.borrow_mut().push(p));
+
+    assert!(result.is_ok(), "run_ffmpeg_with_progress failed: {:?}", result);
+    assert!(Path::new(&out).exists(), "ProRes output was not created");
+
+    let calls = calls.into_inner();
+    assert!(!calls.is_empty(), "expected at least one progress callback");
+    assert!(calls.iter().all(|&p| (0.0..=1.0).contains(&p)), "progress out of range: {:?}", calls);
+    assert_eq!(*calls.last().unwrap(), 1.0, "final progress should be 1.0 (complete)");
+
+    cleanup(&src);
+    cleanup(&out);
+}
