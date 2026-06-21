@@ -176,7 +176,7 @@
 
       <!-- ProRes working file (Pro Tools) -->
       {#if onCreateProres}
-        <ProResButton videoPath={pair.video.path} {onCreateProres} {onReveal} />
+        <ProResButton videoPath={pair.video.path} durationSecs={pair.video.durationSecs} {onCreateProres} {onReveal} />
       {/if}
 
       <!-- Arrow -->

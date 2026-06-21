@@ -54,7 +54,7 @@
                 {/if}
               </div>
               <span class="vp-name" title={v.filename}>{v.filename}</span>
-              <ProResButton videoPath={v.path} {onCreateProres} {onReveal} />
+              <ProResButton videoPath={v.path} durationSecs={v.durationSecs} {onCreateProres} {onReveal} />
             </div>
           {/each}
         </div>

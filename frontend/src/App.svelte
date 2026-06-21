@@ -99,7 +99,7 @@
     onUpdateFilename={app.updatePairFilename}
     onRemove={app.removePair}
     onReveal={app.revealInFinder}
-    onCreateProres={(videoPath) => app.createProres(videoPath, proresProfile)}
+    onCreateProres={(videoPath, durationSecs) => app.createProres(videoPath, durationSecs, proresProfile)}
     onToggleAllNorm={app.toggleAllNorm}
     {timestampFormat}
   />

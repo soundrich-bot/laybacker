@@ -210,9 +210,16 @@ pub fn play_sound(path: String) -> Result<(), String> {
 }
 
 /// Transcode a video into an Apple ProRes 422 .mov "working file" for Pro Tools,
-/// saved next to the source. Returns the output path.
+/// saved next to the source. Emits `prores-progress` events (keyed by videoPath)
+/// as the encode advances. Returns the output path.
 #[tauri::command]
-pub async fn create_prores(video_path: String, profile: String) -> Result<String, String> {
+pub async fn create_prores(
+    window: Window,
+    video_path: String,
+    duration_secs: f64,
+    profile: String,
+) -> Result<String, String> {
+    let video_for_event = video_path.clone();
     tokio::task::spawn_blocking(move || {
         let (num, label) = match profile.as_str() {
             "proxy" => (0u8, "Proxy"),
@@ -228,7 +235,12 @@ pub async fn create_prores(video_path: String, profile: String) -> Result<String
         let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("video");
         let output = format!("{}/{}_ProRes_{}.mov", dir, stem, label);
         let args = ffmpeg::build_prores_command(&video_path, &output, num);
-        ffmpeg::run_ffmpeg(&args)?;
+        ffmpeg::run_ffmpeg_with_progress(&args, duration_secs, |pct| {
+            let _ = window.emit(
+                "prores-progress",
+                serde_json::json!({ "videoPath": video_for_event, "progress": pct }),
+            );
+        })?;
         Ok(output)
     })
     .await

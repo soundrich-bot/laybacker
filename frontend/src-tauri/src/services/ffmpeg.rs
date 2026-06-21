@@ -506,6 +506,104 @@ pub fn run_ffmpeg(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
+/// Parse an ffmpeg `out_time=HH:MM:SS.ffffff` value into seconds.
+/// ffmpeg emits "N/A" before the first frame — that returns None.
+pub fn parse_ffmpeg_time(s: &str) -> Option<f64> {
+    let s = s.trim();
+    if s.is_empty() || s == "N/A" {
+        return None;
+    }
+    let mut parts = s.split(':');
+    let h: f64 = parts.next()?.parse().ok()?;
+    let m: f64 = parts.next()?.parse().ok()?;
+    let sec: f64 = parts.next()?.parse().ok()?;
+    Some(h * 3600.0 + m * 60.0 + sec)
+}
+
+/// Run an ffmpeg command, reporting progress (0.0–1.0) via `on_progress` as the
+/// encode advances. `total_secs` is the media duration used to compute percent;
+/// pass 0.0 if unknown (progress simply won't be reported, but the encode runs).
+/// Behaves like `run_ffmpeg` for cleanup/validation on failure.
+pub fn run_ffmpeg_with_progress(
+    args: &[String],
+    total_secs: f64,
+    on_progress: impl Fn(f64),
+) -> Result<(), String> {
+    use std::io::{BufRead, BufReader, Read};
+    use std::process::Stdio;
+
+    let ffmpeg = find_ffmpeg();
+    let output_path = args.last().map(|s| s.to_string());
+
+    // Ask ffmpeg to stream machine-readable progress to stdout.
+    let mut full: Vec<String> = vec![
+        "-progress".to_string(),
+        "pipe:1".to_string(),
+        "-nostats".to_string(),
+    ];
+    full.extend(args.iter().cloned());
+
+    log::info!("Running: {} {}", ffmpeg, full.join(" "));
+
+    let mut child = silent_command(&ffmpeg)
+        .args(&full)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Failed to run ffmpeg: {}", e))?;
+
+    // Drain stderr on a thread so its pipe never fills and deadlocks the encode.
+    let stderr_handle = child.stderr.take().map(|mut s| {
+        std::thread::spawn(move || {
+            let mut buf = String::new();
+            let _ = s.read_to_string(&mut buf);
+            buf
+        })
+    });
+
+    if let Some(stdout) = child.stdout.take() {
+        for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+            if let Some(rest) = line.strip_prefix("out_time=") {
+                if total_secs > 0.0 {
+                    if let Some(secs) = parse_ffmpeg_time(rest) {
+                        // Hold just below 100% until the process actually exits.
+                        on_progress((secs / total_secs).clamp(0.0, 0.99));
+                    }
+                }
+            }
+        }
+    }
+
+    let status = child
+        .wait()
+        .map_err(|e| format!("ffmpeg wait failed: {}", e))?;
+    let stderr = stderr_handle
+        .and_then(|h| h.join().ok())
+        .unwrap_or_default();
+
+    if !status.success() {
+        // Clean up empty/broken output file left by -y flag
+        if let Some(path) = &output_path {
+            let p = std::path::Path::new(path);
+            if p.exists() && p.metadata().map(|m| m.len() == 0).unwrap_or(false) {
+                let _ = std::fs::remove_file(p);
+            }
+        }
+        return Err(format!("ffmpeg failed: {}", stderr));
+    }
+
+    if let Some(path) = &output_path {
+        let p = std::path::Path::new(path);
+        if !p.exists() || p.metadata().map(|m| m.len() == 0).unwrap_or(true) {
+            let _ = std::fs::remove_file(p);
+            return Err("ffmpeg produced an empty output file".to_string());
+        }
+    }
+
+    on_progress(1.0);
+    Ok(())
+}
+
 /// Measure loudness using ffmpeg's ebur128 filter (ITU-R BS.1770-4 compliant)
 /// This is more precise than loudnorm's built-in measurement
 pub fn measure_loudness_ffmpeg(audio_path: &str) -> Result<(f64, f64), String> {
@@ -770,6 +868,17 @@ mod tests {
         assert!(args.contains(&"yuv422p10le".to_string()));
         assert!(args.contains(&"pcm_s16le".to_string()));
         assert_eq!(args.last().unwrap(), "/clip_ProRes_LT.mov");
+    }
+
+    #[test]
+    fn test_parse_ffmpeg_time() {
+        assert_eq!(parse_ffmpeg_time("00:00:00.000000"), Some(0.0));
+        assert_eq!(parse_ffmpeg_time("00:01:30.500000"), Some(90.5));
+        assert_eq!(parse_ffmpeg_time("01:00:00.000000"), Some(3600.0));
+        // ffmpeg emits N/A before the first frame, and junk should be ignored.
+        assert_eq!(parse_ffmpeg_time("N/A"), None);
+        assert_eq!(parse_ffmpeg_time(""), None);
+        assert_eq!(parse_ffmpeg_time("nonsense"), None);
     }
 
     // ── build_loudnorm_filter ──
