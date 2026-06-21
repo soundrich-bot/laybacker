@@ -1,6 +1,6 @@
 [package]
 name = "laybacker"
-version = "0.1.15"
+version = "0.1.16"
 description = "Replace audio on video files. Fast."
 authors = ["Laybacker"]
 license = "GPL-3.0"

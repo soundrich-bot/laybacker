@@ -1,10 +1,12 @@
 <script>
   import MatchedPairRow from './MatchedPairRow.svelte';
+  import ProResButton from './ProResButton.svelte';
 
   let {
     pairs = [],
     progressMap = {},
     results = [],
+    videos = [],
     videoCount = 0,
     audioCount = 0,
     onUpdateNormalization,
@@ -37,7 +39,25 @@
           <span class="checkmark">✓</span>
         </div>
         <p class="waiting-text">{videoCount} VIDEO{videoCount !== 1 ? 'S' : ''} LOADED</p>
-        <p class="waiting-hint">Now drop audio files to pair up</p>
+        <p class="waiting-hint">Drop audio to lay back — or make a ProRes working file for Pro Tools</p>
+        <div class="video-prores-list">
+          {#each videos as v (v.path)}
+            <div class="video-prores-item">
+              <div class="vp-thumb">
+                {#if v.thumbnailData}
+                  <img src={v.thumbnailData} alt="" />
+                {:else}
+                  <svg width="16" height="12" viewBox="0 0 16 12" fill="none">
+                    <rect x="1" y="1" width="14" height="10" rx="1.5" stroke="currentColor" stroke-width="1.2"/>
+                    <path d="M6 4L10 6L6 8V4Z" fill="currentColor"/>
+                  </svg>
+                {/if}
+              </div>
+              <span class="vp-name" title={v.filename}>{v.filename}</span>
+              <ProResButton videoPath={v.path} {onCreateProres} {onReveal} />
+            </div>
+          {/each}
+        </div>
       {:else if audioCount > 0 && videoCount === 0}
         <div class="waiting-icon">
           <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
@@ -254,6 +274,57 @@
     font-size: 13px;
     color: var(--text-secondary);
     letter-spacing: 0.03em;
+  }
+
+  .video-prores-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-sm);
+    margin-top: var(--gap-lg);
+    width: 100%;
+    max-width: 460px;
+  }
+
+  .video-prores-item {
+    display: flex;
+    align-items: center;
+    gap: var(--gap-sm);
+    padding: 6px 10px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+  }
+
+  .vp-thumb {
+    flex-shrink: 0;
+    width: 40px;
+    height: 28px;
+    border-radius: 3px;
+    overflow: hidden;
+    background: var(--bg-dark);
+    border: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+  }
+
+  .vp-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .vp-name {
+    flex: 1;
+    min-width: 0;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: left;
   }
 
   @keyframes pulse-glow {

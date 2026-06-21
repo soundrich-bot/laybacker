@@ -91,6 +91,7 @@
     pairs={app.matchedPairs}
     progressMap={app.progressMap}
     results={app.processingResults}
+    videos={app.getVideos()}
     videoCount={app.getVideos().length}
     audioCount={app.getAudios().length}
     onUpdateNormalization={app.updatePairNormalization}
