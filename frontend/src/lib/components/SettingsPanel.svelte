@@ -8,7 +8,11 @@
     onTimestampFormatChange,
     proresProfile = 'lt',
     onProresProfileChange,
+    audioOnly = false,
   } = $props();
+
+  // The video container follows the audio format: Original/WAV → .mov, AAC → .mp4.
+  let outputFormat = $derived(settings.audioFormat === 'aac' ? 'mp4' : 'mov');
 
   let showSettings = $state(false);
 
@@ -90,6 +94,21 @@
       </select>
     {/if}
   </div>
+
+  <!-- Output container indicator (driven by the audio format) -->
+  {#if !audioOnly}
+    <div class="setting-group">
+      <span class="setting-label" title="The output container is set by the audio format">OUTPUT</span>
+      <span
+        class="output-format"
+        title={settings.audioFormat === 'aac'
+          ? 'AAC audio produces a compact .mp4'
+          : 'Original/WAV audio is kept uncompressed, so the file is a QuickTime .mov (not .mp4)'}
+      >
+        .{outputFormat}
+      </span>
+    </div>
+  {/if}
 
   <!-- Spacer -->
   <div class="settings-spacer"></div>
@@ -206,6 +225,26 @@
 
   .bitrate-select {
     margin-left: var(--gap-xs);
+  }
+
+  .output-format {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--neon-cyan);
+    background: rgba(8, 247, 254, 0.08);
+    border: 1px solid rgba(8, 247, 254, 0.25);
+    border-radius: var(--radius-sm);
+    padding: 3px 9px;
+    cursor: help;
+  }
+
+  :global(:root.tame) .output-format {
+    color: var(--neon-green);
+    background: rgba(90, 138, 122, 0.1);
+    border-color: rgba(90, 138, 122, 0.3);
   }
 
   .settings-spacer {

@@ -25,6 +25,12 @@
   let checkingSilence = $state(false);
   let showSilenceDetail = $state(false); // expand the 6 Fr warning into a detail panel
 
+  // Split the output filename so the extension (.mov / .mp4 / .wav) is always
+  // shown and highlighted — long names truncate in the middle, never hiding it.
+  let outputDot = $derived(pair.outputFilename.lastIndexOf('.'));
+  let outputStem = $derived(outputDot > 0 ? pair.outputFilename.slice(0, outputDot) : pair.outputFilename);
+  let outputExt = $derived(outputDot > 0 ? pair.outputFilename.slice(outputDot + 1) : '');
+
   // Norm mode: 'broadcast' (LUFS target) or 'fullscale' (true peak only)
   // We infer from settings: if targetLufs is 0 or very high, it's full scale
   let normMode = $state('fullscale');
@@ -284,7 +290,13 @@
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <span class="output-name-display" onclick={startEditing}>
-        <span class="output-name-text">{pair.outputFilename}</span>
+        <span class="output-name-text">{outputStem}</span>
+        {#if outputExt}
+          <span
+            class="output-ext"
+            title={`This file will be a .${outputExt.toUpperCase()} — the container follows the audio format: Original/WAV → .mov (uncompressed), AAC → .mp4`}
+          >.{outputExt}</span>
+        {/if}
         <button class="icon-btn" onclick={addTimestamp} title="Add date & time to filename">
           <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
             <circle cx="6" cy="6" r="5" stroke="currentColor" stroke-width="1.2"/>
@@ -771,8 +783,26 @@
     font-size: 14px;
     font-weight: 700;
     color: var(--text-primary);
-    word-break: break-all;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 0 1 auto;
+    min-width: 0;
     line-height: 1.3;
+  }
+
+  .output-ext {
+    flex-shrink: 0;
+    font-family: var(--font-mono);
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--neon-cyan);
+    cursor: help;
+    line-height: 1.3;
+  }
+
+  :global(:root.tame) .output-ext {
+    color: var(--neon-green);
   }
 
   .output-name-display:hover .output-name-text {
