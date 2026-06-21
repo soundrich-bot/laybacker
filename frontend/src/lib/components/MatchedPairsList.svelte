@@ -137,7 +137,7 @@
 
   .col-video {
     flex: 1;
-    padding-left: 58px; /* thumbnail width + gap */
+    padding-left: 70px; /* thumbnail width + gap */
   }
 
   .col-audio {

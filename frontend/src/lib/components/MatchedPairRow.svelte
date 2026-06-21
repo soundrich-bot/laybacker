@@ -400,9 +400,9 @@
           <button class="preset-btn" class:active={pair.normalizationSettings.truePeakLimit === -0.5}
             onclick={() => onUpdateNormalization(pair.id, true, { targetLufs: 0, truePeakLimit: -0.5 })}
           >-0.5 dBTP<span class="preset-sub">Tight</span></button>
-          <button class="preset-btn" class:active={pair.normalizationSettings.truePeakLimit === -3}
-            onclick={() => onUpdateNormalization(pair.id, true, { targetLufs: 0, truePeakLimit: -3 })}
-          >-3 dBTP<span class="preset-sub">Safe</span></button>
+          <button class="preset-btn" class:active={pair.normalizationSettings.truePeakLimit === -2}
+            onclick={() => onUpdateNormalization(pair.id, true, { targetLufs: 0, truePeakLimit: -2 })}
+          >-2 dBTP<span class="preset-sub">Safe</span></button>
         </div>
         <label class="custom-input">
           <span class="custom-label">TP LIMIT</span>
@@ -475,8 +475,8 @@
   /* Thumbnail */
   .thumbnail {
     flex-shrink: 0;
-    width: 48px;
-    height: 32px;
+    width: 60px;
+    height: 40px;
     border-radius: 3px;
     overflow: hidden;
     background: var(--bg-dark);
