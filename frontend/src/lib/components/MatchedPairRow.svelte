@@ -24,6 +24,7 @@
   let silenceCheck = $state(null); // { headHasAudio, tailHasAudio, headPeak, tailPeak }
   let checkingSilence = $state(false);
   let showSilenceDetail = $state(false); // expand the 6 Fr warning into a detail panel
+  let showDurationDetail = $state(false); // expand the duration-mismatch warning
 
   // Split the output filename so the extension (.mov / .mp4 / .wav) is always
   // shown and highlighted — long names truncate in the middle, never hiding it.
@@ -204,13 +205,19 @@
 
       <!-- Duration warning -->
       {#if durationWarning}
-        <span class="duration-warn" title={durationWarning}>
+        <button
+          class="duration-warn"
+          class:open={showDurationDetail}
+          onclick={() => showDurationDetail = !showDurationDetail}
+          aria-expanded={showDurationDetail}
+          title="Duration mismatch — click for details"
+        >
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
             <path d="M7 1L13 12H1L7 1Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
             <path d="M7 5.5V8.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
             <circle cx="7" cy="10.5" r="0.5" fill="currentColor"/>
           </svg>
-        </span>
+        </button>
       {/if}
     {/if}
 
@@ -351,6 +358,20 @@
       {/if}
     </ul>
     <p class="silence-detail-note">On export these regions are muted to digital silence with a {(pair.fadeMs ?? 5).toFixed(0)} ms fade to prevent clicks, so the delivered file is compliant. Nothing to do — this is just a heads-up.</p>
+  </div>
+{/if}
+
+{#if showDurationDetail && durationWarning}
+  <div class="silence-detail-row">
+    <div class="silence-detail-title">
+      <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
+        <path d="M7 1L13 12H1L7 1Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
+        <path d="M7 5.5V8.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+        <circle cx="7" cy="10.5" r="0.5" fill="currentColor"/>
+      </svg>
+      DURATION MISMATCH
+    </div>
+    <p class="silence-detail-note">{durationWarning}. The output is trimmed to the shorter of the two, so nothing breaks — just check the pairing is right.</p>
   </div>
 {/if}
 
@@ -595,12 +616,19 @@
     color: var(--neon-orange);
     display: flex;
     align-items: center;
-    cursor: help;
+    background: none;
+    border: none;
+    padding: 2px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
     opacity: 0.8;
+    transition: all 0.15s;
   }
 
-  .duration-warn:hover {
+  .duration-warn:hover,
+  .duration-warn.open {
     opacity: 1;
+    background: rgba(255, 159, 28, 0.12);
   }
 
   .norm-section {
@@ -797,7 +825,6 @@
     font-size: 14px;
     font-weight: 700;
     color: var(--neon-cyan);
-    cursor: help;
     line-height: 1.3;
   }
 

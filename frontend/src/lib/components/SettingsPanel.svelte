@@ -98,14 +98,14 @@
   <!-- Output container indicator (driven by the audio format) -->
   {#if !audioOnly}
     <div class="setting-group">
-      <span class="setting-label" title="The output container is set by the audio format">OUTPUT</span>
-      <span
-        class="output-format"
-        title={settings.audioFormat === 'aac'
-          ? 'AAC audio produces a compact .mp4'
-          : 'Original/WAV audio is kept uncompressed, so the file is a QuickTime .mov (not .mp4)'}
-      >
-        .{outputFormat}
+      <span class="setting-label">OUTPUT</span>
+      <span class="output-format-wrap">
+        <span class="output-format">.{outputFormat}</span>
+        <span class="output-tip">
+          {settings.audioFormat === 'aac'
+            ? 'AAC audio is encoded into a compact .mp4. Switch audio to Original to keep your WAV in a .mov.'
+            : 'Original / WAV audio is kept uncompressed, so the file is a QuickTime .mov — not .mp4. Switch audio to AAC for a smaller .mp4.'}
+        </span>
       </span>
     </div>
   {/if}
@@ -187,7 +187,6 @@
     letter-spacing: 0.15em;
     color: var(--text-muted);
     min-width: 50px;
-    cursor: help;
   }
 
   .setting-options {
@@ -227,6 +226,11 @@
     margin-left: var(--gap-xs);
   }
 
+  .output-format-wrap {
+    position: relative;
+    display: inline-flex;
+  }
+
   .output-format {
     font-family: var(--font-mono);
     font-size: 12px;
@@ -245,6 +249,46 @@
     color: var(--neon-green);
     background: rgba(90, 138, 122, 0.1);
     border-color: rgba(90, 138, 122, 0.3);
+  }
+
+  /* Reliable hover tooltip (native title tooltips don't show in the webview) */
+  .output-tip {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    width: 230px;
+    background: var(--bg-raised);
+    border: 1px solid var(--border-accent);
+    border-radius: var(--radius-sm);
+    padding: 8px 10px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 400;
+    letter-spacing: normal;
+    line-height: 1.5;
+    text-transform: none;
+    color: var(--text-secondary);
+    text-align: left;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.12s;
+    z-index: 20;
+  }
+
+  .output-format-wrap:hover .output-tip {
+    opacity: 1;
+  }
+
+  /* Little downward caret on the tooltip */
+  .output-tip::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 5px solid transparent;
+    border-top-color: var(--border-accent);
   }
 
   .settings-spacer {
