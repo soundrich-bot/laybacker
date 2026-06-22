@@ -26,6 +26,7 @@
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html { scroll-behavior: smooth; }
+    section[id] { scroll-margin-top: 24px; }
     body {
       background: radial-gradient(1200px 600px at 50% -10%, #15131f 0%, var(--bg-dark) 60%) fixed;
       color: var(--text);
@@ -407,6 +408,24 @@
       wrap.addEventListener('click', toggle);
       wrap.addEventListener('keydown', function (e) {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+      });
+    })();
+  </script>
+
+  <!-- Reliable in-page scrolling: always scroll to the target on click, even
+       when the URL hash already points there (native anchors no-op in that case). -->
+  <script>
+    (function () {
+      document.querySelectorAll('a[href^="#"]').forEach(function (a) {
+        a.addEventListener('click', function (e) {
+          var id = a.getAttribute('href').slice(1);
+          if (!id) return;                       // ignore a bare "#"
+          var target = document.getElementById(id);
+          if (!target) return;                   // unknown anchor — leave to the browser
+          e.preventDefault();
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          history.replaceState(null, '', '#' + id);
+        });
       });
     })();
   </script>
