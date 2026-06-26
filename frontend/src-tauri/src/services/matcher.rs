@@ -13,6 +13,36 @@ pub fn match_files(files: &[MediaFile]) -> Vec<MatchedPair> {
         return Vec::new();
     }
 
+    // One audio laid back onto every video (1 audio -> N videos): the user dropped
+    // a single mix and several pictures, so pair that audio with each video.
+    if audios.len() == 1 {
+        let audio = audios[0];
+        return videos
+            .iter()
+            .map(|video| {
+                let duration_delta = (video.duration_secs - audio.duration_secs).abs();
+                let confidence = if duration_delta <= DURATION_TOLERANCE {
+                    1.0
+                } else {
+                    (1.0 - (duration_delta / 10.0)).max(0.0)
+                };
+                MatchedPair {
+                    id: Uuid::new_v4().to_string(),
+                    video: Some((*video).clone()),
+                    audio: audio.clone(),
+                    output_filename: String::new(), // Will be set by namer
+                    normalization_enabled: false,
+                    normalization_settings: NormalizationSettings::default(),
+                    timecode_offset_secs: 0.0,
+                    match_confidence: confidence,
+                    silence_compliance: false,
+                    silence_ms: 240.0,
+                    fade_ms: 5.0,
+                }
+            })
+            .collect();
+    }
+
     // Build candidate pairs with scores
     let mut candidates: Vec<(usize, usize, f64, f64, f64)> = Vec::new(); // (video_idx, audio_idx, duration_delta, name_sim, combined)
 
@@ -123,6 +153,29 @@ mod tests {
 
         let pairs = match_files(&files);
         assert_eq!(pairs.len(), 2);
+    }
+
+    #[test]
+    fn test_one_audio_multiple_videos() {
+        // A single mix dropped with several pictures should pair onto every video.
+        let files = vec![
+            make_audio("final_mix", 30.0),
+            make_video("clip_a", 30.0),
+            make_video("clip_b", 15.0),
+            make_video("clip_c", 30.0),
+        ];
+
+        let pairs = match_files(&files);
+        assert_eq!(pairs.len(), 3, "one audio should pair with all three videos");
+        // Every pair uses the same audio.
+        assert!(pairs.iter().all(|p| p.audio.filename_no_ext == "final_mix"));
+        // All three videos are represented, each once.
+        let mut vids: Vec<_> = pairs
+            .iter()
+            .map(|p| p.video.as_ref().unwrap().filename_no_ext.clone())
+            .collect();
+        vids.sort();
+        assert_eq!(vids, vec!["clip_a", "clip_b", "clip_c"]);
     }
 
     #[test]
