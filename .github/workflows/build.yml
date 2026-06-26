@@ -192,14 +192,23 @@ jobs:
           VER="${TAG#v}"
           TMP="$(mktemp -d)"
 
-          # --- "What's new": commit subjects since the previous tag ---
-          PREV="$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)"
-          CHANGELOG=""
-          if [ -n "$PREV" ]; then
-            CHANGELOG="$(git log --no-merges --pretty='- %s' "${PREV}..${TAG}" \
-              | grep -viE '^- (Bump version|Merge )' | head -25 || true)"
+          # --- "What's new" ---
+          # Prefer hand-written notes for this version (release-notes/<tag>.md) so
+          # the release reads in Richard's own tone. Falls back to commit subjects
+          # since the previous tag when no notes file is present.
+          NOTES_FILE="release-notes/${TAG}.md"
+          if [ -s "$NOTES_FILE" ]; then
+            CHANGELOG="$(cat "$NOTES_FILE")"
+            echo "Using hand-written release notes from $NOTES_FILE"
+          else
+            PREV="$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)"
+            CHANGELOG=""
+            if [ -n "$PREV" ]; then
+              CHANGELOG="$(git log --no-merges --pretty='- %s' "${PREV}..${TAG}" \
+                | grep -viE '^- (Bump version|Merge )' | head -25 || true)"
+            fi
+            [ -z "$CHANGELOG" ] && CHANGELOG="- Maintenance and improvements."
           fi
-          [ -z "$CHANGELOG" ] && CHANGELOG="- Maintenance and improvements."
 
           # --- updater manifest (latest.json) from the signed .sig files ---
           gh release download "$TAG" --repo "$REPO" --dir "$TMP" --pattern "*.sig" || true
