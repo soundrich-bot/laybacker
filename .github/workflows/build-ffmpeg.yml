@@ -1,0 +1,134 @@
+name: Build lean FFmpeg (macOS)
+
+# Builds FFmpeg/FFprobe for macOS from source WITHOUT capture-device support, so
+# the bundled binaries don't link AVFoundation / CoreAudio / AudioToolbox and
+# macOS never shows a microphone/camera permission prompt for them. Laybacker
+# only ever processes real files, so none of the removed features are used.
+#
+# Run manually (workflow_dispatch). Publishes the binaries to a PRERELEASE tagged
+# `ffmpeg-lean-<version>` so it never shows up as the app's "latest" release.
+# scripts/download-ffmpeg.sh then pulls these instead of the evermeet.cx build.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  FFMPEG_VERSION: "8.1"
+  LEAN_TAG: "ffmpeg-lean-8.1"
+
+jobs:
+  build:
+    name: Build lean FFmpeg (macOS x86_64)
+    runs-on: macos-13   # Intel runner — native x86_64 (runs on Apple Silicon via Rosetta)
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Install build tools
+        run: brew install nasm pkg-config
+
+      - name: Build static x264
+        run: |
+          set -euo pipefail
+          git clone --depth 1 https://code.videolan.org/videolan/x264.git x264-src
+          cd x264-src
+          echo "x264 commit: $(git rev-parse HEAD)"
+          ./configure --prefix="$HOME/ff-deps" --enable-static --disable-cli --enable-pic
+          make -j3
+          make install
+
+      - name: Build lean FFmpeg
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.xz" -o ffmpeg.tar.xz
+          tar xf ffmpeg.tar.xz
+          cd "ffmpeg-${FFMPEG_VERSION}"
+          PKG_CONFIG_PATH="$HOME/ff-deps/lib/pkgconfig" ./configure \
+            --disable-autodetect \
+            --enable-gpl --enable-version3 \
+            --enable-libx264 \
+            --extra-cflags="-I$HOME/ff-deps/include" \
+            --extra-ldflags="-L$HOME/ff-deps/lib" \
+            --pkg-config-flags=--static \
+            --disable-avdevice \
+            --disable-audiotoolbox \
+            --disable-videotoolbox \
+            --disable-network \
+            --disable-doc \
+            --disable-ffplay \
+            --disable-debug
+          make -j3
+          mkdir -p "$GITHUB_WORKSPACE/bin"
+          cp ffmpeg ffprobe "$GITHUB_WORKSPACE/bin/"
+
+      - name: Verify binaries are clean and self-contained (hard gate)
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/bin"
+          for b in ffmpeg ffprobe; do
+            echo "===== otool -L $b ====="
+            otool -L "$b"
+            # No capture-capable frameworks may be linked.
+            if otool -L "$b" | grep -iE "AVFoundation|CoreAudio|AudioToolbox|VideoToolbox"; then
+              echo "FAIL: $b links a capture/AV framework"; exit 1
+            fi
+            # No non-system dynamic dependencies (must be fully self-contained).
+            if otool -L "$b" | tail -n +2 | awk '{print $1}' | grep -vE "^/usr/lib/|^/System/Library/"; then
+              echo "FAIL: $b has a non-system dylib dependency (not portable)"; exit 1
+            fi
+            # x86_64 Mach-O as expected.
+            file "$b" | grep -q "x86_64" || { echo "FAIL: $b is not x86_64"; exit 1; }
+          done
+          echo "OK: clean, self-contained x86_64 binaries with no capture frameworks"
+
+      - name: Smoke test — required encoders & filters present
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/bin"
+          need_enc() { ./ffmpeg -hide_banner -encoders 2>/dev/null | grep -qE " $1( |$)" || { echo "MISSING encoder: $1"; exit 1; }; }
+          need_filt() { ./ffmpeg -hide_banner -filters 2>/dev/null | grep -qE " $1( |$)" || { echo "MISSING filter: $1"; exit 1; }; }
+          need_enc prores_ks
+          need_enc libx264
+          need_enc aac
+          need_enc pcm_s16le
+          need_enc pcm_s24le
+          need_enc mjpeg
+          need_filt loudnorm
+          need_filt ebur128
+          need_filt adelay
+          need_filt afade
+          need_filt atrim
+          need_filt volume
+          echo "OK: all encoders and filters Laybacker needs are present"
+          ./ffmpeg -version | head -1
+          ./ffprobe -version | head -1
+
+      - name: Package sidecars (x86_64 binary serves both arch slots, via Rosetta)
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/bin"
+          cp ffmpeg  ffmpeg-x86_64-apple-darwin
+          cp ffmpeg  ffmpeg-aarch64-apple-darwin
+          cp ffprobe ffprobe-x86_64-apple-darwin
+          cp ffprobe ffprobe-aarch64-apple-darwin
+          shasum -a 256 ffmpeg-*-apple-darwin ffprobe-*-apple-darwin > SHA256SUMS-ffmpeg.txt
+          cat SHA256SUMS-ffmpeg.txt
+
+      - name: Publish to the lean-ffmpeg prerelease
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/bin"
+          if ! gh release view "$LEAN_TAG" >/dev/null 2>&1; then
+            gh release create "$LEAN_TAG" \
+              --title "Lean FFmpeg ${FFMPEG_VERSION} (no capture devices)" \
+              --notes "FFmpeg/FFprobe ${FFMPEG_VERSION} built from source without avdevice/audiotoolbox/videotoolbox/network, so the binaries link no AVFoundation/CoreAudio/AudioToolbox and macOS shows no microphone prompt. Bundled by Laybacker; not an app release." \
+              --prerelease
+          fi
+          gh release upload "$LEAN_TAG" \
+            ffmpeg-x86_64-apple-darwin ffmpeg-aarch64-apple-darwin \
+            ffprobe-x86_64-apple-darwin ffprobe-aarch64-apple-darwin \
+            SHA256SUMS-ffmpeg.txt --clobber
