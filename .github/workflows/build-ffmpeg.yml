@@ -22,35 +22,40 @@ env:
 jobs:
   build:
     name: Build lean FFmpeg (macOS x86_64)
-    runs-on: macos-13   # Intel runner — native x86_64 (runs on Apple Silicon via Rosetta)
+    runs-on: macos-latest   # Apple Silicon (plentiful); we cross-build x86_64 here
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Install build tools
         run: brew install nasm pkg-config
 
-      - name: Build static x264
+      - name: Build static x264 (cross to x86_64)
         run: |
           set -euo pipefail
           git clone --depth 1 https://code.videolan.org/videolan/x264.git x264-src
           cd x264-src
           echo "x264 commit: $(git rev-parse HEAD)"
-          ./configure --prefix="$HOME/ff-deps" --enable-static --disable-cli --enable-pic
+          CC="clang -arch x86_64" ./configure \
+            --prefix="$HOME/ff-deps" \
+            --host=x86_64-apple-darwin \
+            --enable-static --disable-cli --enable-pic
           make -j3
           make install
 
-      - name: Build lean FFmpeg
+      - name: Build lean FFmpeg (cross to x86_64)
         run: |
           set -euo pipefail
           curl -fsSL "https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.xz" -o ffmpeg.tar.xz
           tar xf ffmpeg.tar.xz
           cd "ffmpeg-${FFMPEG_VERSION}"
           PKG_CONFIG_PATH="$HOME/ff-deps/lib/pkgconfig" ./configure \
+            --arch=x86_64 --cc='clang -arch x86_64' \
+            --enable-cross-compile --target-os=darwin \
             --disable-autodetect \
             --enable-gpl --enable-version3 \
             --enable-libx264 \
-            --extra-cflags="-I$HOME/ff-deps/include" \
-            --extra-ldflags="-L$HOME/ff-deps/lib" \
+            --extra-cflags="-arch x86_64 -I$HOME/ff-deps/include" \
+            --extra-ldflags="-arch x86_64 -L$HOME/ff-deps/lib" \
             --pkg-config-flags=--static \
             --disable-avdevice \
             --disable-audiotoolbox \
@@ -62,6 +67,9 @@ jobs:
           make -j3
           mkdir -p "$GITHUB_WORKSPACE/bin"
           cp ffmpeg ffprobe "$GITHUB_WORKSPACE/bin/"
+
+      - name: Ensure Rosetta (to run the x86_64 binaries for the smoke test)
+        run: softwareupdate --install-rosetta --agree-to-license || true
 
       - name: Verify binaries are clean and self-contained (hard gate)
         run: |
