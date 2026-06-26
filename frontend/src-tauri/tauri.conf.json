@@ -42,7 +42,7 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": ["resources/LaybackComplete.wav", "binaries/FFMPEG_LICENSE.txt"],
+    "resources": ["binaries/FFMPEG_LICENSE.txt"],
     "externalBin": ["binaries/ffmpeg", "binaries/ffprobe"],
     "category": "Utility",
     "shortDescription": "Replace audio on video files. Fast.",

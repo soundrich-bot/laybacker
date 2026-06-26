@@ -1,6 +1,5 @@
 <script>
   import { onMount } from 'svelte';
-  import { invoke } from '@tauri-apps/api/core';
   import { listen } from '@tauri-apps/api/event';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { getAppState } from './lib/stores/app.svelte.js';
@@ -33,12 +32,6 @@
   }
 
   onMount(async () => {
-    // Resolve bundled completion sound
-    try {
-      const soundPath = await invoke('get_resource_path', { resource: 'resources/LaybackComplete.wav' });
-      app.completionSoundPath = soundPath;
-    } catch { /* sound is optional */ }
-
     // Check for FFmpeg on startup
     await app.checkFfmpeg();
 

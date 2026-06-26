@@ -10,8 +10,17 @@ let processingResults = $state([]);
 let progressMap = $state({});
 let errors = $state([]);
 
-// Path to completion sound — can be customized
-let completionSoundPath = $state('');
+// Completion chime, played through the webview (WebKit) rather than a native
+// player (afplay). A native CoreAudio player triggers a one-time macOS
+// microphone permission prompt after each update; webview audio does not.
+let completionAudio = null;
+function playCompletionSound() {
+  try {
+    if (!completionAudio) completionAudio = new Audio('/LaybackComplete.wav');
+    completionAudio.currentTime = 0;
+    completionAudio.play().catch(() => { /* autoplay/optional — ignore */ });
+  } catch { /* sound is optional */ }
+}
 
 let exportSettings = $state({
   videoCodec: 'original',
@@ -166,14 +175,8 @@ async function processAll() {
     });
     processingResults = results;
 
-    // Play completion sound
-    if (completionSoundPath) {
-      try {
-        await invoke('play_sound', { path: completionSoundPath });
-      } catch (e) {
-        console.warn('Could not play completion sound:', e);
-      }
-    }
+    // Play completion chime (through the webview — see playCompletionSound).
+    playCompletionSound();
   } catch (e) {
     errors = [...errors, `Processing failed: ${e}`];
   } finally {
@@ -297,7 +300,5 @@ export function getAppState() {
     dismissError,
     revealInFinder,
     createProres,
-    get completionSoundPath() { return completionSoundPath; },
-    set completionSoundPath(v) { completionSoundPath = v; },
   };
 }
