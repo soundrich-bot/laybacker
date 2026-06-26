@@ -42,28 +42,40 @@ assert_version() {
 if [[ "$(uname)" == "Darwin" ]]; then
   echo "Platform: macOS"
 
-  # Prefer the pinned version archive; fall back to the current release if that
-  # exact version is no longer archived. The version assertion below guards
-  # against accidentally bundling something other than the pin.
-  curl -fL "https://evermeet.cx/ffmpeg/ffmpeg-${FFMPEG_VERSION}.zip" -o /tmp/ffmpeg-mac.zip \
-    || curl -fL "https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip" -o /tmp/ffmpeg-mac.zip
-  curl -fL "https://evermeet.cx/ffmpeg/ffprobe-${FFMPEG_VERSION}.zip" -o /tmp/ffprobe-mac.zip \
-    || curl -fL "https://evermeet.cx/ffmpeg/getrelease/ffprobe/zip" -o /tmp/ffprobe-mac.zip
+  # We bundle our OWN lean FFmpeg, built from source by .github/workflows/build-
+  # ffmpeg.yml WITHOUT avdevice/audiotoolbox/videotoolbox/network. The binaries
+  # therefore link no AVFoundation/CoreAudio/AudioToolbox, so macOS never prompts
+  # the user for microphone/camera access — Laybacker only ever reads files.
+  # The x86_64 build serves both arch slots (runs on Apple Silicon via Rosetta).
+  # Checksums are pinned so a tampered or swapped binary is rejected.
+  LEAN_TAG="ffmpeg-lean-8.1"
+  BASE="https://github.com/soundrich-bot/laybacker/releases/download/${LEAN_TAG}"
+  FFMPEG_SHA256="042c67f1927f1d299128db3a9507b892a4e29f5e59c6e95102ed07c38bd3f59a"
+  FFPROBE_SHA256="a3c5dc50e46e3bad9a8d7432283c346cf99dda45144d95b5b5288ec2741b67a0"
 
-  unzip -o /tmp/ffmpeg-mac.zip -d /tmp/ffmpeg-mac
-  unzip -o /tmp/ffprobe-mac.zip -d /tmp/ffprobe-mac
+  verify_sha256() {
+    local file="$1" expected="$2" actual
+    actual="$(shasum -a 256 "$file" | awk '{print $1}')"
+    if [[ "$actual" != "$expected" ]]; then
+      echo "  ERROR: checksum mismatch for $(basename "$file")"
+      echo "    expected $expected"
+      echo "    got      $actual"
+      exit 1
+    fi
+  }
 
-  # Copy for both architectures (x86_64 runs on ARM64 via Rosetta)
-  cp /tmp/ffmpeg-mac/ffmpeg "$BINDIR/ffmpeg-x86_64-apple-darwin"
-  cp /tmp/ffmpeg-mac/ffmpeg "$BINDIR/ffmpeg-aarch64-apple-darwin"
-  cp /tmp/ffprobe-mac/ffprobe "$BINDIR/ffprobe-x86_64-apple-darwin"
-  cp /tmp/ffprobe-mac/ffprobe "$BINDIR/ffprobe-aarch64-apple-darwin"
+  for f in ffmpeg-x86_64-apple-darwin ffmpeg-aarch64-apple-darwin; do
+    curl -fL "${BASE}/${f}" -o "$BINDIR/$f"
+    verify_sha256 "$BINDIR/$f" "$FFMPEG_SHA256"
+  done
+  for f in ffprobe-x86_64-apple-darwin ffprobe-aarch64-apple-darwin; do
+    curl -fL "${BASE}/${f}" -o "$BINDIR/$f"
+    verify_sha256 "$BINDIR/$f" "$FFPROBE_SHA256"
+  done
 
   chmod +x "$BINDIR"/*-apple-darwin
 
-  rm -rf /tmp/ffmpeg-mac /tmp/ffprobe-mac /tmp/ffmpeg-mac.zip /tmp/ffprobe-mac.zip
-
-  echo "macOS binaries ready:"
+  echo "macOS lean binaries ready (checksums verified):"
   ls -lh "$BINDIR"/*-apple-darwin
   assert_version "$BINDIR/ffmpeg-x86_64-apple-darwin" soft
 fi
