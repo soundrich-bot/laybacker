@@ -304,6 +304,12 @@
             title={`This file will be a .${outputExt.toUpperCase()} — the container follows the audio format: Original/WAV → .mov (uncompressed), AAC → .mp4`}
           >.{outputExt}</span>
         {/if}
+        <span class="edit-pencil" aria-hidden="true" title="Click the name to rename">
+          <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
+            <path d="M8.2 1.3 10.7 3.8 4.3 10.2 1.5 10.5 1.8 7.7 8.2 1.3Z" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"/>
+            <path d="M7.2 2.3 9.7 4.8" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/>
+          </svg>
+        </span>
         <button class="icon-btn" onclick={addTimestamp} title="Add date & time to filename">
           <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
             <circle cx="6" cy="6" r="5" stroke="currentColor" stroke-width="1.2"/>
@@ -856,6 +862,21 @@
 
   .icon-btn:hover {
     opacity: 1 !important;
+    color: var(--neon-cyan);
+  }
+
+  /* Permanent pencil so it's obvious the filename can be renamed. */
+  .edit-pencil {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    color: var(--text-muted);
+    opacity: 0.55;
+    transition: all 0.15s;
+  }
+
+  .output-name-display:hover .edit-pencil {
+    opacity: 1;
     color: var(--neon-cyan);
   }
 
