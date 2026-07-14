@@ -82,8 +82,14 @@
       onUpdateClock(pair.id, true);
       showClockDetail = false;
     } else {
-      showClockDetail = true; // reveal why it failed
+      showClockDetail = true; // reveal why it failed (with a proceed-anyway option)
     }
+  }
+
+  // Override: clock the file even though the check didn't pass.
+  function proceedClock() {
+    onUpdateClock(pair.id, true);
+    showClockDetail = false;
   }
 
   // Split the output filename so the extension (.mov / .mp4 / .wav) is always
@@ -348,6 +354,21 @@
       </button>
       {#if checkingClock}
         <span class="silence-checking">...</span>
+      {:else if pair.clockEnabled && clockFailed}
+        <!-- Clock on, but the check didn't pass (user proceeded anyway) -->
+        <button
+          class="silence-warn"
+          class:open={showClockDetail}
+          onclick={() => showClockDetail = !showClockDetail}
+          aria-expanded={showClockDetail}
+          title="Clock on despite the check — click for details"
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M7 1L13 12H1L7 1Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
+            <path d="M7 5.5V8.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+            <circle cx="7" cy="10.5" r="0.5" fill="currentColor"/>
+          </svg>
+        </button>
       {:else if pair.clockEnabled}
         <span class="silence-pass" title="Clock check passed — 10s/5s handles will be added on export">&#10003;</span>
       {:else if clockFailed}
@@ -485,20 +506,25 @@
         <path d="M7 5.5V8.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
         <circle cx="7" cy="10.5" r="0.5" fill="currentColor"/>
       </svg>
-      CLOCK CHECK FAILED
+      {pair.clockEnabled ? 'CLOCK ON — PROCEEDING ANYWAY' : 'CLOCK CHECK'}
     </div>
     <ul class="silence-detail-list">
-      {#if !clockCheck.silencePass}
-        <li><span class="sd-where">Silence</span> — audio found in the {clockCheck.headHasAudio ? 'head' : ''}{clockCheck.headHasAudio && clockCheck.tailHasAudio ? ' & ' : ''}{clockCheck.tailHasAudio ? 'tail' : ''} guard frames</li>
-      {/if}
       {#if clockCheck.hasLufsTarget && !clockCheck.lufsPass}
-        <li><span class="sd-where">Loudness</span> — measured <strong>{clockCheck.measuredLufs.toFixed(1)} LUFS</strong>, not within ±1 LU of the {clockCheck.targetLufs} LUFS target</li>
+        <li>The level is <strong>{clockCheck.measuredLufs.toFixed(1)} LUFS</strong> — the target is {clockCheck.targetLufs} LUFS (±1).</li>
       {/if}
       {#if !clockCheck.peakPass}
-        <li><span class="sd-where">True peak</span> — <strong>{clockCheck.measuredTP.toFixed(1)} dBTP</strong> is over the {clockCheck.truePeakLimit} dBTP ceiling</li>
+        <li>True peak is <strong>{clockCheck.measuredTP.toFixed(1)} dBTP</strong> — over the {clockCheck.truePeakLimit} dBTP ceiling.</li>
+      {/if}
+      {#if !clockCheck.silencePass}
+        <li>Audio found in the {clockCheck.headHasAudio ? 'head' : ''}{clockCheck.headHasAudio && clockCheck.tailHasAudio ? ' &amp; ' : ''}{clockCheck.tailHasAudio ? 'tail' : ''} silence guard.</li>
       {/if}
     </ul>
-    <p class="silence-detail-note">The 10s / 5s clock handles are only added once the file passes. Fix the level or the head/tail silence, then click Clock again.</p>
+    {#if pair.clockEnabled}
+      <p class="silence-detail-note">Proceeding anyway — the 10s / 5s handles will be added on export. Click <strong>Clock</strong> to turn it back off.</p>
+    {:else}
+      <p class="silence-detail-note">This file isn't at the target, but you can clock it anyway.</p>
+      <button class="clock-proceed" onclick={proceedClock}>Proceed anyway &rarr;</button>
+    {/if}
   </div>
 {/if}
 
@@ -1177,6 +1203,26 @@
     margin: 4px 0 0;
     color: var(--text-muted);
     line-height: 1.5;
+  }
+
+  .clock-proceed {
+    margin-top: 8px;
+    align-self: flex-start;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--neon-orange);
+    background: rgba(255, 159, 28, 0.1);
+    border: 1px solid rgba(255, 159, 28, 0.4);
+    border-radius: var(--radius-sm);
+    padding: 5px 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .clock-proceed:hover {
+    background: rgba(255, 159, 28, 0.18);
+    color: var(--text-primary);
   }
 
   /* Mode switch (BROADCAST vs FULL SCALE) */
