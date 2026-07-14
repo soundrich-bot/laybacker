@@ -49,13 +49,19 @@
       const [measuredLufs, measuredTP] = loud;
       const silencePass = !headHasAudio && !tailHasAudio;
 
-      // Loudness within ±1 of this file's own NORM target.
+      // Level check against this file's own NORM target. The integrated loudness
+      // is the target (must sit within ±1 LU of it); the true-peak limit is a
+      // CEILING, not a target — the peak just has to be at or under it.
       const { targetLufs, truePeakLimit } = pair.normalizationSettings;
-      const loudnessPass = targetLufs < 0
-        ? Math.abs(measuredLufs - targetLufs) <= 1.0 && measuredTP <= truePeakLimit + 0.1
-        : Math.abs(measuredTP - truePeakLimit) <= 1.0; // full-scale: peaked to the limit
+      const hasLufsTarget = targetLufs < 0;
+      const lufsPass = !hasLufsTarget || Math.abs(measuredLufs - targetLufs) <= 1.0;
+      const peakPass = measuredTP <= truePeakLimit + 0.05; // tiny tolerance for rounding
+      const loudnessPass = lufsPass && peakPass;
 
-      clockCheck = { silencePass, loudnessPass, headHasAudio, tailHasAudio, measuredLufs, measuredTP };
+      clockCheck = {
+        silencePass, loudnessPass, lufsPass, peakPass, hasLufsTarget,
+        targetLufs, truePeakLimit, headHasAudio, tailHasAudio, measuredLufs, measuredTP,
+      };
       return silencePass && loudnessPass;
     } catch (e) {
       console.error('Clock check failed:', e);
@@ -485,8 +491,11 @@
       {#if !clockCheck.silencePass}
         <li><span class="sd-where">Silence</span> — audio found in the {clockCheck.headHasAudio ? 'head' : ''}{clockCheck.headHasAudio && clockCheck.tailHasAudio ? ' & ' : ''}{clockCheck.tailHasAudio ? 'tail' : ''} guard frames</li>
       {/if}
-      {#if !clockCheck.loudnessPass}
-        <li><span class="sd-where">Level</span> — measured <strong>{clockCheck.measuredLufs.toFixed(1)} LUFS</strong> / <strong>{clockCheck.measuredTP.toFixed(1)} dBTP</strong>, not within ±1 of the NORM target ({pair.normalizationSettings.targetLufs < 0 ? `${pair.normalizationSettings.targetLufs} LUFS` : `${pair.normalizationSettings.truePeakLimit} dBTP`})</li>
+      {#if clockCheck.hasLufsTarget && !clockCheck.lufsPass}
+        <li><span class="sd-where">Loudness</span> — measured <strong>{clockCheck.measuredLufs.toFixed(1)} LUFS</strong>, not within ±1 LU of the {clockCheck.targetLufs} LUFS target</li>
+      {/if}
+      {#if !clockCheck.peakPass}
+        <li><span class="sd-where">True peak</span> — <strong>{clockCheck.measuredTP.toFixed(1)} dBTP</strong> is over the {clockCheck.truePeakLimit} dBTP ceiling</li>
       {/if}
     </ul>
     <p class="silence-detail-note">The 10s / 5s clock handles are only added once the file passes. Fix the level or the head/tail silence, then click Clock again.</p>
