@@ -42,14 +42,16 @@
   }
 
   function toggleNorm() {
+    // Norm can start enabled with its menu collapsed (audio-only mode defaults
+    // normalization on). In that case the first click should reveal the menu,
+    // not disable norm — otherwise it takes two clicks to reach the options.
+    if (pair.normalizationEnabled && !showNormSettings) {
+      showNormSettings = true;
+      return;
+    }
     const newEnabled = !pair.normalizationEnabled;
     onUpdateNormalization(pair.id, newEnabled, pair.normalizationSettings);
-    // Show settings when enabling normalization
-    if (newEnabled) {
-      showNormSettings = true;
-    } else {
-      showNormSettings = false;
-    }
+    showNormSettings = newEnabled;
   }
 
   function saveName() {
