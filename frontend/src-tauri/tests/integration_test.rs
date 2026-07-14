@@ -59,6 +59,7 @@ fn make_audio_pair(fixture_name: &str, output_filename: &str, norm_enabled: bool
         silence_compliance: false,
         silence_ms: 240.0,
         fade_ms: 5.0,
+        clock_enabled: false,
     }
 }
 
@@ -233,6 +234,7 @@ fn test_reprocessing_generated_output_does_not_fail() {
         silence_compliance: false,
         silence_ms: 240.0,
         fade_ms: 5.0,
+        clock_enabled: false,
     };
     let settings = ExportSettings::default();
     let result = processor::process_pair(&pair, &settings, |_| {});

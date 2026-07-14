@@ -186,6 +186,10 @@ pub fn build_mux_command(
 }
 
 /// Build the ffmpeg command for audio-only processing (normalize + export)
+/// "Clock" delivery handles added to the head/tail of an audio-only export.
+pub const CLOCK_HEAD_SECS: f64 = 10.0;
+pub const CLOCK_TAIL_SECS: f64 = 5.0;
+
 pub fn build_audio_only_command(
     audio_path: &str,
     output_path: &str,
@@ -193,6 +197,7 @@ pub fn build_audio_only_command(
     audio_gain_db: Option<f64>,
     loudnorm_filter: Option<&str>,
     compliance: Option<(f64, f64, f64)>,
+    clock: bool,
 ) -> Vec<String> {
     let mut args: Vec<String> = Vec::new();
 
@@ -217,6 +222,14 @@ pub fn build_audio_only_command(
     // Silence compliance
     if let Some((duration, silence_ms, fade_ms)) = compliance {
         audio_filters.extend(build_compliance_filters(duration, silence_ms, fade_ms));
+    }
+
+    // Clock delivery handles: prepend CLOCK_HEAD_SECS and append CLOCK_TAIL_SECS
+    // of pure silence. Applied last so the handles sit outside any normalisation
+    // / compliance processing done on the programme audio.
+    if clock {
+        audio_filters.push(format!("adelay={}:all=1", (CLOCK_HEAD_SECS * 1000.0) as i64));
+        audio_filters.push(format!("apad=pad_dur={}", CLOCK_TAIL_SECS));
     }
 
     if !audio_filters.is_empty() {
@@ -794,7 +807,7 @@ mod tests {
     fn test_audio_only_basic() {
         let args = build_audio_only_command(
             "/audio.wav", "/out.wav",
-            &default_settings(), None, None, None,
+            &default_settings(), None, None, None, false,
         );
         assert!(args.contains(&"-vn".to_string())); // strip video
         assert!(args.contains(&"copy".to_string())); // no filters = copy
@@ -805,7 +818,7 @@ mod tests {
     fn test_audio_only_with_gain_wav() {
         let args = build_audio_only_command(
             "/audio.wav", "/out.wav",
-            &default_settings(), Some(-2.5), None, None,
+            &default_settings(), Some(-2.5), None, None, false,
         );
         let af_idx = args.iter().position(|a| a == "-af").unwrap();
         assert_eq!(args[af_idx + 1], "volume=-2.5dB");
@@ -816,7 +829,7 @@ mod tests {
     fn test_audio_only_with_gain_aiff() {
         let args = build_audio_only_command(
             "/audio.aiff", "/out.aiff",
-            &default_settings(), Some(1.0), None, None,
+            &default_settings(), Some(1.0), None, None, false,
         );
         assert!(args.contains(&"pcm_s24be".to_string()));
     }
@@ -825,7 +838,7 @@ mod tests {
     fn test_audio_only_tiny_gain_ignored() {
         let args = build_audio_only_command(
             "/audio.wav", "/out.wav",
-            &default_settings(), Some(0.0005), None, None,
+            &default_settings(), Some(0.0005), None, None, false,
         );
         // Gain too small — should be treated as no-op
         assert!(!args.contains(&"-af".to_string()));
@@ -837,13 +850,13 @@ mod tests {
         // Regression: the AAC audio-format setting (a video-mux concern) must NOT
         // be forced into a .wav output — AAC-in-WAV produces a file that won't open.
         let no_gain = build_audio_only_command(
-            "/audio.wav", "/out.wav", &aac_settings(), None, None, None,
+            "/audio.wav", "/out.wav", &aac_settings(), None, None, None, false,
         );
         assert!(!no_gain.contains(&"aac".to_string()), "must not put AAC in a .wav");
         assert!(no_gain.contains(&"copy".to_string()), "no filters -> stream copy");
 
         let with_gain = build_audio_only_command(
-            "/audio.wav", "/out.wav", &aac_settings(), Some(-3.0), None, None,
+            "/audio.wav", "/out.wav", &aac_settings(), Some(-3.0), None, None, false,
         );
         assert!(!with_gain.contains(&"aac".to_string()));
         assert!(with_gain.contains(&"pcm_s24le".to_string()), "filtered .wav -> PCM");
@@ -853,10 +866,24 @@ mod tests {
     fn test_audio_only_aac_to_m4a_still_uses_aac() {
         // AAC into a container that supports it is fine and stays AAC.
         let args = build_audio_only_command(
-            "/audio.m4a", "/out.m4a", &aac_settings(), None, None, None,
+            "/audio.m4a", "/out.m4a", &aac_settings(), None, None, None, false,
         );
         assert!(args.contains(&"aac".to_string()), "m4a supports AAC");
         assert!(args.contains(&"320000".to_string()));
+    }
+
+    #[test]
+    fn test_audio_only_clock_adds_handles() {
+        // Clock delivery: prepend 10s and append 5s of silence via adelay/apad.
+        let args = build_audio_only_command(
+            "/audio.wav", "/out.wav", &default_settings(), None, None, None, true,
+        );
+        let af_idx = args.iter().position(|a| a == "-af").unwrap();
+        let filters = &args[af_idx + 1];
+        assert!(filters.contains("adelay=10000:all=1"), "10s head silence");
+        assert!(filters.contains("apad=pad_dur=5"), "5s tail silence");
+        // Filtering forces a re-encode, never a stream copy.
+        assert!(!args.contains(&"copy".to_string()));
     }
 
     #[test]

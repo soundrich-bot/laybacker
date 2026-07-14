@@ -208,6 +208,7 @@ mod tests {
             silence_compliance: false,
             silence_ms: 240.0,
             fade_ms: 5.0,
+            clock_enabled: false,
         }
     }
 

@@ -117,6 +117,7 @@ async function autoMatch() {
         silenceCompliance: false,
         silenceMs: 240.0,
         fadeMs: 5.0,
+        clockEnabled: false,
       }));
     } else {
       pairs = await invoke('match_files', { files });
@@ -207,6 +208,12 @@ function updatePairCompliance(pairId, enabled) {
   });
 }
 
+function updatePairClock(pairId, enabled) {
+  matchedPairs = matchedPairs.map(p =>
+    p.id === pairId ? { ...p, clockEnabled: enabled } : p
+  );
+}
+
 function updatePairFilename(pairId, filename) {
   matchedPairs = matchedPairs.map(p => {
     if (p.id === pairId) {
@@ -293,6 +300,7 @@ export function getAppState() {
     updateProgress,
     updatePairNormalization,
     updatePairCompliance,
+    updatePairClock,
     updatePairFilename,
     removePair,
     toggleAllNorm,

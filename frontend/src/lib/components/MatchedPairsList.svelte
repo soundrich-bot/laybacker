@@ -11,6 +11,7 @@
     audioCount = 0,
     onUpdateNormalization,
     onUpdateCompliance,
+    onUpdateClock,
     onUpdateFilename,
     onRemove,
     onReveal,
@@ -105,6 +106,7 @@
           result={getResult(pair.id)}
           {onUpdateNormalization}
           {onUpdateCompliance}
+          {onUpdateClock}
           {onUpdateFilename}
           {onRemove}
           {onReveal}

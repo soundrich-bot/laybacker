@@ -44,6 +44,10 @@ pub struct MatchedPair {
     pub silence_compliance: bool,
     pub silence_ms: f64,
     pub fade_ms: f64,
+    /// "Clock" delivery format (audio-only): prepend 10s / append 5s of silence
+    /// on export. Gated in the UI behind a levels + head/tail-silence check.
+    #[serde(default)]
+    pub clock_enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

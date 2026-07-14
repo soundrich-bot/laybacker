@@ -185,6 +185,7 @@ pub fn process_pair(
             audio_gain_db,
             loudnorm_filter.as_deref(),
             compliance,
+            pair.clock_enabled,
         )
     };
 
@@ -401,6 +402,7 @@ mod tests {
             silence_compliance: false,
             silence_ms: 240.0,
             fade_ms: 5.0,
+            clock_enabled: false,
         }
     }
 

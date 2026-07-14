@@ -11,6 +11,7 @@
     onUpdateNormalization,
     onUpdateFilename,
     onUpdateCompliance,
+    onUpdateClock,
     onRemove,
     onReveal,
     onCreateProres,
@@ -25,6 +26,59 @@
   let checkingSilence = $state(false);
   let showSilenceDetail = $state(false); // expand the 6 Fr warning into a detail panel
   let showDurationDetail = $state(false); // expand the duration-mismatch warning
+
+  // Clock (audio-only): gate the 10s/5s silence handles behind a levels +
+  // head/tail-silence check against this file's own NORM target.
+  let checkingClock = $state(false);
+  let clockCheck = $state(null); // { silencePass, loudnessPass, headHasAudio, tailHasAudio, measuredLufs, measuredTP }
+  let showClockDetail = $state(false);
+  let clockFailed = $derived(!!clockCheck && (!clockCheck.silencePass || !clockCheck.loudnessPass));
+
+  async function evaluateClock() {
+    checkingClock = true;
+    try {
+      const [silence, loud] = await Promise.all([
+        invoke('check_silence', {
+          audioPath: pair.audio.path,
+          durationSecs: pair.audio.durationSecs,
+          silenceMs: pair.silenceMs ?? 240.0,
+        }),
+        invoke('measure_loudness', { audioPath: pair.audio.path }),
+      ]);
+      const [headHasAudio, tailHasAudio] = silence;
+      const [measuredLufs, measuredTP] = loud;
+      const silencePass = !headHasAudio && !tailHasAudio;
+
+      // Loudness within ±1 of this file's own NORM target.
+      const { targetLufs, truePeakLimit } = pair.normalizationSettings;
+      const loudnessPass = targetLufs < 0
+        ? Math.abs(measuredLufs - targetLufs) <= 1.0 && measuredTP <= truePeakLimit + 0.1
+        : Math.abs(measuredTP - truePeakLimit) <= 1.0; // full-scale: peaked to the limit
+
+      clockCheck = { silencePass, loudnessPass, headHasAudio, tailHasAudio, measuredLufs, measuredTP };
+      return silencePass && loudnessPass;
+    } catch (e) {
+      console.error('Clock check failed:', e);
+      clockCheck = null;
+      return false;
+    } finally {
+      checkingClock = false;
+    }
+  }
+
+  async function toggleClock() {
+    if (pair.clockEnabled) {
+      onUpdateClock(pair.id, false);
+      return;
+    }
+    const pass = await evaluateClock();
+    if (pass) {
+      onUpdateClock(pair.id, true);
+      showClockDetail = false;
+    } else {
+      showClockDetail = true; // reveal why it failed
+    }
+  }
 
   // Split the output filename so the extension (.mov / .mp4 / .wav) is always
   // shown and highlighted — long names truncate in the middle, never hiding it.
@@ -273,6 +327,40 @@
       <span class="silence-checking">...</span>
     {/if}
 
+    <!-- Clock (audio-only): checks levels + head/tail silence, then adds 10s/5s handles -->
+    {#if isAudioOnly && onUpdateClock}
+      <button
+        class="silence-toggle"
+        class:active={pair.clockEnabled}
+        onclick={toggleClock}
+        disabled={checkingClock}
+        title={pair.clockEnabled
+          ? '10s head / 5s tail silence will be added — click to disable'
+          : 'Check levels & head/tail silence, then add 10s head / 5s tail silence (clock)'}
+      >
+        Clock
+      </button>
+      {#if checkingClock}
+        <span class="silence-checking">...</span>
+      {:else if pair.clockEnabled}
+        <span class="silence-pass" title="Clock check passed — 10s/5s handles will be added on export">&#10003;</span>
+      {:else if clockFailed}
+        <button
+          class="silence-warn"
+          class:open={showClockDetail}
+          onclick={() => showClockDetail = !showClockDetail}
+          aria-expanded={showClockDetail}
+          title="Clock check failed — click for details"
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M7 1L13 12H1L7 1Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
+            <path d="M7 5.5V8.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+            <circle cx="7" cy="10.5" r="0.5" fill="currentColor"/>
+          </svg>
+        </button>
+      {/if}
+    {/if}
+
     <!-- Remove -->
     {#if !progress && !result}
       <button class="remove-btn" onclick={() => onRemove(pair.id)} title="Remove pair">&times;</button>
@@ -380,6 +468,28 @@
       DURATION MISMATCH
     </div>
     <p class="silence-detail-note">{durationWarning}. The output is trimmed to the shorter of the two, so nothing breaks — just check the pairing is right.</p>
+  </div>
+{/if}
+
+{#if showClockDetail && clockFailed}
+  <div class="silence-detail-row">
+    <div class="silence-detail-title">
+      <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
+        <path d="M7 1L13 12H1L7 1Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
+        <path d="M7 5.5V8.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+        <circle cx="7" cy="10.5" r="0.5" fill="currentColor"/>
+      </svg>
+      CLOCK CHECK FAILED
+    </div>
+    <ul class="silence-detail-list">
+      {#if !clockCheck.silencePass}
+        <li><span class="sd-where">Silence</span> — audio found in the {clockCheck.headHasAudio ? 'head' : ''}{clockCheck.headHasAudio && clockCheck.tailHasAudio ? ' & ' : ''}{clockCheck.tailHasAudio ? 'tail' : ''} guard frames</li>
+      {/if}
+      {#if !clockCheck.loudnessPass}
+        <li><span class="sd-where">Level</span> — measured <strong>{clockCheck.measuredLufs.toFixed(1)} LUFS</strong> / <strong>{clockCheck.measuredTP.toFixed(1)} dBTP</strong>, not within ±1 of the NORM target ({pair.normalizationSettings.targetLufs < 0 ? `${pair.normalizationSettings.targetLufs} LUFS` : `${pair.normalizationSettings.truePeakLimit} dBTP`})</li>
+      {/if}
+    </ul>
+    <p class="silence-detail-note">The 10s / 5s clock handles are only added once the file passes. Fix the level or the head/tail silence, then click Clock again.</p>
   </div>
 {/if}
 

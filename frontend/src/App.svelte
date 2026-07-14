@@ -89,6 +89,7 @@
     audioCount={app.getAudios().length}
     onUpdateNormalization={app.updatePairNormalization}
     onUpdateCompliance={app.updatePairCompliance}
+    onUpdateClock={app.updatePairClock}
     onUpdateFilename={app.updatePairFilename}
     onRemove={app.removePair}
     onReveal={app.revealInFinder}
