@@ -32,8 +32,16 @@ fn cleanup(path: &str) {
 /// processor::process_pair resolves output from audio.path's parent directory.
 fn make_audio_pair(fixture_name: &str, output_filename: &str, norm_enabled: bool, target_lufs: f64, tp_limit: f64) -> MatchedPair {
     let dir = output_dir();
-    let audio_path_in_output = format!("{}/{}", dir, fixture_name);
-    let _ = std::fs::copy(test_fixture(fixture_name), &audio_path_in_output);
+    // Give every test its OWN copy of the source. Cargo runs these tests in
+    // parallel, so a shared path let one test truncate the file while another's
+    // ffmpeg was reading it ("Invalid data found when processing input").
+    let stem = Path::new(output_filename)
+        .file_stem()
+        .unwrap_or_default()
+        .to_string_lossy();
+    let audio_path_in_output = format!("{}/src_{}_{}", dir, stem, fixture_name);
+    std::fs::copy(test_fixture(fixture_name), &audio_path_in_output)
+        .expect("failed to copy the test fixture into the output dir");
 
     MatchedPair {
         id: "integration-test".into(),
