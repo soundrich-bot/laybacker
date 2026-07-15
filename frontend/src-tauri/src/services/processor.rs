@@ -84,7 +84,7 @@ pub fn process_pair(
                         pair.normalization_settings.target_lufs,
                         pair.normalization_settings.true_peak_limit,
                     );
-                    log::info!("Loudnorm two-pass filter: {}", &filter);
+                    log::info!("Loudnorm two-pass filter: {}", filter);
                     loudnorm_filter = Some(filter);
 
                     progress_callback(ProcessingProgress {

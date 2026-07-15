@@ -106,7 +106,7 @@ pub fn reveal_in_finder(path: String) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         std::process::Command::new("explorer")
-            .arg(format!("/select,{}", &path))
+            .arg(format!("/select,{}", path))
             .spawn()
             .map_err(|e| format!("Failed to reveal in Explorer: {}", e))?;
     }
