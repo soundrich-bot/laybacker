@@ -290,6 +290,75 @@ function updatePairClock(pairId, enabled) {
   );
 }
 
+// ── Clock ───────────────────────────────────────────────────────────────────
+// Clock is its own pass, independent of QC. The check lives here (rather than in
+// the row) so the per-file button and CLOCK ALL share one path and report the
+// same per-file results.
+let clockChecks = $state({}); // { [pairId]: { silencePass, loudnessPass, ... } | { error } }
+let clockRunning = $state(false);
+let clockProgress = $state({ done: 0, total: 0 });
+
+async function evaluateClockFor(pair) {
+  const [measuredLufs, measuredTP] = await invoke('measure_loudness', { audioPath: pair.audio.path });
+  const [headHasAudio, tailHasAudio] = await invoke('check_silence', {
+    audioPath: pair.audio.path,
+    durationSecs: pair.audio.durationSecs,
+    silenceMs: pair.silenceMs ?? 240.0,
+  });
+  const silencePass = !headHasAudio && !tailHasAudio;
+  // Integrated loudness is the target; true peak is a ceiling, not a target.
+  const { targetLufs, truePeakLimit } = pair.normalizationSettings;
+  const hasLufsTarget = targetLufs < 0;
+  const lufsPass = !hasLufsTarget || Math.abs(measuredLufs - targetLufs) <= 1.0;
+  const peakPass = measuredTP <= truePeakLimit + 0.05;
+  return {
+    silencePass, loudnessPass: lufsPass && peakPass, lufsPass, peakPass,
+    hasLufsTarget, targetLufs, truePeakLimit,
+    headHasAudio, tailHasAudio, measuredLufs, measuredTP,
+  };
+}
+
+/// Check one file and clock it if it passes. Returns true when it passed.
+async function runClockCheck(pairId) {
+  const pair = matchedPairs.find(p => p.id === pairId);
+  if (!pair) return false;
+  try {
+    const r = await evaluateClockFor(pair);
+    clockChecks = { ...clockChecks, [pairId]: r };
+    const passed = r.silencePass && r.loudnessPass;
+    if (passed) updatePairClock(pairId, true);
+    return passed;
+  } catch (e) {
+    clockChecks = { ...clockChecks, [pairId]: { error: String(e) } };
+    return false;
+  }
+}
+
+/// An independent pass over every audio-only file: check, then clock the passes.
+/// Failures are left unclocked with their reason, to override individually.
+async function runBatchClock() {
+  const targets = matchedPairs.filter(p => !p.video);
+  if (clockRunning || targets.length === 0) return;
+  clockRunning = true;
+  clockProgress = { done: 0, total: targets.length };
+  const checks = { ...clockChecks };
+  const passed = new Set();
+  for (const p of targets) {
+    try {
+      const r = await evaluateClockFor(p);
+      checks[p.id] = r;
+      if (r.silencePass && r.loudnessPass) passed.add(p.id);
+    } catch (e) {
+      checks[p.id] = { error: String(e) };
+    }
+    clockProgress = { done: clockProgress.done + 1, total: targets.length };
+    clockChecks = { ...checks };
+  }
+  matchedPairs = matchedPairs.map(p => (passed.has(p.id) ? { ...p, clockEnabled: true } : p));
+  clockChecks = checks;
+  clockRunning = false;
+}
+
 function updatePairFilename(pairId, filename) {
   matchedPairs = matchedPairs.map(p => {
     if (p.id === pairId) {
@@ -385,6 +454,11 @@ export function getAppState() {
     setQcTargetLufs,
     setQcCheckSilence,
     runBatchQc,
+    get clockChecks() { return clockChecks; },
+    get clockRunning() { return clockRunning; },
+    get clockProgress() { return clockProgress; },
+    runClockCheck,
+    runBatchClock,
     updatePairFilename,
     removePair,
     toggleAllNorm,

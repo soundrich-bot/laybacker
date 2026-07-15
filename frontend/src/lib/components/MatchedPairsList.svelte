@@ -26,7 +26,16 @@
     onQcTargetChange,
     onQcSilenceChange,
     onRunQc,
+    clockChecks = {},
+    clockRunning = false,
+    clockProgress = { done: 0, total: 0 },
+    onRunClockCheck,
+    onRunBatchClock,
   } = $props();
+
+  // Clock only applies to audio-only exports (the handles are part of that render path).
+  let clockableCount = $derived(pairs.filter(p => !p.video).length);
+  let clockedCount = $derived(pairs.filter(p => !p.video && p.clockEnabled).length);
 
   let allNormEnabled = $derived(pairs.length > 0 && pairs.every(p => p.normalizationEnabled));
   let someNormEnabled = $derived(pairs.some(p => p.normalizationEnabled));
@@ -126,6 +135,22 @@
           <button class="qc-run" onclick={onRunQc} disabled={qcRunning || pairs.length === 0}>
             {qcRunning ? `CHECKING ${qcProgress.done}/${qcProgress.total}…` : 'RUN QC'}
           </button>
+
+          <!-- Clock is its own pass — independent of QC -->
+          {#if onRunBatchClock && clockableCount > 0}
+            <button
+              class="qc-run"
+              onclick={onRunBatchClock}
+              disabled={clockRunning || qcRunning}
+              title="Independent pass: check each audio file's level and head/tail silence, then add the 10s / 5s clock handles to the ones that pass"
+            >
+              {clockRunning ? `CLOCKING ${clockProgress.done}/${clockProgress.total}…` : 'CLOCK ALL'}
+            </button>
+            {#if !clockRunning && clockedCount > 0}
+              <span class="qc-summary allpass">{clockedCount} of {clockableCount} clocked</span>
+            {/if}
+          {/if}
+
           {#if qcSummary}
             <span class="qc-summary" class:allpass={qcPassCount === qcChecked.length}>{qcSummary}</span>
           {/if}
@@ -158,6 +183,8 @@
           {onUpdateNormalization}
           {onUpdateCompliance}
           {onUpdateClock}
+          {onRunClockCheck}
+          clockCheck={clockChecks[pair.id] ?? null}
           {onUpdateFilename}
           {onRemove}
           {onReveal}

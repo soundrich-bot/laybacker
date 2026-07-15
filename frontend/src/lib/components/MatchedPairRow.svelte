@@ -13,6 +13,8 @@
     onUpdateFilename,
     onUpdateCompliance,
     onUpdateClock,
+    onRunClockCheck,
+    clockCheck = null,
     onRemove,
     onReveal,
     onCreateProres,
@@ -28,62 +30,26 @@
   let showSilenceDetail = $state(false); // expand the 6 Fr warning into a detail panel
   let showDurationDetail = $state(false); // expand the duration-mismatch warning
 
-  // Clock (audio-only): gate the 10s/5s silence handles behind a levels +
-  // head/tail-silence check against this file's own NORM target.
+  // Clock (audio-only): the 10s/5s handles are gated behind a levels +
+  // head/tail-silence check. The check itself lives in the store, so this button
+  // and the batch CLOCK ALL pass share one path — `clockCheck` arrives as a prop.
   let checkingClock = $state(false);
-  let clockCheck = $state(null); // { silencePass, loudnessPass, headHasAudio, tailHasAudio, measuredLufs, measuredTP }
   let showClockDetail = $state(false);
-  let clockFailed = $derived(!!clockCheck && (!clockCheck.silencePass || !clockCheck.loudnessPass));
-
-  async function evaluateClock() {
-    checkingClock = true;
-    try {
-      const [silence, loud] = await Promise.all([
-        invoke('check_silence', {
-          audioPath: pair.audio.path,
-          durationSecs: pair.audio.durationSecs,
-          silenceMs: pair.silenceMs ?? 240.0,
-        }),
-        invoke('measure_loudness', { audioPath: pair.audio.path }),
-      ]);
-      const [headHasAudio, tailHasAudio] = silence;
-      const [measuredLufs, measuredTP] = loud;
-      const silencePass = !headHasAudio && !tailHasAudio;
-
-      // Level check against this file's own NORM target. The integrated loudness
-      // is the target (must sit within ±1 LU of it); the true-peak limit is a
-      // CEILING, not a target — the peak just has to be at or under it.
-      const { targetLufs, truePeakLimit } = pair.normalizationSettings;
-      const hasLufsTarget = targetLufs < 0;
-      const lufsPass = !hasLufsTarget || Math.abs(measuredLufs - targetLufs) <= 1.0;
-      const peakPass = measuredTP <= truePeakLimit + 0.05; // tiny tolerance for rounding
-      const loudnessPass = lufsPass && peakPass;
-
-      clockCheck = {
-        silencePass, loudnessPass, lufsPass, peakPass, hasLufsTarget,
-        targetLufs, truePeakLimit, headHasAudio, tailHasAudio, measuredLufs, measuredTP,
-      };
-      return silencePass && loudnessPass;
-    } catch (e) {
-      console.error('Clock check failed:', e);
-      clockCheck = null;
-      return false;
-    } finally {
-      checkingClock = false;
-    }
-  }
+  let clockFailed = $derived(
+    !!clockCheck && !clockCheck.error && (!clockCheck.silencePass || !clockCheck.loudnessPass)
+  );
 
   async function toggleClock() {
     if (pair.clockEnabled) {
       onUpdateClock(pair.id, false);
       return;
     }
-    const pass = await evaluateClock();
-    if (pass) {
-      onUpdateClock(pair.id, true);
-      showClockDetail = false;
-    } else {
-      showClockDetail = true; // reveal why it failed (with a proceed-anyway option)
+    checkingClock = true;
+    try {
+      const passed = await onRunClockCheck(pair.id);
+      showClockDetail = !passed; // on fail, reveal why (with proceed-anyway)
+    } finally {
+      checkingClock = false;
     }
   }
 
