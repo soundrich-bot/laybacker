@@ -42,26 +42,51 @@ pub fn generate_name(
 }
 
 /// Generate names for all pairs, ensuring uniqueness
+/// Strip a loudness-spec suffix this app appended previously, so re-processing
+/// an output doesn't stack them (e.g. "MyMix_-23LUFS_-1dBTP" -> "MyMix").
+/// Also strips the legacy "_normalised_..." marker written by older versions.
+fn strip_spec_suffix(name: &str) -> &str {
+    // Legacy marker: drop everything from "_normalised_" onwards.
+    let mut s = match name.find("_normalised_") {
+        Some(idx) => &name[..idx],
+        None => name,
+    };
+    // Trailing "_<number>dBTP"
+    if let Some(i) = s.rfind('_') {
+        if let Some(num) = s[i + 1..].strip_suffix("dBTP") {
+            if num.parse::<f64>().is_ok() {
+                s = &s[..i];
+            }
+        }
+    }
+    // Trailing "_<number>LUFS"
+    if let Some(i) = s.rfind('_') {
+        if let Some(num) = s[i + 1..].strip_suffix("LUFS") {
+            if num.parse::<f64>().is_ok() {
+                s = &s[..i];
+            }
+        }
+    }
+    s
+}
+
 pub fn generate_names(pairs: &mut [MatchedPair], remove_duplicates: bool, output_ext: &str) {
     // First pass: generate names
     for pair in pairs.iter_mut() {
         if let Some(ref video) = pair.video {
             pair.output_filename = generate_name(video, &pair.audio, remove_duplicates, output_ext);
         } else {
-            // Audio-only: include norm spec in filename if enabled
-            // Strip any existing _normalised_* suffix to avoid doubling
-            let base_name = if let Some(idx) = pair.audio.filename_no_ext.find("_normalised_") {
-                &pair.audio.filename_no_ext[..idx]
-            } else {
-                &pair.audio.filename_no_ext
-            };
+            // Audio-only: include the norm spec in the filename if enabled.
+            // Any spec suffix already on the source is stripped first so
+            // re-processing an output doesn't stack them.
+            let base_name = strip_spec_suffix(&pair.audio.filename_no_ext);
             if pair.normalization_enabled {
                 let spec = if pair.normalization_settings.target_lufs >= 0.0 {
                     format!("{}dBTP", pair.normalization_settings.true_peak_limit)
                 } else {
                     format!("{}LUFS_{}dBTP", pair.normalization_settings.target_lufs, pair.normalization_settings.true_peak_limit)
                 };
-                pair.output_filename = format!("{}_normalised_{}.{}", base_name, spec, pair.audio.extension);
+                pair.output_filename = format!("{}_{}.{}", base_name, spec, pair.audio.extension);
             } else {
                 pair.output_filename = format!("{}.{}", base_name, pair.audio.extension);
             }
@@ -223,24 +248,41 @@ mod tests {
     fn test_audio_only_lufs_norm() {
         let mut pairs = vec![make_pair(None, "MyMix_Final", true, -23.0, -1.0)];
         generate_names(&mut pairs, true, "wav");
-        assert_eq!(pairs[0].output_filename, "MyMix_Final_normalised_-23LUFS_-1dBTP.wav");
+        assert_eq!(pairs[0].output_filename, "MyMix_Final_-23LUFS_-1dBTP.wav");
+        assert!(!pairs[0].output_filename.contains("normalised"));
     }
 
     #[test]
     fn test_audio_only_fullscale_norm() {
         let mut pairs = vec![make_pair(None, "MyMix_Final", true, 0.0, -1.0)];
         generate_names(&mut pairs, true, "wav");
-        assert_eq!(pairs[0].output_filename, "MyMix_Final_normalised_-1dBTP.wav");
+        assert_eq!(pairs[0].output_filename, "MyMix_Final_-1dBTP.wav");
+        assert!(!pairs[0].output_filename.contains("normalised"));
     }
 
     #[test]
-    fn test_audio_only_strips_existing_norm_suffix() {
-        // Simulates re-processing a file that already has a norm suffix
+    fn test_audio_only_strips_existing_spec_suffix() {
+        // Re-processing one of our own outputs must not stack suffixes.
+        let mut pairs = vec![make_pair(None, "MyMix_Final_-23LUFS_-1dBTP", true, -16.0, -1.0)];
+        generate_names(&mut pairs, true, "wav");
+        assert_eq!(pairs[0].output_filename, "MyMix_Final_-16LUFS_-1dBTP.wav");
+        assert!(!pairs[0].output_filename.contains("-23"));
+    }
+
+    #[test]
+    fn test_audio_only_strips_legacy_normalised_suffix() {
+        // Files named by older versions carried a "_normalised_" marker.
         let mut pairs = vec![make_pair(None, "MyMix_Final_normalised_-23LUFS_-1dBTP", true, -16.0, -1.0)];
         generate_names(&mut pairs, true, "wav");
-        // Should NOT double up the suffix
-        assert_eq!(pairs[0].output_filename, "MyMix_Final_normalised_-16LUFS_-1dBTP.wav");
-        assert!(!pairs[0].output_filename.contains("normalised_-23"));
+        assert_eq!(pairs[0].output_filename, "MyMix_Final_-16LUFS_-1dBTP.wav");
+        assert!(!pairs[0].output_filename.contains("normalised"));
+    }
+
+    #[test]
+    fn test_audio_only_strips_fullscale_spec_suffix() {
+        let mut pairs = vec![make_pair(None, "MyMix_-1dBTP", true, -23.0, -1.0)];
+        generate_names(&mut pairs, true, "wav");
+        assert_eq!(pairs[0].output_filename, "MyMix_-23LUFS_-1dBTP.wav");
     }
 
     #[test]
@@ -248,6 +290,14 @@ mod tests {
         let mut pairs = vec![make_pair(None, "MyMix_normalised_-1dBTP", false, 0.0, -1.0)];
         generate_names(&mut pairs, true, "wav");
         assert_eq!(pairs[0].output_filename, "MyMix.wav");
+    }
+
+    #[test]
+    fn test_audio_only_keeps_unrelated_name_parts() {
+        // Don't chew off legitimate name segments that aren't a spec suffix.
+        let mut pairs = vec![make_pair(None, "Spot_v2_Mix", true, -23.0, -1.0)];
+        generate_names(&mut pairs, true, "wav");
+        assert_eq!(pairs[0].output_filename, "Spot_v2_Mix_-23LUFS_-1dBTP.wav");
     }
 
     #[test]
