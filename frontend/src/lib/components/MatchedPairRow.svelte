@@ -8,6 +8,7 @@
     pair,
     progress = null,
     result = null,
+    qcResult = null,
     onUpdateNormalization,
     onUpdateFilename,
     onUpdateCompliance,
@@ -90,6 +91,25 @@
   function proceedClock() {
     onUpdateClock(pair.id, true);
     showClockDetail = false;
+  }
+
+  // Batch QC: why a file failed, and the one-click fix (mark it for the export).
+  let qcReason = $derived.by(() => {
+    if (!qcResult || qcResult.error || qcResult.pass) return '';
+    const bits = [];
+    if (!qcResult.lufsPass) bits.push(`level is ${qcResult.measuredLufs.toFixed(1)} LUFS`);
+    if (!qcResult.peakPass) bits.push(`true peak ${qcResult.measuredTP.toFixed(1)} dBTP is over the ${qcResult.peakLimit} dBTP ceiling`);
+    if (!qcResult.silencePass) {
+      const where = qcResult.headHasAudio && qcResult.tailHasAudio ? 'head & tail'
+        : qcResult.headHasAudio ? 'head' : 'tail';
+      bits.push(`audio in the ${where} silence guard`);
+    }
+    return bits.join('; ');
+  });
+
+  function fixQc() {
+    // Mark it for correction: NORM is already retargeted to the batch value.
+    onUpdateNormalization(pair.id, true, pair.normalizationSettings);
   }
 
   // Split the output filename so the extension (.mov / .mp4 / .wav) is always
@@ -286,6 +306,24 @@
             <circle cx="7" cy="10.5" r="0.5" fill="currentColor"/>
           </svg>
         </button>
+      {/if}
+    {/if}
+
+    <!-- Batch QC result -->
+    {#if qcResult?.error}
+      <span class="qc-badge fail" title={qcResult.error}>QC &#10007;</span>
+    {:else if qcResult}
+      {#if qcResult.pass}
+        <span class="qc-badge pass" title="QC passed — {qcResult.measuredLufs.toFixed(1)} LUFS / {qcResult.measuredTP.toFixed(1)} dBTP">
+          &#10003; {qcResult.measuredLufs.toFixed(1)}
+        </span>
+      {:else}
+        <span class="qc-badge fail" title="QC failed — {qcReason}">
+          {qcResult.measuredLufs.toFixed(1)} LUFS
+        </span>
+        {#if !pair.normalizationEnabled}
+          <button class="qc-fix" onclick={fixQc} title="Normalise this file to the batch target when you process">FIX</button>
+        {/if}
       {/if}
     {/if}
 
@@ -1203,6 +1241,47 @@
     margin: 4px 0 0;
     color: var(--text-muted);
     line-height: 1.5;
+  }
+
+  /* ── Batch QC badge ── */
+  .qc-badge {
+    flex-shrink: 0;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    border-radius: var(--radius-sm);
+    padding: 3px 7px;
+    white-space: nowrap;
+    cursor: help;
+  }
+  .qc-badge.pass {
+    color: var(--neon-green);
+    background: rgba(57, 255, 20, 0.08);
+    border: 1px solid rgba(57, 255, 20, 0.3);
+  }
+  .qc-badge.fail {
+    color: var(--neon-orange);
+    background: rgba(255, 159, 28, 0.1);
+    border: 1px solid rgba(255, 159, 28, 0.4);
+  }
+
+  .qc-fix {
+    flex-shrink: 0;
+    font-family: var(--font-display);
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    color: var(--neon-orange);
+    background: none;
+    border: 1px solid rgba(255, 159, 28, 0.4);
+    border-radius: var(--radius-sm);
+    padding: 3px 7px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .qc-fix:hover {
+    background: rgba(255, 159, 28, 0.18);
+    color: var(--text-primary);
   }
 
   .clock-proceed {

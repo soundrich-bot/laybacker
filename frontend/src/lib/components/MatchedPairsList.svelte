@@ -18,10 +18,25 @@
     onCreateProres,
     onToggleAllNorm,
     timestampFormat = 'YYYYMMDD_HHmm',
+    qcTargetLufs = -23,
+    qcCheckSilence = true,
+    qcResults = {},
+    qcRunning = false,
+    qcProgress = { done: 0, total: 0 },
+    onQcTargetChange,
+    onQcSilenceChange,
+    onRunQc,
   } = $props();
 
   let allNormEnabled = $derived(pairs.length > 0 && pairs.every(p => p.normalizationEnabled));
   let someNormEnabled = $derived(pairs.some(p => p.normalizationEnabled));
+
+  // Batch QC summary
+  let qcChecked = $derived(Object.values(qcResults).filter(r => !r.error));
+  let qcPassCount = $derived(qcChecked.filter(r => r.pass).length);
+  let qcSummary = $derived(
+    !qcRunning && qcChecked.length > 0 ? `${qcPassCount} of ${qcChecked.length} passed` : ''
+  );
 
   function getResult(pairId) {
     return results.find(r => r.pairId === pairId) ?? null;
@@ -82,6 +97,41 @@
       {:else}
         <span class="pairs-count">{pairs.length} LAYBACK{pairs.length !== 1 ? 'S' : ''} READY</span>
       {/if}
+
+      <!-- Batch QC: one spec for the whole batch -->
+      {#if onRunQc}
+        <div class="qc-bar">
+          <span class="qc-label" title="Check every file against one spec. The loudness value is also the NORM target used on export.">QC</span>
+          <span class="qc-target">
+            <input
+              class="qc-input"
+              type="number"
+              step="0.5"
+              value={qcTargetLufs}
+              disabled={qcRunning}
+              onchange={(e) => onQcTargetChange(parseFloat(e.target.value))}
+              title="Loudness target for the whole batch"
+            />
+            <span class="qc-unit">LUFS</span>
+          </span>
+          <button
+            class="qc-toggle"
+            class:active={qcCheckSilence}
+            disabled={qcRunning}
+            onclick={() => onQcSilenceChange(!qcCheckSilence)}
+            title="Also check 6 frames of silence at head and tail"
+          >
+            6 Fr
+          </button>
+          <button class="qc-run" onclick={onRunQc} disabled={qcRunning || pairs.length === 0}>
+            {qcRunning ? `CHECKING ${qcProgress.done}/${qcProgress.total}…` : 'RUN QC'}
+          </button>
+          {#if qcSummary}
+            <span class="qc-summary" class:allpass={qcPassCount === qcChecked.length}>{qcSummary}</span>
+          {/if}
+        </div>
+      {/if}
+
       <div class="column-labels">
         {#if pairs.every(p => p.video)}
           <span class="col-label col-video">VIDEO</span>
@@ -104,6 +154,7 @@
           {pair}
           progress={progressMap[pair.id] ?? null}
           result={getResult(pair.id)}
+          qcResult={qcResults[pair.id] ?? null}
           {onUpdateNormalization}
           {onUpdateCompliance}
           {onUpdateClock}
@@ -201,6 +252,89 @@
     border-color: var(--neon-yellow);
     box-shadow: 0 0 6px rgba(237, 255, 33, 0.2);
   }
+
+  /* ── Batch QC bar ── */
+  .qc-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--gap-sm);
+    padding: 6px 10px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+  }
+
+  .qc-label {
+    font-family: var(--font-display);
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    color: var(--neon-cyan);
+    cursor: help;
+  }
+
+  .qc-target {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .qc-input {
+    width: 62px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-primary);
+    background: var(--bg-dark);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 3px 6px;
+  }
+  .qc-input:focus { outline: none; border-color: var(--neon-cyan); }
+
+  .qc-unit {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-muted);
+  }
+
+  .qc-toggle,
+  .qc-run {
+    font-family: var(--font-display);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    background: none;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 4px 10px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .qc-toggle:hover:not(:disabled),
+  .qc-run:hover:not(:disabled) {
+    color: var(--neon-cyan);
+    border-color: rgba(8, 247, 254, 0.4);
+  }
+  .qc-toggle.active {
+    color: var(--bg-dark);
+    background: var(--neon-cyan);
+    border-color: var(--neon-cyan);
+  }
+  .qc-run {
+    color: var(--neon-cyan);
+    border-color: rgba(8, 247, 254, 0.4);
+  }
+  .qc-toggle:disabled,
+  .qc-run:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .qc-summary {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--neon-orange);
+    margin-left: auto;
+  }
+  .qc-summary.allpass { color: var(--neon-green); }
 
   .pairs-list {
     flex: 1;

@@ -96,6 +96,14 @@
     onCreateProres={(videoPath, durationSecs) => app.createProres(videoPath, durationSecs, proresProfile)}
     onToggleAllNorm={app.toggleAllNorm}
     {timestampFormat}
+    qcTargetLufs={app.qcTargetLufs}
+    qcCheckSilence={app.qcCheckSilence}
+    qcResults={app.qcResults}
+    qcRunning={app.qcRunning}
+    qcProgress={app.qcProgress}
+    onQcTargetChange={app.setQcTargetLufs}
+    onQcSilenceChange={app.setQcCheckSilence}
+    onRunQc={app.runBatchQc}
   />
 
   <SettingsPanel

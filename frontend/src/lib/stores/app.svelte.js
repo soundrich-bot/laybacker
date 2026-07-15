@@ -10,6 +10,73 @@ let processingResults = $state([]);
 let progressMap = $state({});
 let errors = $state([]);
 
+// ── Batch QC ────────────────────────────────────────────────────────────────
+// One spec for the whole batch: a loudness value (which is ALSO every pair's
+// NORM target, so QC and the export agree) plus an optional 6-frame silence
+// check. Results are transient — they describe the source files, not the export.
+let qcTargetLufs = $state(-23);
+let qcTargetApplied = $state(false); // true once the user sets a batch loudness value
+let qcCheckSilence = $state(true);
+let qcResults = $state({}); // { [pairId]: { pass, lufsPass, peakPass, silencePass, measuredLufs, measuredTP, headHasAudio, tailHasAudio, error? } }
+let qcRunning = $state(false);
+let qcProgress = $state({ done: 0, total: 0 });
+
+// Changing the batch loudness value retargets every pair's NORM and voids any
+// existing results (they were measured against a different spec).
+function setQcTargetLufs(value) {
+  qcTargetLufs = value;
+  qcTargetApplied = true;
+  matchedPairs = matchedPairs.map(p => ({
+    ...p,
+    normalizationSettings: { ...p.normalizationSettings, targetLufs: value },
+  }));
+  qcResults = {};
+}
+
+function setQcCheckSilence(value) {
+  qcCheckSilence = value;
+  qcResults = {};
+}
+
+async function runBatchQc() {
+  if (qcRunning || matchedPairs.length === 0) return;
+  qcRunning = true;
+  qcResults = {};
+  qcProgress = { done: 0, total: matchedPairs.length };
+  const results = {};
+  // Sequential: each measurement spawns ffmpeg, so don't thrash the CPU on a
+  // big batch — and it gives an honest progress count.
+  for (const p of matchedPairs) {
+    try {
+      const [measuredLufs, measuredTP] = await invoke('measure_loudness', { audioPath: p.audio.path });
+      let headHasAudio = false;
+      let tailHasAudio = false;
+      if (qcCheckSilence) {
+        [headHasAudio, tailHasAudio] = await invoke('check_silence', {
+          audioPath: p.audio.path,
+          durationSecs: p.audio.durationSecs,
+          silenceMs: p.silenceMs ?? 240.0,
+        });
+      }
+      const peakLimit = p.normalizationSettings?.truePeakLimit ?? -1.0;
+      const lufsPass = Math.abs(measuredLufs - qcTargetLufs) <= 1.0;
+      const peakPass = measuredTP <= peakLimit + 0.05; // ceiling, not a target
+      const silencePass = qcCheckSilence ? (!headHasAudio && !tailHasAudio) : true;
+      results[p.id] = {
+        pass: lufsPass && peakPass && silencePass,
+        lufsPass, peakPass, silencePass,
+        measuredLufs, measuredTP, headHasAudio, tailHasAudio, peakLimit,
+      };
+    } catch (e) {
+      results[p.id] = { error: String(e) };
+    }
+    qcProgress = { done: qcProgress.done + 1, total: matchedPairs.length };
+    qcResults = { ...results };
+  }
+  qcResults = results;
+  qcRunning = false;
+}
+
 // Completion chime, played through the webview (WebKit) rather than a native
 // player (afplay). A native CoreAudio player triggers a one-time macOS
 // microphone permission prompt after each update; webview audio does not.
@@ -138,6 +205,15 @@ async function autoMatch() {
       }
       return p;
     });
+
+    // Once a batch loudness value has been set, it's the universal NORM target —
+    // files dropped later inherit it too, so QC and the export stay in agreement.
+    if (qcTargetApplied) {
+      pairs = pairs.map(p => ({
+        ...p,
+        normalizationSettings: { ...p.normalizationSettings, targetLufs: qcTargetLufs },
+      }));
+    }
 
     matchedPairs = pairs;
   } catch (e) {
@@ -301,6 +377,14 @@ export function getAppState() {
     updatePairNormalization,
     updatePairCompliance,
     updatePairClock,
+    get qcTargetLufs() { return qcTargetLufs; },
+    get qcCheckSilence() { return qcCheckSilence; },
+    get qcResults() { return qcResults; },
+    get qcRunning() { return qcRunning; },
+    get qcProgress() { return qcProgress; },
+    setQcTargetLufs,
+    setQcCheckSilence,
+    runBatchQc,
     updatePairFilename,
     removePair,
     toggleAllNorm,
