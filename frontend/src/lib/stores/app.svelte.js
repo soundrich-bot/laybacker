@@ -31,6 +31,7 @@ function setQcTargetLufs(value) {
     normalizationSettings: { ...p.normalizationSettings, targetLufs: value },
   }));
   qcResults = {};
+  regenerateNames(); // the spec in the filename follows the target
 }
 
 function setQcCheckSilence(value) {
@@ -285,9 +286,14 @@ function updatePairCompliance(pairId, enabled) {
 }
 
 function updatePairClock(pairId, enabled) {
+  // Clocking delivers the file at its existing level, so it never re-normalises:
+  // turning Clock on turns NORM off for that file.
   matchedPairs = matchedPairs.map(p =>
-    p.id === pairId ? { ...p, clockEnabled: enabled } : p
+    p.id === pairId
+      ? { ...p, clockEnabled: enabled, normalizationEnabled: enabled ? false : p.normalizationEnabled }
+      : p
   );
+  regenerateNames();
 }
 
 // ── Clock ───────────────────────────────────────────────────────────────────
@@ -354,9 +360,13 @@ async function runBatchClock() {
     clockProgress = { done: clockProgress.done + 1, total: targets.length };
     clockChecks = { ...checks };
   }
-  matchedPairs = matchedPairs.map(p => (passed.has(p.id) ? { ...p, clockEnabled: true } : p));
+  // Clocked files keep their existing level, so NORM comes off for them.
+  matchedPairs = matchedPairs.map(p =>
+    passed.has(p.id) ? { ...p, clockEnabled: true, normalizationEnabled: false } : p
+  );
   clockChecks = checks;
   clockRunning = false;
+  regenerateNames();
 }
 
 function updatePairFilename(pairId, filename) {
@@ -370,10 +380,18 @@ function updatePairFilename(pairId, filename) {
 
 function toggleAllNorm() {
   const allEnabled = matchedPairs.every(p => p.normalizationEnabled);
+  const enable = !allEnabled;
+  // NORM ALL normalises everything to the batch QC threshold — so the target it
+  // uses (and the spec in the filename) matches what QC checks against.
   matchedPairs = matchedPairs.map(p => ({
     ...p,
-    normalizationEnabled: !allEnabled,
+    normalizationEnabled: enable,
+    normalizationSettings: enable
+      ? { ...p.normalizationSettings, targetLufs: qcTargetLufs }
+      : p.normalizationSettings,
   }));
+  if (enable) qcTargetApplied = true;
+  regenerateNames();
 }
 
 function removePair(pairId) {

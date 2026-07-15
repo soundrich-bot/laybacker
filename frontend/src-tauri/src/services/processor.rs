@@ -56,7 +56,9 @@ pub fn process_pair(
         pair.normalization_settings.target_lufs,
         pair.normalization_settings.true_peak_limit,
     );
-    if pair.normalization_enabled {
+    // Clocking delivers a finished file at its existing level — adding the
+    // handles must never re-normalise it, whatever the NORM flag says.
+    if pair.normalization_enabled && !pair.clock_enabled {
         progress_callback(ProcessingProgress {
             pair_id: pair_id.clone(),
             state: "measuring".to_string(),

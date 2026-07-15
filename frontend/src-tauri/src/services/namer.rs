@@ -51,6 +51,10 @@ fn strip_spec_suffix(name: &str) -> &str {
         Some(idx) => &name[..idx],
         None => name,
     };
+    // Trailing "_Clocked"
+    if let Some(rest) = s.strip_suffix("_Clocked") {
+        s = rest;
+    }
     // Trailing "_<number>dBTP"
     if let Some(i) = s.rfind('_') {
         if let Some(num) = s[i + 1..].strip_suffix("dBTP") {
@@ -80,7 +84,11 @@ pub fn generate_names(pairs: &mut [MatchedPair], remove_duplicates: bool, output
             // Any spec suffix already on the source is stripped first so
             // re-processing an output doesn't stack them.
             let base_name = strip_spec_suffix(&pair.audio.filename_no_ext);
-            if pair.normalization_enabled {
+            if pair.clock_enabled {
+                // Clocked files keep their level, so there's no norm spec to
+                // record — just mark that the delivery handles were added.
+                pair.output_filename = format!("{}_Clocked.{}", base_name, pair.audio.extension);
+            } else if pair.normalization_enabled {
                 let spec = if pair.normalization_settings.target_lufs >= 0.0 {
                     format!("{}dBTP", pair.normalization_settings.true_peak_limit)
                 } else {
@@ -290,6 +298,42 @@ mod tests {
         let mut pairs = vec![make_pair(None, "MyMix_normalised_-1dBTP", false, 0.0, -1.0)];
         generate_names(&mut pairs, true, "wav");
         assert_eq!(pairs[0].output_filename, "MyMix.wav");
+    }
+
+    #[test]
+    fn test_audio_only_clocked_name() {
+        // Clocked files keep their level, so the name records "Clocked" and
+        // carries no norm spec.
+        let mut pairs = vec![make_pair(None, "MyMix", false, -23.0, -1.0)];
+        pairs[0].clock_enabled = true;
+        generate_names(&mut pairs, true, "wav");
+        assert_eq!(pairs[0].output_filename, "MyMix_Clocked.wav");
+    }
+
+    #[test]
+    fn test_audio_only_clocked_strips_previous_spec_and_doesnt_stack() {
+        // Clocking one of our own normalised outputs: drop the old spec, and
+        // re-clocking a clocked file must not stack "_Clocked_Clocked".
+        let mut pairs = vec![make_pair(None, "MyMix_-23LUFS_-1dBTP", false, -23.0, -1.0)];
+        pairs[0].clock_enabled = true;
+        generate_names(&mut pairs, true, "wav");
+        assert_eq!(pairs[0].output_filename, "MyMix_Clocked.wav");
+
+        let mut again = vec![make_pair(None, "MyMix_Clocked", false, -23.0, -1.0)];
+        again[0].clock_enabled = true;
+        generate_names(&mut again, true, "wav");
+        assert_eq!(again[0].output_filename, "MyMix_Clocked.wav");
+    }
+
+    #[test]
+    fn test_audio_only_clock_wins_over_norm_spec() {
+        // Even if NORM is flagged on, a clocked file isn't re-levelled, so the
+        // name must not claim a norm spec.
+        let mut pairs = vec![make_pair(None, "MyMix", true, -23.0, -1.0)];
+        pairs[0].clock_enabled = true;
+        generate_names(&mut pairs, true, "wav");
+        assert_eq!(pairs[0].output_filename, "MyMix_Clocked.wav");
+        assert!(!pairs[0].output_filename.contains("LUFS"));
     }
 
     #[test]
