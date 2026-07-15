@@ -32,13 +32,24 @@ jobs:
       - name: System dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf ffmpeg
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
-      - name: Provide Linux FFmpeg sidecars (the build script checks they exist)
+      - name: Provide Linux FFmpeg sidecars (pinned to the version we ship)
         run: |
+          set -euo pipefail
+          # Test against the same FFmpeg the app bundles (8.1), NOT the distro's
+          # apt build. Otherwise a runner-image refresh silently changes what the
+          # loudness/silence tests measure against, and CI stops reflecting what
+          # actually ships to users.
+          curl -fL "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n8.1-latest-linux64-gpl-8.1.tar.xz" -o /tmp/ff.tar.xz
+          mkdir -p /tmp/ff
+          tar xf /tmp/ff.tar.xz -C /tmp/ff --strip-components=1
           mkdir -p frontend/src-tauri/binaries
-          ln -sf "$(command -v ffmpeg)"  frontend/src-tauri/binaries/ffmpeg-x86_64-unknown-linux-gnu
-          ln -sf "$(command -v ffprobe)" frontend/src-tauri/binaries/ffprobe-x86_64-unknown-linux-gnu
+          cp /tmp/ff/bin/ffmpeg  frontend/src-tauri/binaries/ffmpeg-x86_64-unknown-linux-gnu
+          cp /tmp/ff/bin/ffprobe frontend/src-tauri/binaries/ffprobe-x86_64-unknown-linux-gnu
+          chmod +x frontend/src-tauri/binaries/ffmpeg-x86_64-unknown-linux-gnu \
+                   frontend/src-tauri/binaries/ffprobe-x86_64-unknown-linux-gnu
+          frontend/src-tauri/binaries/ffmpeg-x86_64-unknown-linux-gnu -version | head -1
 
       - name: Clippy (strict — no warnings allowed)
         working-directory: frontend/src-tauri
