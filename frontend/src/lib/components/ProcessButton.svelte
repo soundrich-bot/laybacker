@@ -1,5 +1,8 @@
 <script>
-  let { pairCount = 0, fileCount = 0, isProcessing = false, onProcess, onClear, onCancel, audioOnly = false } = $props();
+  let { pairCount = 0, fileCount = 0, isProcessing = false, onProcess, onClear, onCancel, audioOnly = false, clockOnly = false } = $props();
+
+  // Audio-only batches: the button names the job it will actually do.
+  let actionLabel = $derived(audioOnly ? (clockOnly ? 'CLOCK' : 'NORMALIZE') : 'LAYBACK');
 </script>
 
 <div class="process-bar">
@@ -21,7 +24,7 @@
       disabled={pairCount === 0}
       onclick={onProcess}
     >
-      {audioOnly ? 'NORMALIZE' : 'LAYBACK'} {pairCount > 0 ? `(${pairCount})` : ''}
+      {actionLabel} {pairCount > 0 ? `(${pairCount})` : ''}
     </button>
   {/if}
 

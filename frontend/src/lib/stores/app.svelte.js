@@ -14,8 +14,10 @@ let errors = $state([]);
 // One spec for the whole batch: a loudness value (which is ALSO every pair's
 // NORM target, so QC and the export agree) plus an optional 6-frame silence
 // check. Results are transient — they describe the source files, not the export.
+// The batch value IS the loudness target — the one number QC checks against and
+// NORM corrects to. Loudness is the headline metric; the true-peak ceiling
+// (-1 dBTP) is a background check, deemphasised in the UI and the naming.
 let qcTargetLufs = $state(-23);
-let qcTargetApplied = $state(false); // true once the user sets a batch loudness value
 let qcCheckSilence = $state(true);
 let qcResults = $state({}); // { [pairId]: { pass, lufsPass, peakPass, silencePass, measuredLufs, measuredTP, headHasAudio, tailHasAudio, error? } }
 let qcRunning = $state(false);
@@ -25,13 +27,30 @@ let qcProgress = $state({ done: 0, total: 0 });
 // existing results (they were measured against a different spec).
 function setQcTargetLufs(value) {
   qcTargetLufs = value;
-  qcTargetApplied = true;
   matchedPairs = matchedPairs.map(p => ({
     ...p,
     normalizationSettings: { ...p.normalizationSettings, targetLufs: value },
   }));
   qcResults = {};
+  clockChecks = {}; // clock verdicts were judged against the old target
   regenerateNames(); // the spec in the filename follows the target
+}
+
+// One-click correction for the batch: turn NORM on (at the batch target) for
+// every file whose loudness failed QC. Files already on target are left alone.
+function fixAllLevels() {
+  matchedPairs = matchedPairs.map(p => {
+    const r = qcResults[p.id];
+    if (r && !r.error && !r.lufsPass) {
+      return {
+        ...p,
+        normalizationEnabled: true,
+        normalizationSettings: { ...p.normalizationSettings, targetLufs: qcTargetLufs },
+      };
+    }
+    return p;
+  });
+  regenerateNames();
 }
 
 function setQcCheckSilence(value) {
@@ -133,6 +152,8 @@ async function scanFiles(paths) {
     matchedPairs = [];
     processingResults = [];
     progressMap = {};
+    qcResults = {};
+    clockChecks = {};
   }
 
   isScanning = true;
@@ -178,8 +199,10 @@ async function autoMatch() {
         video: null,
         audio,
         outputFilename: '',
-        normalizationEnabled: true,
-        normalizationSettings: { targetLufs: 0.0, truePeakLimit: -1.0 },
+        // QC-first workflow: files arrive untouched. QC (or NORM ALL / FIX)
+        // decides what gets levelled — to the one batch target.
+        normalizationEnabled: false,
+        normalizationSettings: { targetLufs: qcTargetLufs, truePeakLimit: -1.0 },
         timecodeOffsetSecs: 0,
         matchConfidence: 1.0,
         silenceCompliance: false,
@@ -207,14 +230,12 @@ async function autoMatch() {
       return p;
     });
 
-    // Once a batch loudness value has been set, it's the universal NORM target —
-    // files dropped later inherit it too, so QC and the export stay in agreement.
-    if (qcTargetApplied) {
-      pairs = pairs.map(p => ({
-        ...p,
-        normalizationSettings: { ...p.normalizationSettings, targetLufs: qcTargetLufs },
-      }));
-    }
+    // The batch loudness value is THE target — every pair carries it, including
+    // files dropped later, so QC and the export can never disagree.
+    pairs = pairs.map(p => ({
+      ...p,
+      normalizationSettings: { ...p.normalizationSettings, targetLufs: qcTargetLufs },
+    }));
 
     matchedPairs = pairs;
   } catch (e) {
@@ -286,12 +307,10 @@ function updatePairCompliance(pairId, enabled) {
 }
 
 function updatePairClock(pairId, enabled) {
-  // Clocking delivers the file at its existing level, so it never re-normalises:
-  // turning Clock on turns NORM off for that file.
+  // Clock composes with NORM: the handles are silence and don't change the
+  // programme level, so a file can be levelled AND clocked in one export.
   matchedPairs = matchedPairs.map(p =>
-    p.id === pairId
-      ? { ...p, clockEnabled: enabled, normalizationEnabled: enabled ? false : p.normalizationEnabled }
-      : p
+    p.id === pairId ? { ...p, clockEnabled: enabled } : p
   );
   regenerateNames();
 }
@@ -313,13 +332,17 @@ async function evaluateClockFor(pair) {
   });
   const silencePass = !headHasAudio && !tailHasAudio;
   // Integrated loudness is the target; true peak is a ceiling, not a target.
+  // A file already marked for levelling (QC fix / NORM) WILL be at target on
+  // export, so the loudness gate passes by construction — step two of the
+  // QC-then-clock workflow only needs to judge the silence.
+  const willBeLevelled = pair.normalizationEnabled;
   const { targetLufs, truePeakLimit } = pair.normalizationSettings;
   const hasLufsTarget = targetLufs < 0;
-  const lufsPass = !hasLufsTarget || Math.abs(measuredLufs - targetLufs) <= 1.0;
-  const peakPass = measuredTP <= truePeakLimit + 0.05;
+  const lufsPass = willBeLevelled || !hasLufsTarget || Math.abs(measuredLufs - targetLufs) <= 1.0;
+  const peakPass = willBeLevelled || measuredTP <= truePeakLimit + 0.05;
   return {
     silencePass, loudnessPass: lufsPass && peakPass, lufsPass, peakPass,
-    hasLufsTarget, targetLufs, truePeakLimit,
+    willBeLevelled, hasLufsTarget, targetLufs, truePeakLimit,
     headHasAudio, tailHasAudio, measuredLufs, measuredTP,
   };
 }
@@ -360,10 +383,7 @@ async function runBatchClock() {
     clockProgress = { done: clockProgress.done + 1, total: targets.length };
     clockChecks = { ...checks };
   }
-  // Clocked files keep their existing level, so NORM comes off for them.
-  matchedPairs = matchedPairs.map(p =>
-    passed.has(p.id) ? { ...p, clockEnabled: true, normalizationEnabled: false } : p
-  );
+  matchedPairs = matchedPairs.map(p => (passed.has(p.id) ? { ...p, clockEnabled: true } : p));
   clockChecks = checks;
   clockRunning = false;
   regenerateNames();
@@ -390,7 +410,6 @@ function toggleAllNorm() {
       ? { ...p.normalizationSettings, targetLufs: qcTargetLufs }
       : p.normalizationSettings,
   }));
-  if (enable) qcTargetApplied = true;
   regenerateNames();
 }
 
@@ -412,6 +431,11 @@ function clearAll() {
   processingResults = [];
   progressMap = {};
   errors = [];
+  // QC/clock verdicts describe the files that were just cleared.
+  qcResults = {};
+  clockChecks = {};
+  qcProgress = { done: 0, total: 0 };
+  clockProgress = { done: 0, total: 0 };
 }
 
 function dismissError(index) {
@@ -472,6 +496,7 @@ export function getAppState() {
     setQcTargetLufs,
     setQcCheckSilence,
     runBatchQc,
+    fixAllLevels,
     get clockChecks() { return clockChecks; },
     get clockRunning() { return clockRunning; },
     get clockProgress() { return clockProgress; },

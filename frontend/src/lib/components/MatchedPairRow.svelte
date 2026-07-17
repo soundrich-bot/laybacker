@@ -94,9 +94,15 @@
   }
 
   function toggleNorm() {
-    // Norm can start enabled with its menu collapsed (audio-only mode defaults
-    // normalization on). In that case the first click should reveal the menu,
-    // not disable norm — otherwise it takes two clicks to reach the options.
+    // Audio-only: NORM is a plain on/off at the batch target — there's no
+    // per-file settings menu to reveal (the QC bar owns the loudness value).
+    if (isAudioOnly) {
+      onUpdateNormalization(pair.id, !pair.normalizationEnabled, pair.normalizationSettings);
+      return;
+    }
+    // Video pairs keep the per-file menu. Norm can be enabled with the menu
+    // collapsed; in that case the first click reveals the menu rather than
+    // disabling norm — otherwise it takes two clicks to reach the options.
     if (pair.normalizationEnabled && !showNormSettings) {
       showNormSettings = true;
       return;
@@ -304,11 +310,19 @@
         NORM
       </button>
       {#if pair.normalizationEnabled}
-        <button class="norm-settings-btn" onclick={() => showNormSettings = !showNormSettings}
-          title="Click to change normalization settings"
-        >
-          {normMode === 'broadcast' ? `${pair.normalizationSettings.targetLufs} LUFS` : `${pair.normalizationSettings.truePeakLimit} dBTP`}
-        </button>
+        {#if isAudioOnly}
+          <!-- One batch target: the QC bar owns the loudness value, so the
+               per-file badge is a read-out, not an editor. -->
+          <span class="norm-settings-btn readonly" title="Target set by the QC loudness value">
+            {pair.normalizationSettings.targetLufs} LUFS
+          </span>
+        {:else}
+          <button class="norm-settings-btn" onclick={() => showNormSettings = !showNormSettings}
+            title="Click to change normalization settings"
+          >
+            {normMode === 'broadcast' ? `${pair.normalizationSettings.targetLufs} LUFS` : `${pair.normalizationSettings.truePeakLimit} dBTP`}
+          </button>
+        {/if}
       {/if}
     </div>
 
@@ -532,7 +546,7 @@
   </div>
 {/if}
 
-{#if showNormSettings && pair.normalizationEnabled}
+{#if showNormSettings && pair.normalizationEnabled && !isAudioOnly}
   <div class="norm-detail-row">
     <!-- Mode selector -->
     <div class="norm-mode-switch">
@@ -839,6 +853,13 @@
 
   .norm-settings-btn:hover {
     background: rgba(237, 255, 33, 0.15);
+  }
+
+  .norm-settings-btn.readonly {
+    cursor: default;
+  }
+  .norm-settings-btn.readonly:hover {
+    background: rgba(237, 255, 33, 0.08);
   }
 
   .silence-toggle {

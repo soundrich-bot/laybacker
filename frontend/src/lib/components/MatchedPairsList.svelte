@@ -26,6 +26,7 @@
     onQcTargetChange,
     onQcSilenceChange,
     onRunQc,
+    onFixLevels,
     clockChecks = {},
     clockRunning = false,
     clockProgress = { done: 0, total: 0 },
@@ -45,6 +46,13 @@
   let qcPassCount = $derived(qcChecked.filter(r => r.pass).length);
   let qcSummary = $derived(
     !qcRunning && qcChecked.length > 0 ? `${qcPassCount} of ${qcChecked.length} passed` : ''
+  );
+  // Loudness failures that aren't already marked for levelling — what FIX LEVELS acts on.
+  let qcFixableCount = $derived(
+    pairs.filter(p => {
+      const r = qcResults[p.id];
+      return r && !r.error && !r.lufsPass && !p.normalizationEnabled;
+    }).length
   );
 
   function getResult(pairId) {
@@ -135,6 +143,17 @@
           <button class="qc-run" onclick={onRunQc} disabled={qcRunning || pairs.length === 0}>
             {qcRunning ? `CHECKING ${qcProgress.done}/${qcProgress.total}…` : 'RUN QC'}
           </button>
+
+          <!-- Step between QC and Clock: force every off-level file to the target -->
+          {#if onFixLevels && qcFixableCount > 0 && !qcRunning}
+            <button
+              class="qc-fix-all"
+              onclick={onFixLevels}
+              title="Normalise every file that failed the loudness check to {qcTargetLufs} LUFS on export"
+            >
+              FIX LEVELS ({qcFixableCount})
+            </button>
+          {/if}
 
           <!-- Clock is its own pass — independent of QC -->
           {#if onRunBatchClock && clockableCount > 0}
@@ -350,6 +369,23 @@
   .qc-run {
     color: var(--neon-cyan);
     border-color: rgba(8, 247, 254, 0.4);
+  }
+
+  .qc-fix-all {
+    font-family: var(--font-display);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    color: var(--neon-yellow);
+    background: none;
+    border: 1px solid rgba(237, 255, 33, 0.4);
+    border-radius: var(--radius-sm);
+    padding: 4px 10px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .qc-fix-all:hover {
+    background: rgba(237, 255, 33, 0.12);
+    color: var(--text-primary);
   }
   .qc-toggle:disabled,
   .qc-run:disabled { opacity: 0.4; cursor: not-allowed; }

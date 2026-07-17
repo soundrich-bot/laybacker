@@ -84,20 +84,22 @@ pub fn generate_names(pairs: &mut [MatchedPair], remove_duplicates: bool, output
             // Any spec suffix already on the source is stripped first so
             // re-processing an output doesn't stack them.
             let base_name = strip_spec_suffix(&pair.audio.filename_no_ext);
-            if pair.clock_enabled {
-                // Clocked files keep their level, so there's no norm spec to
-                // record — just mark that the delivery handles were added.
-                pair.output_filename = format!("{}_Clocked.{}", base_name, pair.audio.extension);
-            } else if pair.normalization_enabled {
-                let spec = if pair.normalization_settings.target_lufs >= 0.0 {
-                    format!("{}dBTP", pair.normalization_settings.true_peak_limit)
+            // NORM and Clock compose; the name records each step that was
+            // actually applied. Loudness is the headline spec — the true-peak
+            // ceiling is a background check and stays out of the name (it only
+            // appears in full-scale mode, where the peak IS the spec).
+            let mut name = base_name.to_string();
+            if pair.normalization_enabled {
+                if pair.normalization_settings.target_lufs >= 0.0 {
+                    name = format!("{}_{}dBTP", name, pair.normalization_settings.true_peak_limit);
                 } else {
-                    format!("{}LUFS_{}dBTP", pair.normalization_settings.target_lufs, pair.normalization_settings.true_peak_limit)
-                };
-                pair.output_filename = format!("{}_{}.{}", base_name, spec, pair.audio.extension);
-            } else {
-                pair.output_filename = format!("{}.{}", base_name, pair.audio.extension);
+                    name = format!("{}_{}LUFS", name, pair.normalization_settings.target_lufs);
+                }
             }
+            if pair.clock_enabled {
+                name = format!("{}_Clocked", name);
+            }
+            pair.output_filename = format!("{}.{}", name, pair.audio.extension);
         }
     }
 
@@ -256,7 +258,7 @@ mod tests {
     fn test_audio_only_lufs_norm() {
         let mut pairs = vec![make_pair(None, "MyMix_Final", true, -23.0, -1.0)];
         generate_names(&mut pairs, true, "wav");
-        assert_eq!(pairs[0].output_filename, "MyMix_Final_-23LUFS_-1dBTP.wav");
+        assert_eq!(pairs[0].output_filename, "MyMix_Final_-23LUFS.wav");
         assert!(!pairs[0].output_filename.contains("normalised"));
     }
 
@@ -273,7 +275,7 @@ mod tests {
         // Re-processing one of our own outputs must not stack suffixes.
         let mut pairs = vec![make_pair(None, "MyMix_Final_-23LUFS_-1dBTP", true, -16.0, -1.0)];
         generate_names(&mut pairs, true, "wav");
-        assert_eq!(pairs[0].output_filename, "MyMix_Final_-16LUFS_-1dBTP.wav");
+        assert_eq!(pairs[0].output_filename, "MyMix_Final_-16LUFS.wav");
         assert!(!pairs[0].output_filename.contains("-23"));
     }
 
@@ -282,7 +284,7 @@ mod tests {
         // Files named by older versions carried a "_normalised_" marker.
         let mut pairs = vec![make_pair(None, "MyMix_Final_normalised_-23LUFS_-1dBTP", true, -16.0, -1.0)];
         generate_names(&mut pairs, true, "wav");
-        assert_eq!(pairs[0].output_filename, "MyMix_Final_-16LUFS_-1dBTP.wav");
+        assert_eq!(pairs[0].output_filename, "MyMix_Final_-16LUFS.wav");
         assert!(!pairs[0].output_filename.contains("normalised"));
     }
 
@@ -290,7 +292,7 @@ mod tests {
     fn test_audio_only_strips_fullscale_spec_suffix() {
         let mut pairs = vec![make_pair(None, "MyMix_-1dBTP", true, -23.0, -1.0)];
         generate_names(&mut pairs, true, "wav");
-        assert_eq!(pairs[0].output_filename, "MyMix_-23LUFS_-1dBTP.wav");
+        assert_eq!(pairs[0].output_filename, "MyMix_-23LUFS.wav");
     }
 
     #[test]
@@ -326,14 +328,18 @@ mod tests {
     }
 
     #[test]
-    fn test_audio_only_clock_wins_over_norm_spec() {
-        // Even if NORM is flagged on, a clocked file isn't re-levelled, so the
-        // name must not claim a norm spec.
+    fn test_audio_only_norm_and_clock_compose() {
+        // Levelled AND clocked in one export: the name records both steps.
         let mut pairs = vec![make_pair(None, "MyMix", true, -23.0, -1.0)];
         pairs[0].clock_enabled = true;
         generate_names(&mut pairs, true, "wav");
-        assert_eq!(pairs[0].output_filename, "MyMix_Clocked.wav");
-        assert!(!pairs[0].output_filename.contains("LUFS"));
+        assert_eq!(pairs[0].output_filename, "MyMix_-23LUFS_Clocked.wav");
+
+        // And re-dropping that output doesn't stack the suffixes.
+        let mut again = vec![make_pair(None, "MyMix_-23LUFS_Clocked", true, -23.0, -1.0)];
+        again[0].clock_enabled = true;
+        generate_names(&mut again, true, "wav");
+        assert_eq!(again[0].output_filename, "MyMix_-23LUFS_Clocked.wav");
     }
 
     #[test]
@@ -341,7 +347,7 @@ mod tests {
         // Don't chew off legitimate name segments that aren't a spec suffix.
         let mut pairs = vec![make_pair(None, "Spot_v2_Mix", true, -23.0, -1.0)];
         generate_names(&mut pairs, true, "wav");
-        assert_eq!(pairs[0].output_filename, "Spot_v2_Mix_-23LUFS_-1dBTP.wav");
+        assert_eq!(pairs[0].output_filename, "Spot_v2_Mix_-23LUFS.wav");
     }
 
     #[test]

@@ -104,6 +104,7 @@
     onQcTargetChange={app.setQcTargetLufs}
     onQcSilenceChange={app.setQcCheckSilence}
     onRunQc={app.runBatchQc}
+    onFixLevels={app.fixAllLevels}
     clockChecks={app.clockChecks}
     clockRunning={app.clockRunning}
     clockProgress={app.clockProgress}
@@ -131,6 +132,10 @@
     onCancel={app.cancelProcessing}
     onClear={app.clearAll}
     audioOnly={app.matchedPairs.length > 0 && app.matchedPairs.every(p => !p.video)}
+    clockOnly={app.matchedPairs.length > 0
+      && app.matchedPairs.every(p => !p.video)
+      && app.matchedPairs.some(p => p.clockEnabled)
+      && !app.matchedPairs.some(p => p.normalizationEnabled)}
   />
 </div>
 
