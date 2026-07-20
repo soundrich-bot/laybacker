@@ -134,7 +134,6 @@ pub fn process_pair(
             &output_path,
             settings,
             audio_gain_db,
-            None, // loudnorm no longer used — level via ebur128-measured static gain
             pair.timecode_offset_secs,
             compliance,
         )
@@ -144,7 +143,6 @@ pub fn process_pair(
             &output_path,
             settings,
             audio_gain_db,
-            None, // loudnorm no longer used — level via ebur128-measured static gain
             compliance,
             pair.clock_enabled,
         )

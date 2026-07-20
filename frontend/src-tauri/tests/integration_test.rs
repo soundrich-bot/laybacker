@@ -92,17 +92,6 @@ fn test_loudness_measurement() {
         "Expected ~-14 dBTP, got {:.1}", m.true_peak_dbtp);
 }
 
-#[test]
-fn test_loudnorm_measurement() {
-    let path = test_fixture("test_tone.wav");
-    let result = ffmpeg::measure_loudnorm_full(&path, -23.0, -1.0);
-    assert!(result.is_ok(), "Loudnorm measurement failed: {:?}", result.err());
-
-    let m = result.unwrap();
-    assert!((m.input_i - (-14.0)).abs() < 1.0,
-        "Expected ~-14 LUFS, got {:.1}", m.input_i);
-    assert!(m.input_lra >= 0.0, "LRA should be non-negative");
-}
 
 // ── Processing tests ──
 

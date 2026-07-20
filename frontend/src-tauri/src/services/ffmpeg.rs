@@ -101,7 +101,6 @@ pub fn build_mux_command(
     output_path: &str,
     settings: &ExportSettings,
     audio_gain_db: Option<f64>,
-    loudnorm_filter: Option<&str>,
     timecode_offset_secs: f64,
     compliance: Option<(f64, f64, f64)>, // (duration_secs, silence_ms, fade_ms)
 ) -> Vec<String> {
@@ -138,10 +137,8 @@ pub fn build_mux_command(
         audio_filters.push(format!("adelay={}|{}", delay_ms, delay_ms));
     }
 
-    // Normalization: two-pass loudnorm (LUFS mode) or simple gain (full-scale mode)
-    if let Some(filter) = loudnorm_filter {
-        audio_filters.push(filter.to_string());
-    } else if let Some(gain) = audio_gain_db {
+    // Normalization gain (computed from the ebur128 measurement upstream)
+    if let Some(gain) = audio_gain_db {
         if gain.abs() > 0.001 {
             audio_filters.push(format!("volume={}dB", gain));
         }
@@ -195,7 +192,6 @@ pub fn build_audio_only_command(
     output_path: &str,
     settings: &ExportSettings,
     audio_gain_db: Option<f64>,
-    loudnorm_filter: Option<&str>,
     compliance: Option<(f64, f64, f64)>,
     clock: bool,
 ) -> Vec<String> {
@@ -210,10 +206,8 @@ pub fn build_audio_only_command(
     // Audio filter chain
     let mut audio_filters: Vec<String> = Vec::new();
 
-    // Normalization: two-pass loudnorm (LUFS mode) or simple gain (full-scale mode)
-    if let Some(filter) = loudnorm_filter {
-        audio_filters.push(filter.to_string());
-    } else if let Some(gain) = audio_gain_db {
+    // Normalization gain (computed from the ebur128 measurement upstream)
+    if let Some(gain) = audio_gain_db {
         if gain.abs() > 0.001 {
             audio_filters.push(format!("volume={}dB", gain));
         }
@@ -397,84 +391,11 @@ pub fn build_compliance_filters(duration_secs: f64, silence_ms: f64, fade_ms: f6
     filters
 }
 
-/// Build ffmpeg command to measure loudness with specific target for two-pass loudnorm.
-/// Pass 1 must use the same target as pass 2 so that target_offset is correct.
-pub fn build_loudness_measure_command_targeted(audio_path: &str, target_lufs: f64, true_peak_limit: f64) -> Vec<String> {
-    vec![
-        "-i".to_string(),
-        audio_path.to_string(),
-        "-af".to_string(),
-        format!("loudnorm=I={}:TP={}:LRA=11:print_format=json", target_lufs, true_peak_limit),
-        "-f".to_string(),
-        "null".to_string(),
-        "-".to_string(),
-    ]
-}
-
-/// Parse loudness measurement from ffmpeg loudnorm output (first pass)
-/// Returns (integrated_lufs, true_peak, lra, threshold) for use in second pass
-pub fn parse_loudness_output_full(stderr: &str) -> Option<LoudnormMeasurement> {
-    let json_start = stderr.rfind('{')?;
-    let json_end = stderr.rfind('}')? + 1;
-    let json_str = &stderr[json_start..json_end];
-
-    let json: serde_json::Value = serde_json::from_str(json_str).ok()?;
-
-    Some(LoudnormMeasurement {
-        input_i: json["input_i"].as_str()?.parse::<f64>().ok()?,
-        input_tp: json["input_tp"].as_str()?.parse::<f64>().ok()?,
-        input_lra: json["input_lra"].as_str()?.parse::<f64>().ok()?,
-        input_thresh: json["input_thresh"].as_str()?.parse::<f64>().ok()?,
-        target_offset: json["target_offset"].as_str()?.parse::<f64>().ok()?,
-    })
-}
-
-/// Measurement data from loudnorm first pass
-#[derive(Debug, Clone)]
-pub struct LoudnormMeasurement {
-    pub input_i: f64,
-    pub input_tp: f64,
-    pub input_lra: f64,
-    pub input_thresh: f64,
-    pub target_offset: f64,
-}
-
-/// Build the two-pass loudnorm filter string for precise LUFS targeting.
-/// Uses the measurements from pass 1 to inform pass 2.
-/// Build the two-pass loudnorm filter string.
-/// Caller is responsible for applying any calibration offset to `target_lufs` before calling.
-pub fn build_loudnorm_filter(
-    measurement: &LoudnormMeasurement,
-    target_lufs: f64,
-    true_peak_limit: f64,
-) -> String {
-    format!(
-        "loudnorm=I={}:TP={}:LRA=11:measured_I={}:measured_TP={}:measured_LRA={}:measured_thresh={}:offset={}:print_format=summary",
-        target_lufs,
-        true_peak_limit,
-        measurement.input_i,
-        measurement.input_tp,
-        measurement.input_lra,
-        measurement.input_thresh,
-        measurement.target_offset,
-    )
-}
-
-/// Run loudnorm first pass and return full measurement data.
-/// Uses the actual target values so that target_offset is calculated correctly for pass 2.
-pub fn measure_loudnorm_full(audio_path: &str, target_lufs: f64, true_peak_limit: f64) -> Result<LoudnormMeasurement, String> {
-    let ffmpeg = find_ffmpeg();
-    let args = build_loudness_measure_command_targeted(audio_path, target_lufs, true_peak_limit);
-
-    let output = silent_command(&ffmpeg)
-        .args(&args)
-        .output()
-        .map_err(|e| format!("Failed to run ffmpeg for loudness measurement: {}", e))?;
-
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    parse_loudness_output_full(&stderr)
-        .ok_or_else(|| "Failed to parse loudnorm measurement output".to_string())
-}
+// NOTE: the loudnorm two-pass machinery that used to live here was removed
+// deliberately. loudnorm's internal measurement reads a few tenths lower than
+// ebur128 (the meter QC and Pro Tools agree with), which made normalised
+// output land ~0.2 LU hot. All levelling now goes through loudness::measure
+// (ebur128) + a static volume gain. Don't reintroduce loudnorm.
 
 /// Run an ffmpeg command and return success/failure.
 /// On failure, removes any 0-byte output file left behind by ffmpeg's -y flag.
@@ -704,7 +625,7 @@ mod tests {
     fn test_mux_command_basic_copy() {
         let args = build_mux_command(
             "/video.mov", "/audio.wav", "/out.mov",
-            &default_settings(), None, None, 0.0, None,
+            &default_settings(), None, 0.0, None,
         );
         assert!(args.contains(&"-y".to_string()));
         assert!(args.contains(&"/video.mov".to_string()));
@@ -720,7 +641,7 @@ mod tests {
     fn test_mux_command_with_gain() {
         let args = build_mux_command(
             "/video.mov", "/audio.wav", "/out.mov",
-            &default_settings(), Some(3.5), None, 0.0, None,
+            &default_settings(), Some(3.5), 0.0, None,
         );
         assert!(args.contains(&"-af".to_string()));
         let af_idx = args.iter().position(|a| a == "-af").unwrap();
@@ -730,34 +651,10 @@ mod tests {
     }
 
     #[test]
-    fn test_mux_command_with_loudnorm_filter() {
-        let filter = "loudnorm=I=-23.1:TP=-1:LRA=11:measured_I=-20:measured_TP=-3:measured_LRA=8:measured_thresh=-30:offset=0.5:print_format=summary";
-        let args = build_mux_command(
-            "/video.mov", "/audio.wav", "/out.mov",
-            &default_settings(), None, Some(filter), 0.0, None,
-        );
-        let af_idx = args.iter().position(|a| a == "-af").unwrap();
-        assert_eq!(args[af_idx + 1], filter);
-    }
-
-    #[test]
-    fn test_mux_command_loudnorm_takes_precedence_over_gain() {
-        let filter = "loudnorm=I=-23:TP=-1:LRA=11";
-        let args = build_mux_command(
-            "/video.mov", "/audio.wav", "/out.mov",
-            &default_settings(), Some(5.0), Some(filter), 0.0, None,
-        );
-        let af_idx = args.iter().position(|a| a == "-af").unwrap();
-        // Should use loudnorm, not volume gain
-        assert!(args[af_idx + 1].starts_with("loudnorm="));
-        assert!(!args[af_idx + 1].contains("volume="));
-    }
-
-    #[test]
     fn test_mux_command_with_timecode_offset() {
         let args = build_mux_command(
             "/video.mov", "/audio.wav", "/out.mov",
-            &default_settings(), None, None, 0.5, None,
+            &default_settings(), None, 0.5, None,
         );
         let af_idx = args.iter().position(|a| a == "-af").unwrap();
         assert!(args[af_idx + 1].contains("adelay=500|500"));
@@ -771,7 +668,7 @@ mod tests {
         };
         let args = build_mux_command(
             "/video.mov", "/audio.wav", "/out.mov",
-            &settings, None, None, 0.0, None,
+            &settings, None, 0.0, None,
         );
         assert!(args.contains(&"libx264".to_string()));
         assert!(args.contains(&"yuv420p".to_string()));
@@ -781,7 +678,7 @@ mod tests {
     fn test_mux_command_aac_audio() {
         let args = build_mux_command(
             "/video.mov", "/audio.wav", "/out.mp4",
-            &aac_settings(), None, None, 0.0, None,
+            &aac_settings(), None, 0.0, None,
         );
         assert!(args.contains(&"aac".to_string()));
         assert!(args.contains(&"320000".to_string()));
@@ -791,7 +688,7 @@ mod tests {
     fn test_mux_command_with_compliance() {
         let args = build_mux_command(
             "/video.mov", "/audio.wav", "/out.mov",
-            &default_settings(), None, None, 0.0,
+            &default_settings(), None, 0.0,
             Some((30.0, 240.0, 5.0)),
         );
         let af_idx = args.iter().position(|a| a == "-af").unwrap();
@@ -807,7 +704,7 @@ mod tests {
     fn test_audio_only_basic() {
         let args = build_audio_only_command(
             "/audio.wav", "/out.wav",
-            &default_settings(), None, None, None, false,
+            &default_settings(), None, None, false,
         );
         assert!(args.contains(&"-vn".to_string())); // strip video
         assert!(args.contains(&"copy".to_string())); // no filters = copy
@@ -818,7 +715,7 @@ mod tests {
     fn test_audio_only_with_gain_wav() {
         let args = build_audio_only_command(
             "/audio.wav", "/out.wav",
-            &default_settings(), Some(-2.5), None, None, false,
+            &default_settings(), Some(-2.5), None, false,
         );
         let af_idx = args.iter().position(|a| a == "-af").unwrap();
         assert_eq!(args[af_idx + 1], "volume=-2.5dB");
@@ -829,7 +726,7 @@ mod tests {
     fn test_audio_only_with_gain_aiff() {
         let args = build_audio_only_command(
             "/audio.aiff", "/out.aiff",
-            &default_settings(), Some(1.0), None, None, false,
+            &default_settings(), Some(1.0), None, false,
         );
         assert!(args.contains(&"pcm_s24be".to_string()));
     }
@@ -838,7 +735,7 @@ mod tests {
     fn test_audio_only_tiny_gain_ignored() {
         let args = build_audio_only_command(
             "/audio.wav", "/out.wav",
-            &default_settings(), Some(0.0005), None, None, false,
+            &default_settings(), Some(0.0005), None, false,
         );
         // Gain too small — should be treated as no-op
         assert!(!args.contains(&"-af".to_string()));
@@ -850,13 +747,13 @@ mod tests {
         // Regression: the AAC audio-format setting (a video-mux concern) must NOT
         // be forced into a .wav output — AAC-in-WAV produces a file that won't open.
         let no_gain = build_audio_only_command(
-            "/audio.wav", "/out.wav", &aac_settings(), None, None, None, false,
+            "/audio.wav", "/out.wav", &aac_settings(), None, None, false,
         );
         assert!(!no_gain.contains(&"aac".to_string()), "must not put AAC in a .wav");
         assert!(no_gain.contains(&"copy".to_string()), "no filters -> stream copy");
 
         let with_gain = build_audio_only_command(
-            "/audio.wav", "/out.wav", &aac_settings(), Some(-3.0), None, None, false,
+            "/audio.wav", "/out.wav", &aac_settings(), Some(-3.0), None, false,
         );
         assert!(!with_gain.contains(&"aac".to_string()));
         assert!(with_gain.contains(&"pcm_s24le".to_string()), "filtered .wav -> PCM");
@@ -866,7 +763,7 @@ mod tests {
     fn test_audio_only_aac_to_m4a_still_uses_aac() {
         // AAC into a container that supports it is fine and stays AAC.
         let args = build_audio_only_command(
-            "/audio.m4a", "/out.m4a", &aac_settings(), None, None, None, false,
+            "/audio.m4a", "/out.m4a", &aac_settings(), None, None, false,
         );
         assert!(args.contains(&"aac".to_string()), "m4a supports AAC");
         assert!(args.contains(&"320000".to_string()));
@@ -876,7 +773,7 @@ mod tests {
     fn test_audio_only_clock_adds_handles() {
         // Clock delivery: prepend 10s and append 5s of silence via adelay/apad.
         let args = build_audio_only_command(
-            "/audio.wav", "/out.wav", &default_settings(), None, None, None, true,
+            "/audio.wav", "/out.wav", &default_settings(), None, None, true,
         );
         let af_idx = args.iter().position(|a| a == "-af").unwrap();
         let filters = &args[af_idx + 1];
@@ -906,39 +803,6 @@ mod tests {
         assert_eq!(parse_ffmpeg_time("N/A"), None);
         assert_eq!(parse_ffmpeg_time(""), None);
         assert_eq!(parse_ffmpeg_time("nonsense"), None);
-    }
-
-    // ── build_loudnorm_filter ──
-
-    #[test]
-    fn test_loudnorm_filter_string() {
-        let measurement = LoudnormMeasurement {
-            input_i: -20.0,
-            input_tp: -3.0,
-            input_lra: 8.5,
-            input_thresh: -31.2,
-            target_offset: 0.3,
-        };
-        let filter = build_loudnorm_filter(&measurement, -23.1, -1.0);
-        assert!(filter.starts_with("loudnorm="));
-        assert!(filter.contains("I=-23.1"));
-        assert!(filter.contains("TP=-1"));
-        assert!(filter.contains("measured_I=-20"));
-        assert!(filter.contains("measured_TP=-3"));
-        assert!(filter.contains("measured_LRA=8.5"));
-        assert!(filter.contains("measured_thresh=-31.2"));
-        assert!(filter.contains("offset=0.3"));
-    }
-
-    // ── build_loudness_measure_command_targeted ──
-
-    #[test]
-    fn test_loudness_measure_command_uses_target() {
-        let args = build_loudness_measure_command_targeted("/audio.wav", -23.1, -1.0);
-        let af_idx = args.iter().position(|a| a == "-af").unwrap();
-        assert!(args[af_idx + 1].contains("I=-23.1"));
-        assert!(args[af_idx + 1].contains("TP=-1"));
-        assert!(args[af_idx + 1].contains("print_format=json"));
     }
 
     // ── parse_ebur128_output ──
@@ -981,40 +845,6 @@ Summary:
     fn test_parse_ebur128_output_missing_peak() {
         let stderr = "Summary:\n  Integrated loudness:\n    I: -23.0 LUFS\n";
         assert!(parse_ebur128_output(stderr).is_none());
-    }
-
-    // ── parse_loudness_output_full ──
-
-    #[test]
-    fn test_parse_loudnorm_json() {
-        let stderr = r#"
-[Parsed_loudnorm_0 @ 0x12345]
-{
-    "input_i" : "-20.50",
-    "input_tp" : "-3.20",
-    "input_lra" : "8.40",
-    "input_thresh" : "-31.00",
-    "output_i" : "-23.10",
-    "output_tp" : "-1.00",
-    "output_lra" : "7.50",
-    "output_thresh" : "-33.50",
-    "normalization_type" : "dynamic",
-    "target_offset" : "0.10"
-}
-"#;
-        let result = parse_loudness_output_full(stderr);
-        assert!(result.is_some());
-        let m = result.unwrap();
-        assert!((m.input_i - (-20.5)).abs() < 0.01);
-        assert!((m.input_tp - (-3.2)).abs() < 0.01);
-        assert!((m.input_lra - 8.4).abs() < 0.01);
-        assert!((m.input_thresh - (-31.0)).abs() < 0.01);
-        assert!((m.target_offset - 0.1).abs() < 0.01);
-    }
-
-    #[test]
-    fn test_parse_loudnorm_invalid_json() {
-        assert!(parse_loudness_output_full("no json here").is_none());
     }
 
     // ── build_compliance_filters ──

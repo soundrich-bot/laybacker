@@ -8,9 +8,9 @@ pub struct LoudnessMeasurement {
     pub true_peak_dbtp: f64,
 }
 
-/// Measure loudness of an audio file using ffmpeg's loudnorm filter
-/// This is more reliable than a custom implementation and leverages
-/// FFmpeg's ITU-R BS.1770-4 compliant measurement
+/// Measure loudness of an audio file using ffmpeg's ebur128 filter — the ONE
+/// meter used app-wide (QC, Clock, and normalisation), which agrees with
+/// Pro Tools. ITU-R BS.1770-4 compliant.
 pub fn measure(audio_path: &str) -> Result<LoudnessMeasurement, String> {
     let (lufs, true_peak) = ffmpeg::measure_loudness_ffmpeg(audio_path)?;
 
