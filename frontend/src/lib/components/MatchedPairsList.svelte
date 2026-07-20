@@ -26,17 +26,19 @@
     onQcTargetChange,
     onQcSilenceChange,
     onRunQc,
-    onFixLevels,
+    onNormalizeAll,
+    onClockAll,
+    isProcessing = false,
     clockChecks = {},
     clockRunning = false,
     clockProgress = { done: 0, total: 0 },
     onRunClockCheck,
-    onRunBatchClock,
   } = $props();
 
-  // Clock only applies to audio-only exports (the handles are part of that render path).
+  // Batch normalise/clock only apply to audio-only files (the deliverables path).
   let clockableCount = $derived(pairs.filter(p => !p.video).length);
-  let clockedCount = $derived(pairs.filter(p => !p.video && p.clockEnabled).length);
+  let isAudioOnlyBatch = $derived(pairs.length > 0 && pairs.every(p => !p.video));
+  let busy = $derived(qcRunning || clockRunning || isProcessing);
 
   let allNormEnabled = $derived(pairs.length > 0 && pairs.every(p => p.normalizationEnabled));
   let someNormEnabled = $derived(pairs.some(p => p.normalizationEnabled));
@@ -46,13 +48,6 @@
   let qcPassCount = $derived(qcChecked.filter(r => r.pass).length);
   let qcSummary = $derived(
     !qcRunning && qcChecked.length > 0 ? `${qcPassCount} of ${qcChecked.length} passed` : ''
-  );
-  // Loudness failures that aren't already marked for levelling — what FIX LEVELS acts on.
-  let qcFixableCount = $derived(
-    pairs.filter(p => {
-      const r = qcResults[p.id];
-      return r && !r.error && !r.lufsPass && !p.normalizationEnabled;
-    }).length
   );
 
   function getResult(pairId) {
@@ -125,7 +120,7 @@
               type="number"
               step="0.5"
               value={qcTargetLufs}
-              disabled={qcRunning}
+              disabled={busy}
               onchange={(e) => onQcTargetChange(parseFloat(e.target.value))}
               title="Loudness target for the whole batch"
             />
@@ -134,40 +129,37 @@
           <button
             class="qc-toggle"
             class:active={qcCheckSilence}
-            disabled={qcRunning}
+            disabled={busy}
             onclick={() => onQcSilenceChange(!qcCheckSilence)}
             title="Also check 6 frames of silence at head and tail"
           >
             6 Fr
           </button>
-          <button class="qc-run" onclick={onRunQc} disabled={qcRunning || pairs.length === 0}>
+          <button class="qc-run" onclick={onRunQc} disabled={busy || pairs.length === 0}>
             {qcRunning ? `CHECKING ${qcProgress.done}/${qcProgress.total}…` : 'RUN QC'}
           </button>
 
-          <!-- Step between QC and Clock: force every off-level file to the target -->
-          {#if onFixLevels && qcFixableCount > 0 && !qcRunning}
+          <!-- Batch actions run IMMEDIATELY, then the new files are re-analysed -->
+          {#if onNormalizeAll && clockableCount > 0}
             <button
               class="qc-fix-all"
-              onclick={onFixLevels}
-              title="Normalise every file that failed the loudness check to {qcTargetLufs} LUFS on export"
+              onclick={onNormalizeAll}
+              disabled={busy}
+              title="Normalise every file to {qcTargetLufs} LUFS now — the new files are then measured and displayed"
             >
-              FIX LEVELS ({qcFixableCount})
+              {isProcessing ? 'WORKING…' : `NORMALISE ALL → ${qcTargetLufs} LUFS`}
             </button>
           {/if}
 
-          <!-- Clock is its own pass — independent of QC -->
-          {#if onRunBatchClock && clockableCount > 0}
+          {#if onClockAll && clockableCount > 0}
             <button
               class="qc-run"
-              onclick={onRunBatchClock}
-              disabled={clockRunning || qcRunning}
-              title="Independent pass: check each audio file's level and head/tail silence, then add the 10s / 5s clock handles to the ones that pass"
+              onclick={onClockAll}
+              disabled={busy}
+              title="Check each file's level and head/tail silence, then render the clocked files (10s head / 5s tail) for the ones that pass"
             >
-              {clockRunning ? `CLOCKING ${clockProgress.done}/${clockProgress.total}…` : 'CLOCK ALL'}
+              {clockRunning ? `CHECKING ${clockProgress.done}/${clockProgress.total}…` : 'CLOCK ALL'}
             </button>
-            {#if !clockRunning && clockedCount > 0}
-              <span class="qc-summary allpass">{clockedCount} of {clockableCount} clocked</span>
-            {/if}
           {/if}
 
           {#if qcSummary}
@@ -181,15 +173,19 @@
           <span class="col-label col-video">VIDEO</span>
         {/if}
         <span class="col-label col-audio">AUDIO</span>
-        <button
-          class="col-norm-btn"
-          class:active={allNormEnabled}
-          class:partial={someNormEnabled && !allNormEnabled}
-          onclick={onToggleAllNorm}
-          title={allNormEnabled ? "Disable normalization on all" : "Enable normalization on all"}
-        >
-          NORM ALL
-        </button>
+        {#if !isAudioOnlyBatch}
+          <!-- Audio-only batches do batch operations in the QC bar; this
+               flag-for-export toggle stays for video laybacks. -->
+          <button
+            class="col-norm-btn"
+            class:active={allNormEnabled}
+            class:partial={someNormEnabled && !allNormEnabled}
+            onclick={onToggleAllNorm}
+            title={allNormEnabled ? "Disable normalization on all" : "Enable normalization on all"}
+          >
+            NORM ALL
+          </button>
+        {/if}
       </div>
     </div>
     <div class="pairs-list">

@@ -104,12 +104,13 @@
     onQcTargetChange={app.setQcTargetLufs}
     onQcSilenceChange={app.setQcCheckSilence}
     onRunQc={app.runBatchQc}
-    onFixLevels={app.fixAllLevels}
+    onNormalizeAll={app.normalizeAllNow}
+    onClockAll={app.clockAllNow}
+    isProcessing={app.isProcessing}
     clockChecks={app.clockChecks}
     clockRunning={app.clockRunning}
     clockProgress={app.clockProgress}
     onRunClockCheck={app.runClockCheck}
-    onRunBatchClock={app.runBatchClock}
   />
 
   <SettingsPanel

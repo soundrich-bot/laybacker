@@ -48,7 +48,6 @@ pub fn process_pair(
     let mut measured_lufs = None;
     let mut measured_true_peak = None;
     let mut audio_gain_db: Option<f64> = None;
-    let mut loudnorm_filter: Option<String> = None;
 
     // Step 1: Measure and calculate normalization if enabled
     log::info!("Processing pair: normalization_enabled={}, target_lufs={}, true_peak_limit={}",
@@ -67,89 +66,48 @@ pub fn process_pair(
             message: "Measuring loudness...".to_string(),
         });
 
-        let is_lufs_mode = pair.normalization_settings.target_lufs < 0.0;
+        // ONE meter, one method — for both LUFS and full-scale modes: measure
+        // with ebur128 (the same meter QC and Pro Tools agree with) and apply a
+        // plain static gain. A static gain shifts integrated loudness exactly,
+        // with no dynamic processing. The previous loudnorm two-pass used
+        // loudnorm's own internal measurement, which reads a few tenths lower
+        // than ebur128 — outputs targeted at -23 landed at -22.8 by every
+        // honest meter. calculate_gain handles both modes and caps the gain at
+        // the true-peak ceiling.
+        match loudness::measure(&pair.audio.path) {
+            Ok(measurement) => {
+                measured_lufs = Some(measurement.integrated_lufs);
+                measured_true_peak = Some(measurement.true_peak_dbtp);
 
-        if is_lufs_mode {
-            // LUFS mode: use FFmpeg's loudnorm filter (two-pass) for gating-accurate targeting.
-            // No calibration offset — FFmpeg's loudnorm is ITU-R BS.1770-4 compliant
-            // and any ±0.1dB variation vs third-party meters is within spec tolerance.
-            match ffmpeg::measure_loudnorm_full(
-                &pair.audio.path,
-                pair.normalization_settings.target_lufs,
-                pair.normalization_settings.true_peak_limit,
-            ) {
-                Ok(measurement) => {
-                    measured_lufs = Some(measurement.input_i);
-                    measured_true_peak = Some(measurement.input_tp);
+                let gain = loudness::calculate_gain(&measurement, &pair.normalization_settings);
+                log::info!("Normalize: {:.2} LUFS, {:.2} dBTP. Gain: {:.3} dB",
+                    measurement.integrated_lufs, measurement.true_peak_dbtp, gain);
 
-                    let filter = ffmpeg::build_loudnorm_filter(
-                        &measurement,
-                        pair.normalization_settings.target_lufs,
-                        pair.normalization_settings.true_peak_limit,
-                    );
-                    log::info!("Loudnorm two-pass filter: {}", filter);
-                    loudnorm_filter = Some(filter);
-
-                    progress_callback(ProcessingProgress {
-                        pair_id: pair_id.clone(),
-                        state: "measured".to_string(),
-                        progress: 0.3,
-                        message: format!(
-                            "Measured: {:.1} LUFS, {:.1} dBTP → target {:.0} LUFS (loudnorm)",
-                            measurement.input_i,
-                            measurement.input_tp,
-                            pair.normalization_settings.target_lufs,
-                        ),
-                    });
+                if gain.abs() > 0.001 {
+                    audio_gain_db = Some(gain);
                 }
-                Err(e) => {
-                    return ProcessingResult {
-                        pair_id,
-                        success: false,
-                        output_path: None,
-                        error: Some(format!("Loudness measurement failed: {}", e)),
-                        measured_lufs: None,
-                        measured_true_peak: None,
-                    };
-                }
+
+                progress_callback(ProcessingProgress {
+                    pair_id: pair_id.clone(),
+                    state: "measured".to_string(),
+                    progress: 0.3,
+                    message: format!(
+                        "Measured: {:.1} LUFS, {:.1} dBTP. Gain: {:.1} dB",
+                        measurement.integrated_lufs,
+                        measurement.true_peak_dbtp,
+                        gain
+                    ),
+                });
             }
-        } else {
-            // Full-scale mode: simple gain to true peak limit (this works perfectly)
-            match loudness::measure(&pair.audio.path) {
-                Ok(measurement) => {
-                    measured_lufs = Some(measurement.integrated_lufs);
-                    measured_true_peak = Some(measurement.true_peak_dbtp);
-
-                    let gain = loudness::calculate_gain(&measurement, &pair.normalization_settings);
-                    log::info!("Full-scale mode: {:.2} LUFS, {:.2} dBTP. Gain: {:.3} dB",
-                        measurement.integrated_lufs, measurement.true_peak_dbtp, gain);
-
-                    if gain.abs() > 0.001 {
-                        audio_gain_db = Some(gain);
-                    }
-
-                    progress_callback(ProcessingProgress {
-                        pair_id: pair_id.clone(),
-                        state: "measured".to_string(),
-                        progress: 0.3,
-                        message: format!(
-                            "Measured: {:.1} LUFS, {:.1} dBTP. Gain: {:.1} dB",
-                            measurement.integrated_lufs,
-                            measurement.true_peak_dbtp,
-                            gain
-                        ),
-                    });
-                }
-                Err(e) => {
-                    return ProcessingResult {
-                        pair_id,
-                        success: false,
-                        output_path: None,
-                        error: Some(format!("Loudness measurement failed: {}", e)),
-                        measured_lufs: None,
-                        measured_true_peak: None,
-                    };
-                }
+            Err(e) => {
+                return ProcessingResult {
+                    pair_id,
+                    success: false,
+                    output_path: None,
+                    error: Some(format!("Loudness measurement failed: {}", e)),
+                    measured_lufs: None,
+                    measured_true_peak: None,
+                };
             }
         }
     }
@@ -176,7 +134,7 @@ pub fn process_pair(
             &output_path,
             settings,
             audio_gain_db,
-            loudnorm_filter.as_deref(),
+            None, // loudnorm no longer used — level via ebur128-measured static gain
             pair.timecode_offset_secs,
             compliance,
         )
@@ -186,7 +144,7 @@ pub fn process_pair(
             &output_path,
             settings,
             audio_gain_db,
-            loudnorm_filter.as_deref(),
+            None, // loudnorm no longer used — level via ebur128-measured static gain
             compliance,
             pair.clock_enabled,
         )

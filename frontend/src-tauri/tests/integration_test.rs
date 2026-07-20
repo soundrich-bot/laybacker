@@ -164,11 +164,13 @@ fn test_process_audio_only_lufs_norm() {
     assert!(result.success, "Processing failed: {:?}", result.error);
     assert!(Path::new(&output).exists(), "Output file not created");
 
-    // Verify normalized to target LUFS
+    // Verify normalized to target LUFS — tight tolerance, measured by the same
+    // ebur128 meter QC (and Pro Tools) use. The old ±2.0 tolerance let a
+    // consistent 0.2 LU loudnorm targeting error pass unnoticed.
     let m = loudness::measure(&output).expect("Failed to measure output");
     assert!(
-        (m.integrated_lufs - (-23.0)).abs() < 2.0,
-        "Expected ~-23 LUFS, got {:.1} LUFS (delta: {:.1} dB)",
+        (m.integrated_lufs - (-23.0)).abs() <= 0.15,
+        "Expected -23.0 LUFS ±0.15, got {:.2} LUFS (delta: {:.2} dB)",
         m.integrated_lufs, m.integrated_lufs + 23.0,
     );
 

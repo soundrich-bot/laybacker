@@ -73,10 +73,6 @@
     return bits.join('; ');
   });
 
-  function fixQc() {
-    // Mark it for correction: NORM is already retargeted to the batch value.
-    onUpdateNormalization(pair.id, true, pair.normalizationSettings);
-  }
 
   // Split the output filename so the extension (.mov / .mp4 / .wav) is always
   // shown and highlighted — long names truncate in the middle, never hiding it.
@@ -293,9 +289,6 @@
         <span class="qc-badge fail" title="QC failed — {qcReason}">
           {qcResult.measuredLufs.toFixed(1)} LUFS
         </span>
-        {#if !pair.normalizationEnabled}
-          <button class="qc-fix" onclick={fixQc} title="Normalise this file to the batch target when you process">FIX</button>
-        {/if}
       {/if}
     {/if}
 
@@ -1251,24 +1244,6 @@
     color: var(--neon-orange);
     background: rgba(255, 159, 28, 0.1);
     border: 1px solid rgba(255, 159, 28, 0.4);
-  }
-
-  .qc-fix {
-    flex-shrink: 0;
-    font-family: var(--font-display);
-    font-size: 9px;
-    letter-spacing: 0.1em;
-    color: var(--neon-orange);
-    background: none;
-    border: 1px solid rgba(255, 159, 28, 0.4);
-    border-radius: var(--radius-sm);
-    padding: 3px 7px;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-  .qc-fix:hover {
-    background: rgba(255, 159, 28, 0.18);
-    color: var(--text-primary);
   }
 
   .clock-proceed {

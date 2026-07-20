@@ -36,21 +36,77 @@ function setQcTargetLufs(value) {
   regenerateNames(); // the spec in the filename follows the target
 }
 
-// One-click correction for the batch: turn NORM on (at the batch target) for
-// every file whose loudness failed QC. Files already on target are left alone.
-function fixAllLevels() {
-  matchedPairs = matchedPairs.map(p => {
-    const r = qcResults[p.id];
-    if (r && !r.error && !r.lufsPass) {
-      return {
-        ...p,
-        normalizationEnabled: true,
-        normalizationSettings: { ...p.normalizationSettings, targetLufs: qcTargetLufs },
-      };
+// ── Batch passes that act immediately ───────────────────────────────────────
+// The QC bar owns batch operations, and they RUN when clicked: NORMALISE ALL
+// renders levelled files, CLOCK ALL checks then renders clocked files. After a
+// pass, the list reloads with the rendered outputs (plus any files the pass
+// skipped) and QC re-runs automatically so the NEW levels are analysed and
+// displayed — no flags left pending on the big green button.
+
+/// Render `subset` now, then reload the list with the outputs (+ `keep` paths
+/// that weren't part of the pass) and re-analyse everything.
+async function runPassAndReload(subset, keepPaths) {
+  isProcessing = true;
+  processingResults = [];
+  progressMap = {};
+  try {
+    const results = await invoke('process_pairs', { pairs: subset, settings: exportSettings });
+    const failed = results.filter(r => !r.success);
+    for (const f of failed) {
+      errors = [...errors, `Processing failed: ${f.error ?? 'unknown error'}`];
     }
-    return p;
-  });
-  regenerateNames();
+    playCompletionSound();
+    const outputs = results.filter(r => r.success && r.outputPath).map(r => r.outputPath);
+    if (outputs.length > 0) {
+      const reload = [...outputs, ...keepPaths];
+      files = [];
+      matchedPairs = [];
+      processingResults = [];
+      progressMap = {};
+      qcResults = {};
+      clockChecks = {};
+      const scanned = await invoke('scan_files', { paths: reload });
+      files = scanned;
+      await autoMatch();
+      await runBatchQc(); // analyse and display the new levels
+    }
+  } catch (e) {
+    errors = [...errors, `Processing failed: ${e}`];
+  } finally {
+    isProcessing = false;
+  }
+}
+
+/// Batch loudness normalisation: level every audio file to the batch target now.
+async function normalizeAllNow() {
+  if (isProcessing || qcRunning || clockRunning) return;
+  const targets = matchedPairs.filter(p => !p.video);
+  if (targets.length === 0) return;
+  matchedPairs = matchedPairs.map(p =>
+    p.video ? p : {
+      ...p,
+      normalizationEnabled: true,
+      clockEnabled: false,
+      normalizationSettings: { ...p.normalizationSettings, targetLufs: qcTargetLufs },
+    }
+  );
+  await regenerateNames(); // output names carry the spec before rendering
+  const subset = matchedPairs.filter(p => !p.video);
+  await runPassAndReload(subset, []);
+}
+
+/// CLOCK ALL: check every audio file (level + head/tail silence), then render
+/// the clocked files for the ones that pass. Failures stay in the list with
+/// their reason, unrendered.
+async function clockAllNow() {
+  if (isProcessing || qcRunning || clockRunning) return;
+  await runBatchClock(); // sets clockChecks and clockEnabled on the passes
+  const toClock = matchedPairs.filter(p => !p.video && p.clockEnabled);
+  if (toClock.length === 0) return;
+  const keep = matchedPairs
+    .filter(p => !p.video && !p.clockEnabled)
+    .map(p => p.audio.path);
+  await runPassAndReload(toClock, keep);
 }
 
 function setQcCheckSilence(value) {
@@ -496,12 +552,12 @@ export function getAppState() {
     setQcTargetLufs,
     setQcCheckSilence,
     runBatchQc,
-    fixAllLevels,
+    normalizeAllNow,
+    clockAllNow,
     get clockChecks() { return clockChecks; },
     get clockRunning() { return clockRunning; },
     get clockProgress() { return clockProgress; },
     runClockCheck,
-    runBatchClock,
     updatePairFilename,
     removePair,
     toggleAllNorm,
