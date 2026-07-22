@@ -52,17 +52,25 @@
     font-size: 11px;
     letter-spacing: 0.1em;
     color: var(--text-muted);
-    background: none;
+    background: var(--cap-face);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
     padding: 6px 14px;
     cursor: pointer;
     transition: all 0.15s;
+    box-shadow: var(--cap-shadow);
   }
 
   .clear-btn:hover:not(:disabled) {
     color: var(--neon-pink);
     border-color: var(--neon-pink);
+    transform: translateY(-1px);
+    box-shadow: var(--cap-shadow-hover);
+  }
+
+  .clear-btn:active:not(:disabled) {
+    transform: translateY(1px);
+    box-shadow: var(--cap-shadow-pressed);
   }
 
   .clear-btn:disabled {

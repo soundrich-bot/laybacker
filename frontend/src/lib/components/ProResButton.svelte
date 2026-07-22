@@ -68,16 +68,27 @@
     font-weight: 700;
     letter-spacing: 0.04em;
     color: var(--text-muted);
-    background: none;
+    background: var(--cap-face);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
     padding: 4px 8px;
     cursor: pointer;
     transition: all 0.15s;
     white-space: nowrap;
-    opacity: 0.6;
+    opacity: 0.85;
+    box-shadow: var(--cap-shadow);
   }
-  .prores-btn:hover { opacity: 1; color: var(--neon-cyan); border-color: rgba(8, 247, 254, 0.4); }
+  .prores-btn:hover {
+    opacity: 1;
+    color: var(--neon-cyan);
+    border-color: rgba(8, 247, 254, 0.4);
+    transform: translateY(-1px);
+    box-shadow: var(--cap-shadow-hover);
+  }
+  .prores-btn:active {
+    transform: translateY(1px);
+    box-shadow: var(--cap-shadow-pressed);
+  }
   .prores-btn.working { color: var(--text-secondary); opacity: 1; cursor: default; border-color: rgba(8, 247, 254, 0.4); }
   .prores-btn.done { color: var(--neon-green); border-color: rgba(57, 255, 20, 0.4); opacity: 1; }
   .prores-btn.error { color: var(--neon-pink); border-color: rgba(255, 46, 99, 0.4); opacity: 1; }

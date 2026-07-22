@@ -806,25 +806,33 @@
     padding: 4px 10px;
     border-radius: var(--radius-sm);
     border: 2px solid var(--border-accent);
-    background: var(--bg-dark);
+    background: var(--cap-face);
     color: var(--text-muted);
     font-family: var(--font-display);
     font-size: 10px;
     letter-spacing: 0.1em;
     cursor: pointer;
     transition: all 0.2s;
+    box-shadow: var(--cap-shadow);
+  }
+
+  .norm-toggle:active {
+    transform: translateY(1px);
+    box-shadow: var(--cap-shadow-pressed);
   }
 
   .norm-toggle:hover {
     border-color: var(--neon-yellow);
     color: var(--text-secondary);
+    transform: translateY(-1px);
+    box-shadow: var(--cap-shadow-hover);
   }
 
   .norm-toggle.active {
     border-color: var(--neon-yellow);
     color: var(--bg-dark);
     background: var(--neon-yellow);
-    box-shadow: 0 0 8px rgba(237, 255, 33, 0.3);
+    box-shadow: var(--cap-shadow), 0 0 8px rgba(237, 255, 33, 0.3);
   }
 
   .norm-settings-btn {
@@ -844,8 +852,19 @@
     white-space: nowrap;
   }
 
-  .norm-settings-btn:hover {
-    background: rgba(237, 255, 33, 0.15);
+  /* Only the clickable variant gets button depth — the read-only badge
+     (audio-only mode) stays flat so it reads as information. */
+  button.norm-settings-btn {
+    background: var(--cap-face);
+    box-shadow: var(--cap-shadow);
+  }
+  button.norm-settings-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--cap-shadow-hover);
+  }
+  button.norm-settings-btn:active {
+    transform: translateY(1px);
+    box-shadow: var(--cap-shadow-pressed);
   }
 
   .norm-settings-btn.readonly {
@@ -859,7 +878,7 @@
     padding: 4px 8px;
     border-radius: var(--radius-sm);
     border: 2px solid var(--border-accent);
-    background: var(--bg-dark);
+    background: var(--cap-face);
     color: var(--text-muted);
     font-family: var(--font-display);
     font-size: 10px;
@@ -867,18 +886,26 @@
     cursor: pointer;
     transition: all 0.2s;
     flex-shrink: 0;
+    box-shadow: var(--cap-shadow);
   }
 
-  .silence-toggle:hover {
+  .silence-toggle:hover:not(:disabled) {
     border-color: var(--neon-orange);
     color: var(--text-secondary);
+    transform: translateY(-1px);
+    box-shadow: var(--cap-shadow-hover);
+  }
+
+  .silence-toggle:active:not(:disabled) {
+    transform: translateY(1px);
+    box-shadow: var(--cap-shadow-pressed);
   }
 
   .silence-toggle.active {
     border-color: var(--neon-orange);
     color: var(--bg-dark);
     background: var(--neon-orange);
-    box-shadow: 0 0 8px rgba(255, 110, 39, 0.3);
+    box-shadow: var(--cap-shadow), 0 0 8px rgba(255, 110, 39, 0.3);
   }
 
   .silence-warn {
@@ -1120,18 +1147,24 @@
     font-weight: 700;
     letter-spacing: 0.05em;
     color: var(--neon-cyan);
-    background: rgba(8, 247, 254, 0.08);
-    border: 1px solid rgba(8, 247, 254, 0.25);
+    background: var(--cap-face);
+    border: 1px solid rgba(8, 247, 254, 0.4);
     border-radius: var(--radius-sm);
     padding: 4px 8px;
     cursor: pointer;
     transition: all 0.15s;
+    box-shadow: var(--cap-shadow);
+  }
+
+  .finder-btn:active {
+    transform: translateY(1px);
+    box-shadow: var(--cap-shadow-pressed);
   }
 
   .finder-btn:hover {
-    background: rgba(8, 247, 254, 0.15);
     border-color: var(--neon-cyan);
-    box-shadow: 0 0 8px rgba(8, 247, 254, 0.2);
+    transform: translateY(-1px);
+    box-shadow: var(--cap-shadow-hover), 0 0 8px rgba(8, 247, 254, 0.2);
   }
 
   .finder-btn svg {
@@ -1254,16 +1287,23 @@
     font-weight: 700;
     letter-spacing: 0.04em;
     color: var(--neon-orange);
-    background: rgba(255, 159, 28, 0.1);
-    border: 1px solid rgba(255, 159, 28, 0.4);
+    background: var(--cap-face);
+    border: 1px solid rgba(255, 159, 28, 0.5);
     border-radius: var(--radius-sm);
     padding: 5px 12px;
     cursor: pointer;
     transition: all 0.15s;
+    box-shadow: var(--cap-shadow);
+  }
+
+  .clock-proceed:active {
+    transform: translateY(1px);
+    box-shadow: var(--cap-shadow-pressed);
   }
   .clock-proceed:hover {
-    background: rgba(255, 159, 28, 0.18);
     color: var(--text-primary);
+    transform: translateY(-1px);
+    box-shadow: var(--cap-shadow-hover);
   }
 
   /* Mode switch (BROADCAST vs FULL SCALE) */

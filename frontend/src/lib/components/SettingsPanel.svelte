@@ -300,7 +300,7 @@
   }
 
   .cog-btn {
-    background: none;
+    background: var(--cap-face);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
     color: var(--text-muted);
@@ -309,11 +309,19 @@
     transition: all 0.15s;
     display: flex;
     align-items: center;
+    box-shadow: var(--cap-shadow);
   }
 
   .cog-btn:hover {
     color: var(--text-secondary);
     border-color: var(--border-accent);
+    transform: translateY(-1px);
+    box-shadow: var(--cap-shadow-hover);
+  }
+
+  .cog-btn:active {
+    transform: translateY(1px);
+    box-shadow: var(--cap-shadow-pressed);
   }
 
   .cog-btn.open {

@@ -265,20 +265,28 @@
     font-size: 10px;
     letter-spacing: 0.1em;
     color: var(--text-muted);
-    background: none;
+    background: var(--cap-face);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
     padding: 2px 8px;
     cursor: pointer;
     transition: all 0.15s;
     flex-shrink: 0;
-    opacity: 0.6;
+    opacity: 0.8;
+    box-shadow: var(--cap-shadow);
   }
 
   .col-norm-btn:hover {
     opacity: 1;
     border-color: var(--neon-yellow);
     color: var(--neon-yellow);
+    transform: translateY(-1px);
+    box-shadow: var(--cap-shadow-hover);
+  }
+
+  .col-norm-btn:active {
+    transform: translateY(1px);
+    box-shadow: var(--cap-shadow-pressed);
   }
 
   .col-norm-btn.partial {
@@ -292,7 +300,7 @@
     color: var(--bg-dark);
     background: var(--neon-yellow);
     border-color: var(--neon-yellow);
-    box-shadow: 0 0 6px rgba(237, 255, 33, 0.2);
+    box-shadow: var(--cap-shadow), 0 0 6px rgba(237, 255, 33, 0.2);
   }
 
   /* ── Batch QC bar ── */
@@ -340,51 +348,52 @@
   }
 
   .qc-toggle,
-  .qc-run {
+  .qc-run,
+  .qc-fix-all {
     font-family: var(--font-display);
     font-size: 10px;
     letter-spacing: 0.1em;
     color: var(--text-muted);
-    background: none;
+    background: var(--cap-face);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
     padding: 4px 10px;
     cursor: pointer;
     transition: all 0.15s;
+    box-shadow: var(--cap-shadow);
+  }
+  .qc-run {
+    color: var(--neon-cyan);
+    border-color: rgba(8, 247, 254, 0.5);
+  }
+  .qc-fix-all {
+    color: var(--neon-yellow);
+    border-color: rgba(237, 255, 33, 0.5);
   }
   .qc-toggle:hover:not(:disabled),
-  .qc-run:hover:not(:disabled) {
-    color: var(--neon-cyan);
-    border-color: rgba(8, 247, 254, 0.4);
+  .qc-run:hover:not(:disabled),
+  .qc-fix-all:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: var(--cap-shadow-hover);
+  }
+  .qc-toggle:hover:not(:disabled) { color: var(--neon-cyan); border-color: rgba(8, 247, 254, 0.5); }
+  .qc-run:hover:not(:disabled) { border-color: var(--neon-cyan); }
+  .qc-fix-all:hover:not(:disabled) { border-color: var(--neon-yellow); }
+  .qc-toggle:active:not(:disabled),
+  .qc-run:active:not(:disabled),
+  .qc-fix-all:active:not(:disabled) {
+    transform: translateY(1px);
+    box-shadow: var(--cap-shadow-pressed);
   }
   .qc-toggle.active {
     color: var(--bg-dark);
     background: var(--neon-cyan);
     border-color: var(--neon-cyan);
-  }
-  .qc-run {
-    color: var(--neon-cyan);
-    border-color: rgba(8, 247, 254, 0.4);
-  }
-
-  .qc-fix-all {
-    font-family: var(--font-display);
-    font-size: 10px;
-    letter-spacing: 0.1em;
-    color: var(--neon-yellow);
-    background: none;
-    border: 1px solid rgba(237, 255, 33, 0.4);
-    border-radius: var(--radius-sm);
-    padding: 4px 10px;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-  .qc-fix-all:hover {
-    background: rgba(237, 255, 33, 0.12);
-    color: var(--text-primary);
+    box-shadow: var(--cap-shadow);
   }
   .qc-toggle:disabled,
-  .qc-run:disabled { opacity: 0.4; cursor: not-allowed; }
+  .qc-run:disabled,
+  .qc-fix-all:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: var(--cap-shadow); }
 
   .qc-summary {
     font-family: var(--font-mono);

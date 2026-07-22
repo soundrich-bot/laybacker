@@ -49,6 +49,15 @@
   --radius-sm: 4px;
   --radius-md: 8px;
   --radius-lg: 12px;
+
+  /* "Key-cap" depth for clickable controls — buttons get a filled face and a
+     hard under-shadow so they sit proud of the panel; plain labels stay flat.
+     Hover lifts a pixel, pressing sinks. Components share these so every
+     button feels the same. */
+  --cap-face: linear-gradient(180deg, var(--bg-raised), #161624);
+  --cap-shadow: 0 2px 0 rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  --cap-shadow-hover: 0 3px 0 rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  --cap-shadow-pressed: inset 0 2px 3px rgba(0, 0, 0, 0.6);
 }
 
 * {
@@ -153,6 +162,12 @@ select {
   /* Borders */
   --border-color: #ddd2b8;
   --border-accent: #c8bda3;
+
+  /* Key-cap depth, softened for the light theme (no glow, gentle shadow) */
+  --cap-face: linear-gradient(180deg, #fdf8ea, var(--bg-raised));
+  --cap-shadow: 0 2px 0 rgba(58, 46, 30, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  --cap-shadow-hover: 0 3px 0 rgba(58, 46, 30, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  --cap-shadow-pressed: inset 0 2px 3px rgba(58, 46, 30, 0.25);
 }
 
 /* Hide noise overlay in tame mode */
