@@ -163,11 +163,14 @@ select {
   --border-color: #ddd2b8;
   --border-accent: #c8bda3;
 
-  /* Key-cap depth, softened for the light theme (no glow, gentle shadow) */
+  /* Key-cap look in the light theme: filled face + border only — NO under-
+     shadow (it reads Windows-95 on cream). The hover lift and border change
+     carry the affordance. Zero-size shadows (not `none`) so composite
+     box-shadow lists like "var(--cap-shadow), 0 0 6px ..." stay valid. */
   --cap-face: linear-gradient(180deg, #fdf8ea, var(--bg-raised));
-  --cap-shadow: 0 2px 0 rgba(58, 46, 30, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.7);
-  --cap-shadow-hover: 0 3px 0 rgba(58, 46, 30, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.8);
-  --cap-shadow-pressed: inset 0 2px 3px rgba(58, 46, 30, 0.25);
+  --cap-shadow: 0 0 0 rgba(0, 0, 0, 0);
+  --cap-shadow-hover: 0 0 0 rgba(0, 0, 0, 0);
+  --cap-shadow-pressed: inset 0 1px 2px rgba(58, 46, 30, 0.2);
 }
 
 /* Hide noise overlay in tame mode */
