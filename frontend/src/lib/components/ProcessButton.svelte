@@ -64,7 +64,6 @@
   .clear-btn:hover:not(:disabled) {
     color: var(--neon-pink);
     border-color: var(--neon-pink);
-    transform: translateY(-1px);
     box-shadow: var(--cap-shadow-hover);
   }
 

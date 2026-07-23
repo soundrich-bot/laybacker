@@ -106,6 +106,7 @@
     onRunQc={app.runBatchQc}
     onNormalizeAll={app.normalizeAllNow}
     onClockAll={app.clockAllNow}
+    onSixFrAll={app.sixFrAllNow}
     isProcessing={app.isProcessing}
     clockChecks={app.clockChecks}
     clockRunning={app.clockRunning}

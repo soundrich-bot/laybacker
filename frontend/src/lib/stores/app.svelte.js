@@ -18,7 +18,7 @@ let errors = $state([]);
 // NORM corrects to. Loudness is the headline metric; the true-peak ceiling
 // (-1 dBTP) is a background check, deemphasised in the UI and the naming.
 let qcTargetLufs = $state(-23);
-let qcCheckSilence = $state(true);
+let qcCheckSilence = $state(false);
 let qcResults = $state({}); // { [pairId]: { pass, lufsPass, peakPass, silencePass, measuredLufs, measuredTP, headHasAudio, tailHasAudio, error? } }
 let qcRunning = $state(false);
 let qcProgress = $state({ done: 0, total: 0 });
@@ -109,6 +109,25 @@ async function clockAllNow() {
   await runPassAndReload(toClock, keep);
 }
 
+/// 6 Fr ALL: apply the 6-frame broadcast mute to every audio file now, then
+/// reload with the muted outputs. Guarded behind an "Are you sure?" in the UI
+/// because the mute is destructive at the head and tail.
+async function sixFrAllNow() {
+  if (isProcessing || qcRunning || clockRunning) return;
+  const targets = matchedPairs.filter(p => !p.video);
+  if (targets.length === 0) return;
+  matchedPairs = matchedPairs.map(p =>
+    p.video ? p : {
+      ...p,
+      silenceCompliance: true,
+      clockEnabled: false,
+    }
+  );
+  await regenerateNames(); // output names carry the _6Fr marker before rendering
+  const subset = matchedPairs.filter(p => !p.video);
+  await runPassAndReload(subset, []);
+}
+
 function setQcCheckSilence(value) {
   qcCheckSilence = value;
   qcResults = {};
@@ -140,7 +159,7 @@ async function runBatchQc() {
       const silencePass = qcCheckSilence ? (!headHasAudio && !tailHasAudio) : true;
       results[p.id] = {
         pass: lufsPass && peakPass && silencePass,
-        lufsPass, peakPass, silencePass,
+        lufsPass, peakPass, silencePass, silenceChecked: qcCheckSilence,
         measuredLufs, measuredTP, headHasAudio, tailHasAudio, peakLimit,
       };
     } catch (e) {
@@ -554,6 +573,7 @@ export function getAppState() {
     runBatchQc,
     normalizeAllNow,
     clockAllNow,
+    sixFrAllNow,
     get clockChecks() { return clockChecks; },
     get clockRunning() { return clockRunning; },
     get clockProgress() { return clockProgress; },

@@ -302,6 +302,13 @@
           {qcResult.measuredLufs.toFixed(1)} LUFS
         </span>
       {/if}
+      {#if qcResult.silenceChecked}
+        {#if qcResult.silencePass}
+          <span class="qc-badge sixfr-pass" title="6-frame check passed — head and tail are already silent">6Fr &#10003;</span>
+        {:else}
+          <span class="qc-badge sixfr-fail" title="6-frame check — sound found at the {qcResult.headHasAudio && qcResult.tailHasAudio ? 'head & tail' : qcResult.headHasAudio ? 'head' : 'tail'}; use 6 Fr to mute it">6Fr &#10007;</span>
+        {/if}
+      {/if}
     {/if}
 
     <!-- Norm -->
@@ -728,7 +735,6 @@
   }
   .confirm-cancel:hover {
     color: var(--text-primary);
-    transform: translateY(-1px);
     box-shadow: var(--cap-shadow-hover);
   }
   .confirm-cancel:active {
@@ -751,7 +757,6 @@
   }
   .confirm-apply:hover {
     filter: brightness(1.1);
-    transform: translateY(-1px);
     box-shadow: var(--cap-shadow-hover);
   }
   .confirm-apply:active {
@@ -952,7 +957,6 @@
   .norm-toggle:hover {
     border-color: var(--neon-yellow);
     color: var(--text-secondary);
-    transform: translateY(-1px);
     box-shadow: var(--cap-shadow-hover);
   }
 
@@ -987,7 +991,6 @@
     box-shadow: var(--cap-shadow);
   }
   button.norm-settings-btn:hover {
-    transform: translateY(-1px);
     box-shadow: var(--cap-shadow-hover);
   }
   button.norm-settings-btn:active {
@@ -1020,7 +1023,6 @@
   .silence-toggle:hover:not(:disabled) {
     border-color: var(--neon-orange);
     color: var(--text-secondary);
-    transform: translateY(-1px);
     box-shadow: var(--cap-shadow-hover);
   }
 
@@ -1291,7 +1293,6 @@
 
   .finder-btn:hover {
     border-color: var(--neon-cyan);
-    transform: translateY(-1px);
     box-shadow: var(--cap-shadow-hover), 0 0 8px rgba(8, 247, 254, 0.2);
   }
 
@@ -1406,6 +1407,16 @@
     background: rgba(255, 159, 28, 0.1);
     border: 1px solid rgba(255, 159, 28, 0.4);
   }
+  .qc-badge.sixfr-pass {
+    color: var(--neon-green);
+    background: rgba(57, 255, 20, 0.08);
+    border: 1px solid rgba(57, 255, 20, 0.3);
+  }
+  .qc-badge.sixfr-fail {
+    color: var(--neon-orange);
+    background: rgba(255, 159, 28, 0.1);
+    border: 1px solid rgba(255, 159, 28, 0.4);
+  }
 
   .clock-proceed {
     margin-top: 8px;
@@ -1430,7 +1441,6 @@
   }
   .clock-proceed:hover {
     color: var(--text-primary);
-    transform: translateY(-1px);
     box-shadow: var(--cap-shadow-hover);
   }
 

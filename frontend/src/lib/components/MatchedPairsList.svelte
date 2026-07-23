@@ -28,6 +28,7 @@
     onRunQc,
     onNormalizeAll,
     onClockAll,
+    onSixFrAll,
     isProcessing = false,
     clockChecks = {},
     clockRunning = false,
@@ -52,6 +53,14 @@
 
   function getResult(pairId) {
     return results.find(r => r.pairId === pairId) ?? null;
+  }
+
+  // 6 Fr ALL is destructive at the head/tail, so it's gated behind a confirm —
+  // the same "Are you sure?" as the per-file mute, but for the whole batch.
+  let showSixFrConfirm = $state(false);
+  function confirmSixFrAll() {
+    showSixFrConfirm = false;
+    onSixFrAll();
   }
 </script>
 
@@ -151,6 +160,17 @@
             </button>
           {/if}
 
+          {#if onSixFrAll && clockableCount > 0}
+            <button
+              class="qc-sixfr"
+              onclick={() => showSixFrConfirm = true}
+              disabled={busy}
+              title="Force the first and last 6 frames (240 ms) of every file to silence, then re-measure — mutes any sound in those regions"
+            >
+              {isProcessing ? 'WORKING…' : '6 Fr ALL'}
+            </button>
+          {/if}
+
           {#if onClockAll && clockableCount > 0}
             <button
               class="qc-run"
@@ -210,6 +230,28 @@
     </div>
   {/if}
 </div>
+
+{#if showSixFrConfirm}
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="confirm-overlay" onclick={() => showSixFrConfirm = false}>
+    <div class="confirm-box" onclick={(e) => e.stopPropagation()} role="alertdialog" aria-modal="true">
+      <div class="confirm-title">APPLY 6 Fr TO ALL {clockableCount} FILE{clockableCount !== 1 ? 'S' : ''}?</div>
+      <p class="confirm-body">
+        The first and last 6 frames (240&nbsp;ms) of <strong>every file in the
+        batch</strong> will be forced to digital silence, with a short fade to
+        prevent clicks. <strong>Any sound in those regions will be muted</strong>
+        in the new files. Your originals are untouched.
+      </p>
+      <div class="confirm-actions">
+        <button class="confirm-cancel" onclick={() => showSixFrConfirm = false}>CANCEL</button>
+        <button class="confirm-apply" onclick={confirmSixFrAll}>YES — APPLY 6 Fr TO ALL</button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<svelte:window onkeydown={(e) => { if (e.key === 'Escape' && showSixFrConfirm) showSixFrConfirm = false; }} />
 
 <style>
   .pairs-section {
@@ -280,7 +322,6 @@
     opacity: 1;
     border-color: var(--neon-yellow);
     color: var(--neon-yellow);
-    transform: translateY(-1px);
     box-shadow: var(--cap-shadow-hover);
   }
 
@@ -349,7 +390,8 @@
 
   .qc-toggle,
   .qc-run,
-  .qc-fix-all {
+  .qc-fix-all,
+  .qc-sixfr {
     font-family: var(--font-display);
     font-size: 10px;
     letter-spacing: 0.1em;
@@ -370,18 +412,24 @@
     color: var(--neon-yellow);
     border-color: rgba(237, 255, 33, 0.5);
   }
+  .qc-sixfr {
+    color: var(--neon-orange);
+    border-color: rgba(255, 149, 0, 0.5);
+  }
   .qc-toggle:hover:not(:disabled),
   .qc-run:hover:not(:disabled),
-  .qc-fix-all:hover:not(:disabled) {
-    transform: translateY(-1px);
+  .qc-fix-all:hover:not(:disabled),
+  .qc-sixfr:hover:not(:disabled) {
     box-shadow: var(--cap-shadow-hover);
   }
   .qc-toggle:hover:not(:disabled) { color: var(--neon-cyan); border-color: rgba(8, 247, 254, 0.5); }
   .qc-run:hover:not(:disabled) { border-color: var(--neon-cyan); }
   .qc-fix-all:hover:not(:disabled) { border-color: var(--neon-yellow); }
+  .qc-sixfr:hover:not(:disabled) { border-color: var(--neon-orange); }
   .qc-toggle:active:not(:disabled),
   .qc-run:active:not(:disabled),
-  .qc-fix-all:active:not(:disabled) {
+  .qc-fix-all:active:not(:disabled),
+  .qc-sixfr:active:not(:disabled) {
     transform: translateY(1px);
     box-shadow: var(--cap-shadow-pressed);
   }
@@ -393,7 +441,8 @@
   }
   .qc-toggle:disabled,
   .qc-run:disabled,
-  .qc-fix-all:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: var(--cap-shadow); }
+  .qc-fix-all:disabled,
+  .qc-sixfr:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: var(--cap-shadow); }
 
   .qc-summary {
     font-family: var(--font-mono);
@@ -534,5 +583,94 @@
   @keyframes pulse-glow {
     0%, 100% { opacity: 0.8; filter: drop-shadow(0 0 4px rgba(8, 247, 254, 0.2)); }
     50% { opacity: 1; filter: drop-shadow(0 0 10px rgba(8, 247, 254, 0.4)); }
+  }
+
+  /* === 6 Fr ALL confirmation modal (matches the per-file confirm) === */
+  .confirm-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+  }
+
+  .confirm-box {
+    width: min(460px, calc(100vw - 48px));
+    background: var(--bg-panel);
+    border: 1px solid var(--neon-orange);
+    border-radius: var(--radius-md);
+    padding: var(--gap-lg);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  }
+
+  .confirm-title {
+    font-family: var(--font-display);
+    font-size: 14px;
+    letter-spacing: 0.08em;
+    color: var(--neon-orange);
+    margin-bottom: var(--gap-md);
+  }
+
+  .confirm-body {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+    margin-bottom: var(--gap-lg);
+    word-break: break-word;
+  }
+  .confirm-body strong { color: var(--text-primary); }
+
+  .confirm-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--gap-sm);
+  }
+
+  .confirm-cancel {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    background: var(--cap-face);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 7px 14px;
+    cursor: pointer;
+    transition: all 0.15s;
+    box-shadow: var(--cap-shadow);
+  }
+  .confirm-cancel:hover {
+    color: var(--text-primary);
+    box-shadow: var(--cap-shadow-hover);
+  }
+  .confirm-cancel:active {
+    transform: translateY(1px);
+    box-shadow: var(--cap-shadow-pressed);
+  }
+
+  .confirm-apply {
+    font-family: var(--font-display);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    color: var(--bg-dark);
+    background: var(--neon-orange);
+    border: 1px solid var(--neon-orange);
+    border-radius: var(--radius-sm);
+    padding: 7px 14px;
+    cursor: pointer;
+    transition: all 0.15s;
+    box-shadow: var(--cap-shadow);
+  }
+  .confirm-apply:hover {
+    filter: brightness(1.1);
+    box-shadow: var(--cap-shadow-hover);
+  }
+  .confirm-apply:active {
+    transform: translateY(1px);
+    box-shadow: var(--cap-shadow-pressed);
   }
 </style>

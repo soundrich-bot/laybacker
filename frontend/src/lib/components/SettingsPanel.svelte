@@ -315,7 +315,6 @@
   .cog-btn:hover {
     color: var(--text-secondary);
     border-color: var(--border-accent);
-    transform: translateY(-1px);
     box-shadow: var(--cap-shadow-hover);
   }
 

@@ -82,7 +82,6 @@
     opacity: 1;
     color: var(--neon-cyan);
     border-color: rgba(8, 247, 254, 0.4);
-    transform: translateY(-1px);
     box-shadow: var(--cap-shadow-hover);
   }
   .prores-btn:active {

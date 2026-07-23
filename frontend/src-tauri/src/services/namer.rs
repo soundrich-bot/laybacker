@@ -55,6 +55,10 @@ fn strip_spec_suffix(name: &str) -> &str {
     if let Some(rest) = s.strip_suffix("_Clocked") {
         s = rest;
     }
+    // Trailing "_6Fr"
+    if let Some(rest) = s.strip_suffix("_6Fr") {
+        s = rest;
+    }
     // Trailing "_<number>dBTP"
     if let Some(i) = s.rfind('_') {
         if let Some(num) = s[i + 1..].strip_suffix("dBTP") {
@@ -88,6 +92,8 @@ pub fn generate_names(pairs: &mut [MatchedPair], remove_duplicates: bool, output
             // actually applied. Loudness is the headline spec — the true-peak
             // ceiling is a background check and stays out of the name (it only
             // appears in full-scale mode, where the peak IS the spec).
+            // Applied in processing order: normalise, then the 6-frame mute,
+            // then the clock handles — the name reflects each step taken.
             let mut name = base_name.to_string();
             if pair.normalization_enabled {
                 if pair.normalization_settings.target_lufs >= 0.0 {
@@ -95,6 +101,9 @@ pub fn generate_names(pairs: &mut [MatchedPair], remove_duplicates: bool, output
                 } else {
                     name = format!("{}_{}LUFS", name, pair.normalization_settings.target_lufs);
                 }
+            }
+            if pair.silence_compliance {
+                name = format!("{}_6Fr", name);
             }
             if pair.clock_enabled {
                 name = format!("{}_Clocked", name);
@@ -340,6 +349,30 @@ mod tests {
         again[0].clock_enabled = true;
         generate_names(&mut again, true, "wav");
         assert_eq!(again[0].output_filename, "MyMix_-23LUFS_Clocked.wav");
+    }
+
+    #[test]
+    fn test_audio_only_6fr_name() {
+        let mut pairs = vec![make_pair(None, "MyMix", false, -23.0, -1.0)];
+        pairs[0].silence_compliance = true;
+        generate_names(&mut pairs, true, "wav");
+        assert_eq!(pairs[0].output_filename, "MyMix_6Fr.wav");
+    }
+
+    #[test]
+    fn test_audio_only_norm_6fr_clock_compose_and_dont_stack() {
+        let mut pairs = vec![make_pair(None, "MyMix", true, -23.0, -1.0)];
+        pairs[0].silence_compliance = true;
+        pairs[0].clock_enabled = true;
+        generate_names(&mut pairs, true, "wav");
+        assert_eq!(pairs[0].output_filename, "MyMix_-23LUFS_6Fr_Clocked.wav");
+
+        // Re-dropping that output must not stack the suffixes.
+        let mut again = vec![make_pair(None, "MyMix_-23LUFS_6Fr_Clocked", true, -23.0, -1.0)];
+        again[0].silence_compliance = true;
+        again[0].clock_enabled = true;
+        generate_names(&mut again, true, "wav");
+        assert_eq!(again[0].output_filename, "MyMix_-23LUFS_6Fr_Clocked.wav");
     }
 
     #[test]
