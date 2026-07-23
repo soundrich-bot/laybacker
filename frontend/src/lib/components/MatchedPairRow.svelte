@@ -155,10 +155,22 @@
 
   let isAudioOnly = $derived(!pair.video);
 
+  // Enabling 6 Fr mutes the head/tail on export — the one control that can
+  // REMOVE sound — so it asks for confirmation first. Disabling is instant.
+  let showComplianceConfirm = $state(false);
+
   async function toggleCompliance() {
-    const newEnabled = !pair.silenceCompliance;
-    onUpdateCompliance(pair.id, newEnabled);
-    if (newEnabled && !silenceCheck) {
+    if (pair.silenceCompliance) {
+      onUpdateCompliance(pair.id, false);
+      return;
+    }
+    showComplianceConfirm = true;
+  }
+
+  async function confirmCompliance() {
+    showComplianceConfirm = false;
+    onUpdateCompliance(pair.id, true);
+    if (!silenceCheck) {
       await runSilenceCheck();
     }
   }
@@ -630,7 +642,123 @@
   />
 {/if}
 
+{#if showComplianceConfirm}
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="confirm-overlay" onclick={() => showComplianceConfirm = false}>
+    <div class="confirm-box" onclick={(e) => e.stopPropagation()} role="alertdialog" aria-modal="true">
+      <div class="confirm-title">APPLY 6-FRAME SILENCE?</div>
+      <p class="confirm-body">
+        On export, the first and last 6 frames (240&nbsp;ms) of
+        <strong>{pair.audio.filename}</strong> will be forced to digital silence,
+        with a short fade to prevent clicks. <strong>Any sound in those regions
+        will be muted</strong> in the output file. Your original file is untouched.
+      </p>
+      <div class="confirm-actions">
+        <button class="confirm-cancel" onclick={() => showComplianceConfirm = false}>CANCEL</button>
+        <button class="confirm-apply" onclick={confirmCompliance}>YES — APPLY 6 Fr</button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<svelte:window onkeydown={(e) => { if (e.key === 'Escape' && showComplianceConfirm) showComplianceConfirm = false; }} />
+
 <style>
+  /* === 6 Fr confirmation modal === */
+  .confirm-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+  }
+
+  .confirm-box {
+    width: min(440px, calc(100vw - 48px));
+    background: var(--bg-panel);
+    border: 1px solid var(--neon-orange);
+    border-radius: var(--radius-md);
+    padding: var(--gap-lg);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  }
+
+  .confirm-title {
+    font-family: var(--font-display);
+    font-size: 14px;
+    letter-spacing: 0.08em;
+    color: var(--neon-orange);
+    margin-bottom: var(--gap-md);
+  }
+
+  .confirm-body {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+    margin-bottom: var(--gap-lg);
+    word-break: break-word;
+  }
+
+  .confirm-body strong {
+    color: var(--text-primary);
+  }
+
+  .confirm-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--gap-sm);
+  }
+
+  .confirm-cancel {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    background: var(--cap-face);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 7px 14px;
+    cursor: pointer;
+    transition: all 0.15s;
+    box-shadow: var(--cap-shadow);
+  }
+  .confirm-cancel:hover {
+    color: var(--text-primary);
+    transform: translateY(-1px);
+    box-shadow: var(--cap-shadow-hover);
+  }
+  .confirm-cancel:active {
+    transform: translateY(1px);
+    box-shadow: var(--cap-shadow-pressed);
+  }
+
+  .confirm-apply {
+    font-family: var(--font-display);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    color: var(--bg-dark);
+    background: var(--neon-orange);
+    border: 1px solid var(--neon-orange);
+    border-radius: var(--radius-sm);
+    padding: 7px 14px;
+    cursor: pointer;
+    transition: all 0.15s;
+    box-shadow: var(--cap-shadow);
+  }
+  .confirm-apply:hover {
+    filter: brightness(1.1);
+    transform: translateY(-1px);
+    box-shadow: var(--cap-shadow-hover);
+  }
+  .confirm-apply:active {
+    transform: translateY(1px);
+    box-shadow: var(--cap-shadow-pressed);
+  }
+
   /* === Card container === */
   .pair-card {
     background: var(--bg-panel);
