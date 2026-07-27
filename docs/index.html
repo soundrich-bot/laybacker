@@ -116,6 +116,31 @@
     .badge:hover { border-color: var(--green); color: var(--text); }
     @media (max-width: 520px) { .trust { flex-direction: column; text-align: center; } .trust-badges { justify-content: center; } }
 
+    /* "As featured on" press banner — prominent, sits under the download buttons */
+    .featured {
+      display: flex; align-items: center; gap: 16px;
+      max-width: 640px; margin: 30px auto 0;
+      padding: 16px 20px;
+      border-radius: 14px;
+      text-decoration: none;
+      background: linear-gradient(180deg, rgba(8,247,254,0.07), rgba(255,46,99,0.045));
+      border: 1px solid rgba(8,247,254,0.4);
+      box-shadow: 0 0 26px rgba(8,247,254,0.09);
+      transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+    }
+    .featured:hover { transform: translateY(-2px); border-color: var(--cyan); box-shadow: 0 0 42px rgba(8,247,254,0.2); }
+    .featured-seal {
+      flex-shrink: 0; width: 44px; height: 44px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center; font-size: 22px;
+      color: #04130a; background: linear-gradient(90deg, var(--cyan), var(--pink));
+      box-shadow: 0 0 14px rgba(8,247,254,0.4);
+    }
+    .featured-text { display: flex; flex-direction: column; gap: 3px; text-align: left; flex: 1; min-width: 0; }
+    .featured-kicker { font-family: var(--disp); font-weight: 800; font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--cyan); }
+    .featured-headline { font-size: 14px; color: var(--text); font-weight: 700; line-height: 1.4; }
+    .featured-arrow { flex-shrink: 0; font-family: var(--disp); font-weight: 800; font-size: 13px; letter-spacing: 0.03em; color: var(--pink); white-space: nowrap; }
+    @media (max-width: 560px) { .featured { flex-direction: column; text-align: center; } .featured-text { text-align: center; } }
+
     /* First-launch note */
     .firstrun {
       background: var(--bg-panel);
@@ -224,6 +249,15 @@
         <span id="version">latest release</span> ·
         <a href="https://github.com/soundrich-bot/laybacker/releases">all versions &amp; release notes</a><span id="dl-count"></span>
       </p>
+
+      <a class="featured" href="https://www.production-expert.com/production-expert-1/these-audio-pros-built-their-own-plugins-with-ai-heres-why" target="_blank" rel="noopener noreferrer">
+        <span class="featured-seal" aria-hidden="true">★</span>
+        <span class="featured-text">
+          <span class="featured-kicker">As featured on Production Expert</span>
+          <span class="featured-headline">“These Audio Pros Built Their Own Plugins With AI — Here's Why”</span>
+        </span>
+        <span class="featured-arrow">Read the article →</span>
+      </a>
     </header>
 
     <section class="showcase">
