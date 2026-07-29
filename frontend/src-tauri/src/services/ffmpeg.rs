@@ -95,6 +95,14 @@ pub fn get_ffmpeg_version() -> Option<String> {
 
 /// Build the ffmpeg command arguments for a muxing job
 #[allow(clippy::too_many_arguments)]
+/// Frames to fade the audio over when the user picks the "fade" length fix.
+pub const LENGTH_FADE_FRAMES: f64 = 12.0;
+/// fps to assume when the video's real frame rate is unknown.
+const FALLBACK_FPS: f64 = 25.0;
+/// How much longer (seconds) the audio must be before a length fix kicks in.
+const LENGTH_MISMATCH_TOLERANCE: f64 = 0.04;
+
+#[allow(clippy::too_many_arguments)]
 pub fn build_mux_command(
     video_path: &str,
     audio_path: &str,
@@ -103,8 +111,19 @@ pub fn build_mux_command(
     audio_gain_db: Option<f64>,
     timecode_offset_secs: f64,
     compliance: Option<(f64, f64, f64)>, // (duration_secs, silence_ms, fade_ms)
+    length_fix: LengthFix,
+    video_duration_secs: f64,
+    audio_duration_secs: f64,
+    video_fps: Option<f64>,
 ) -> Vec<String> {
     let mut args: Vec<String> = Vec::new();
+
+    // A length fix only applies when the audio genuinely runs past the video.
+    // Otherwise fall back to a plain cut (which -shortest already handles).
+    let audio_longer =
+        audio_duration_secs > video_duration_secs + LENGTH_MISMATCH_TOLERANCE;
+    let effective_fix = if audio_longer { length_fix } else { LengthFix::Cut };
+    let freeze = effective_fix == LengthFix::Freeze;
 
     // Input files
     args.extend(["-y".to_string()]); // Overwrite output
@@ -115,17 +134,25 @@ pub fn build_mux_command(
     args.extend(["-map".to_string(), "0:v:0".to_string()]);
     args.extend(["-map".to_string(), "1:a:0".to_string()]);
 
-    // Video codec settings
-    match settings.video_codec {
-        VideoCodecOption::Original => {
-            args.extend(["-c:v".to_string(), "copy".to_string()]);
-        }
-        VideoCodecOption::H264 => {
-            args.extend(["-c:v".to_string(), "libx264".to_string()]);
-            args.extend(["-crf".to_string(), "18".to_string()]);
-            args.extend(["-preset".to_string(), "medium".to_string()]);
-            args.extend(["-pix_fmt".to_string(), "yuv420p".to_string()]);
-        }
+    // Video codec settings. Freeze holds the last frame past the original end,
+    // which needs a filter — so the stream can't be copied and must re-encode.
+    let reencode_video = freeze || settings.video_codec == VideoCodecOption::H264;
+    if reencode_video {
+        args.extend(["-c:v".to_string(), "libx264".to_string()]);
+        args.extend(["-crf".to_string(), "18".to_string()]);
+        args.extend(["-preset".to_string(), "medium".to_string()]);
+        args.extend(["-pix_fmt".to_string(), "yuv420p".to_string()]);
+    } else {
+        args.extend(["-c:v".to_string(), "copy".to_string()]);
+    }
+
+    // Freeze: pad the video by cloning its final frame until it matches the audio.
+    if freeze {
+        let pad = (audio_duration_secs - video_duration_secs).max(0.0);
+        args.extend([
+            "-vf".to_string(),
+            format!("tpad=stop_mode=clone:stop_duration={:.4}", pad),
+        ]);
     }
 
     // Audio filter chain
@@ -147,6 +174,15 @@ pub fn build_mux_command(
     // Silence compliance (UK broadcast: 6 frames silence at head/tail + fade)
     if let Some((duration, silence_ms, fade_ms)) = compliance {
         audio_filters.extend(build_compliance_filters(duration, silence_ms, fade_ms));
+    }
+
+    // Fade length fix: the output stays video-length (via -shortest), but the
+    // audio fades out over the final 12 frames instead of stopping dead.
+    if effective_fix == LengthFix::Fade {
+        let fps = video_fps.filter(|f| *f > 0.0).unwrap_or(FALLBACK_FPS);
+        let fade_secs = (LENGTH_FADE_FRAMES / fps).min(video_duration_secs);
+        let start = (video_duration_secs - fade_secs).max(0.0);
+        audio_filters.push(format!("afade=t=out:st={:.4}:d={:.4}", start, fade_secs));
     }
 
     if !audio_filters.is_empty() {
@@ -173,8 +209,11 @@ pub fn build_mux_command(
         }
     }
 
-    // Shortest: trim output to shortest stream
-    args.push("-shortest".to_string());
+    // Trim to the shortest stream — EXCEPT when freezing, where the whole point
+    // is to run to the (longer) audio length with the video held on its last frame.
+    if !freeze {
+        args.push("-shortest".to_string());
+    }
 
     // Output file
     args.push(output_path.to_string());
@@ -626,6 +665,7 @@ mod tests {
         let args = build_mux_command(
             "/video.mov", "/audio.wav", "/out.mov",
             &default_settings(), None, 0.0, None,
+            LengthFix::Cut, 30.0, 30.0, Some(25.0),
         );
         assert!(args.contains(&"-y".to_string()));
         assert!(args.contains(&"/video.mov".to_string()));
@@ -642,6 +682,7 @@ mod tests {
         let args = build_mux_command(
             "/video.mov", "/audio.wav", "/out.mov",
             &default_settings(), Some(3.5), 0.0, None,
+            LengthFix::Cut, 30.0, 30.0, Some(25.0),
         );
         assert!(args.contains(&"-af".to_string()));
         let af_idx = args.iter().position(|a| a == "-af").unwrap();
@@ -655,6 +696,7 @@ mod tests {
         let args = build_mux_command(
             "/video.mov", "/audio.wav", "/out.mov",
             &default_settings(), None, 0.5, None,
+            LengthFix::Cut, 30.0, 30.0, Some(25.0),
         );
         let af_idx = args.iter().position(|a| a == "-af").unwrap();
         assert!(args[af_idx + 1].contains("adelay=500|500"));
@@ -669,6 +711,7 @@ mod tests {
         let args = build_mux_command(
             "/video.mov", "/audio.wav", "/out.mov",
             &settings, None, 0.0, None,
+            LengthFix::Cut, 30.0, 30.0, Some(25.0),
         );
         assert!(args.contains(&"libx264".to_string()));
         assert!(args.contains(&"yuv420p".to_string()));
@@ -679,6 +722,7 @@ mod tests {
         let args = build_mux_command(
             "/video.mov", "/audio.wav", "/out.mp4",
             &aac_settings(), None, 0.0, None,
+            LengthFix::Cut, 30.0, 30.0, Some(25.0),
         );
         assert!(args.contains(&"aac".to_string()));
         assert!(args.contains(&"320000".to_string()));
@@ -690,12 +734,74 @@ mod tests {
             "/video.mov", "/audio.wav", "/out.mov",
             &default_settings(), None, 0.0,
             Some((30.0, 240.0, 5.0)),
+            LengthFix::Cut, 30.0, 30.0, Some(25.0),
         );
         let af_idx = args.iter().position(|a| a == "-af").unwrap();
         let filters = &args[af_idx + 1];
         assert!(filters.contains("volume=enable="));
         assert!(filters.contains("afade=t=in"));
         assert!(filters.contains("afade=t=out"));
+    }
+
+    // ── length fixes (audio longer than video) ──
+
+    #[test]
+    fn test_length_fix_cut_is_plain_shortest() {
+        // Audio longer, fix = Cut: just -shortest, no fade, video still copied.
+        let args = build_mux_command(
+            "/video.mov", "/audio.wav", "/out.mov",
+            &default_settings(), None, 0.0, None,
+            LengthFix::Cut, 20.0, 30.0, Some(25.0),
+        );
+        assert!(args.contains(&"-shortest".to_string()));
+        assert!(args.contains(&"copy".to_string()));
+        assert!(!args.contains(&"-af".to_string()), "cut adds no audio filter");
+        assert!(!args.contains(&"-vf".to_string()), "cut adds no video filter");
+    }
+
+    #[test]
+    fn test_length_fix_fade_adds_afade_out() {
+        // Audio longer, fix = Fade: 12-frame fade out ending at the video's end.
+        let args = build_mux_command(
+            "/video.mov", "/audio.wav", "/out.mov",
+            &default_settings(), None, 0.0, None,
+            LengthFix::Fade, 20.0, 30.0, Some(25.0),
+        );
+        let af_idx = args.iter().position(|a| a == "-af").unwrap();
+        let filters = &args[af_idx + 1];
+        // 12 frames @ 25fps = 0.48s, so fade starts at 20 - 0.48 = 19.52.
+        assert!(filters.contains("afade=t=out:st=19.5200:d=0.4800"), "got {filters}");
+        assert!(args.contains(&"-shortest".to_string()), "fade keeps video length");
+        // Audio filter present -> lossless PCM, not stream copy.
+        assert!(args.contains(&"pcm_s24le".to_string()));
+    }
+
+    #[test]
+    fn test_length_fix_freeze_pads_video_and_reencodes() {
+        // Audio longer, fix = Freeze: hold last frame, re-encode, no -shortest.
+        let args = build_mux_command(
+            "/video.mov", "/audio.wav", "/out.mov",
+            &default_settings(), None, 0.0, None,
+            LengthFix::Freeze, 20.0, 30.0, Some(25.0),
+        );
+        let vf_idx = args.iter().position(|a| a == "-vf").expect("freeze sets -vf");
+        // Pad = 30 - 20 = 10s of cloned final frame.
+        assert!(args[vf_idx + 1].contains("tpad=stop_mode=clone:stop_duration=10.0000"), "got {}", args[vf_idx + 1]);
+        assert!(args.contains(&"libx264".to_string()), "freeze must re-encode video");
+        assert!(!args.contains(&"-shortest".to_string()), "freeze runs to audio length");
+    }
+
+    #[test]
+    fn test_length_fix_ignored_when_audio_not_longer() {
+        // Fix requested but audio isn't actually longer -> behaves like a cut.
+        let args = build_mux_command(
+            "/video.mov", "/audio.wav", "/out.mov",
+            &default_settings(), None, 0.0, None,
+            LengthFix::Freeze, 30.0, 30.0, Some(25.0),
+        );
+        assert!(args.contains(&"copy".to_string()), "no re-encode when not longer");
+        assert!(!args.contains(&"-vf".to_string()));
+        assert!(args.contains(&"-shortest".to_string()));
     }
 
     // ── build_audio_only_command ──

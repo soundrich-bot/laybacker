@@ -10,6 +10,14 @@ let processingResults = $state([]);
 let progressMap = $state({});
 let errors = $state([]);
 
+// Blocking "audio is longer than video" prompt. When set, App shows a modal for
+// this one pair and export waits until the user picks cut / fade / freeze.
+let lengthPrompt = $state(null); // { pairId, filename, overBy, fps } | null
+let _lengthResolve = null;
+
+// How much longer (seconds) the audio must run before we ask about it.
+const LENGTH_MISMATCH_TOLERANCE = 0.5;
+
 // ── Batch QC ────────────────────────────────────────────────────────────────
 // One spec for the whole batch: a loudness value (which is ALSO every pair's
 // NORM target, so QC and the export agree) plus an optional 6-frame silence
@@ -336,8 +344,56 @@ async function cancelProcessing() {
   await invoke('cancel_processing');
 }
 
+// Ask the user how to handle one over-length pair. Resolves to the chosen fix
+// ('cut' | 'fade' | 'freeze'), or null if they cancel the whole export.
+function askLengthFix(pair) {
+  const overBy = pair.audio.durationSecs - pair.video.durationSecs;
+  lengthPrompt = {
+    pairId: pair.id,
+    filename: pair.audio.filename,
+    overBy,
+    fps: pair.video.frameRate ?? null,
+  };
+  return new Promise((resolve) => { _lengthResolve = resolve; });
+}
+
+// Called by the modal: record the choice on the pair and let export continue.
+// `lengthFixChosen` marks that the USER picked — distinct from the backend's
+// default `lengthFix: "cut"`, which every pair carries from the matcher.
+function resolveLengthFix(choice) {
+  const id = lengthPrompt?.pairId;
+  if (id) {
+    matchedPairs = matchedPairs.map(p =>
+      p.id === id ? { ...p, lengthFix: choice, lengthFixChosen: true } : p
+    );
+  }
+  lengthPrompt = null;
+  const r = _lengthResolve; _lengthResolve = null;
+  if (r) r(choice);
+}
+
+// Called by the modal's Cancel: abort the export entirely.
+function cancelLengthFix() {
+  lengthPrompt = null;
+  const r = _lengthResolve; _lengthResolve = null;
+  if (r) r(null);
+}
+
 async function processAll() {
   if (matchedPairs.length === 0) return;
+
+  // Pre-flight: for every pair whose audio runs past its video, ask how to
+  // reconcile it — one blocking prompt at a time — before any rendering starts.
+  const overLong = matchedPairs.filter(p =>
+    p.video &&
+    !p.lengthFixChosen &&
+    (p.audio.durationSecs - p.video.durationSecs) > LENGTH_MISMATCH_TOLERANCE
+  );
+  for (const p of overLong) {
+    const choice = await askLengthFix(p);
+    if (choice === null) return; // user cancelled — export nothing
+  }
+
   isProcessing = true;
   processingResults = [];
   progressMap = {};
@@ -559,6 +615,9 @@ export function getAppState() {
     regenerateNames,
     processAll,
     cancelProcessing,
+    get lengthPrompt() { return lengthPrompt; },
+    resolveLengthFix,
+    cancelLengthFix,
     updateProgress,
     updatePairNormalization,
     updatePairCompliance,

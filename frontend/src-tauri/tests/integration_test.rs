@@ -57,8 +57,8 @@ fn make_audio_pair(fixture_name: &str, output_filename: &str, norm_enabled: bool
             codec_info: None,
             sample_rate: Some(48000.0),
             channel_count: Some(2),
-            thumbnail_data: None,
-        },
+            frame_rate: None,
+            thumbnail_data: None,        },
         output_filename: output_filename.to_string(),
         normalization_enabled: norm_enabled,
         normalization_settings: NormalizationSettings { target_lufs, true_peak_limit: tp_limit },
@@ -68,7 +68,7 @@ fn make_audio_pair(fixture_name: &str, output_filename: &str, norm_enabled: bool
         silence_ms: 240.0,
         fade_ms: 5.0,
         clock_enabled: false,
-    }
+        length_fix: LengthFix::default(),    }
 }
 
 // ── Measurement tests ──
@@ -223,8 +223,8 @@ fn test_reprocessing_generated_output_does_not_fail() {
             codec_info: None,
             sample_rate: Some(48000.0),
             channel_count: Some(2),
-            thumbnail_data: None,
-        },
+            frame_rate: None,
+            thumbnail_data: None,        },
         output_filename: src_name.into(), // namer regenerates a name identical to the source
         normalization_enabled: true,
         normalization_settings: NormalizationSettings { target_lufs: 0.0, true_peak_limit: -1.0 },
@@ -234,7 +234,7 @@ fn test_reprocessing_generated_output_does_not_fail() {
         silence_ms: 240.0,
         fade_ms: 5.0,
         clock_enabled: false,
-    };
+        length_fix: LengthFix::default(),    };
     let settings = ExportSettings::default();
     let result = processor::process_pair(&pair, &settings, |_| {});
 

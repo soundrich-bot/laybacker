@@ -136,6 +136,10 @@ pub fn process_pair(
             audio_gain_db,
             pair.timecode_offset_secs,
             compliance,
+            pair.length_fix,
+            video.duration_secs,
+            pair.audio.duration_secs,
+            video.frame_rate,
         )
     } else {
         ffmpeg::build_audio_only_command(
@@ -148,7 +152,28 @@ pub fn process_pair(
         )
     };
 
-    match ffmpeg::run_ffmpeg(&args) {
+    // Freeze re-encodes the whole video, which can take a while — stream ffmpeg's
+    // progress so the per-file bar advances instead of sitting at 50%.
+    let freeze_reencode = pair.video.as_ref().is_some_and(|v| {
+        pair.length_fix == LengthFix::Freeze
+            && pair.audio.duration_secs > v.duration_secs + 0.04
+    });
+
+    let run_result = if freeze_reencode {
+        let total = pair.audio.duration_secs;
+        ffmpeg::run_ffmpeg_with_progress(&args, total, |pct| {
+            progress_callback(ProcessingProgress {
+                pair_id: pair_id.clone(),
+                state: "muxing".to_string(),
+                progress: 0.5 + pct * 0.45,
+                message: format!("Freezing last frame to match audio… {}%", (pct * 100.0) as u32),
+            });
+        })
+    } else {
+        ffmpeg::run_ffmpeg(&args)
+    };
+
+    match run_result {
         Ok(()) => {
             progress_callback(ProcessingProgress {
                 pair_id: pair_id.clone(),
@@ -328,6 +353,7 @@ mod tests {
             codec_info: None,
             sample_rate: None,
             channel_count: None,
+            frame_rate: None,
             thumbnail_data: None,
         }
     }
@@ -344,6 +370,7 @@ mod tests {
             codec_info: None,
             sample_rate: None,
             channel_count: None,
+            frame_rate: None,
             thumbnail_data: None,
         }
     }
@@ -362,6 +389,7 @@ mod tests {
             silence_ms: 240.0,
             fade_ms: 5.0,
             clock_enabled: false,
+            length_fix: LengthFix::default(),
         }
     }
 

@@ -11,6 +11,7 @@
   import ProcessButton from './lib/components/ProcessButton.svelte';
   import ErrorBar from './lib/components/ErrorBar.svelte';
   import UpdateBanner from './lib/components/UpdateBanner.svelte';
+  import LengthFixModal from './lib/components/LengthFixModal.svelte';
 
   const app = getAppState();
   let isDraggingOver = $state(false);
@@ -140,6 +141,14 @@
       && !app.matchedPairs.some(p => p.normalizationEnabled)}
   />
 </div>
+
+{#if app.lengthPrompt}
+  <LengthFixModal
+    prompt={app.lengthPrompt}
+    onChoose={app.resolveLengthFix}
+    onCancel={app.cancelLengthFix}
+  />
+{/if}
 
 <style>
   .app-container {

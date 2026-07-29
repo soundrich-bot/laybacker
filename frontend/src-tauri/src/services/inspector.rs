@@ -53,6 +53,7 @@ pub fn inspect_file(path: &str) -> Result<MediaFile, String> {
         codec_info: probe.codec_name,
         sample_rate: probe.sample_rate,
         channel_count: probe.channels,
+        frame_rate: probe.frame_rate,
         thumbnail_data,
     })
 }
@@ -103,6 +104,21 @@ struct ProbeResult {
     codec_name: Option<String>,
     sample_rate: Option<f64>,
     channels: Option<u32>,
+    frame_rate: Option<f64>,
+}
+
+/// Parse an ffprobe frame-rate field like "25/1" or "30000/1001" into fps.
+fn parse_frame_rate(s: &str) -> Option<f64> {
+    if let Some((num, den)) = s.split_once('/') {
+        let n = num.parse::<f64>().ok()?;
+        let d = den.parse::<f64>().ok()?;
+        if d != 0.0 && n != 0.0 {
+            return Some(n / d);
+        }
+        None
+    } else {
+        s.parse::<f64>().ok().filter(|v| *v != 0.0)
+    }
 }
 
 fn probe_file(path: &str) -> Result<ProbeResult, String> {
@@ -139,6 +155,7 @@ fn probe_file(path: &str) -> Result<ProbeResult, String> {
     let mut codec_name = None;
     let mut sample_rate = None;
     let mut channels = None;
+    let mut frame_rate = None;
 
     if let Some(streams) = streams {
         // Find the video stream for video files, audio stream for audio files
@@ -149,6 +166,15 @@ fn probe_file(path: &str) -> Result<ProbeResult, String> {
                 "video" => {
                     if codec_name.is_none() {
                         codec_name = stream["codec_name"].as_str().map(|s| s.to_string());
+                    }
+                    // avg_frame_rate is the true average; fall back to r_frame_rate.
+                    if frame_rate.is_none() {
+                        frame_rate = stream["avg_frame_rate"]
+                            .as_str()
+                            .and_then(parse_frame_rate)
+                            .or_else(|| {
+                                stream["r_frame_rate"].as_str().and_then(parse_frame_rate)
+                            });
                     }
                 }
                 "audio" => {
@@ -178,10 +204,29 @@ fn probe_file(path: &str) -> Result<ProbeResult, String> {
         codec_name,
         sample_rate,
         channels,
+        frame_rate,
     })
 }
 
 /// Find ffprobe binary (delegates to shared cached lookup)
 fn find_ffprobe() -> String {
     ffmpeg::find_ffprobe()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_frame_rate;
+
+    #[test]
+    fn test_parse_frame_rate() {
+        assert_eq!(parse_frame_rate("25/1"), Some(25.0));
+        assert_eq!(parse_frame_rate("30/1"), Some(30.0));
+        assert_eq!(parse_frame_rate("24"), Some(24.0));
+        // NTSC-style fractional rates.
+        let r = parse_frame_rate("30000/1001").unwrap();
+        assert!((r - 29.97).abs() < 0.01);
+        // ffprobe uses 0/0 for "unknown" — must not divide by zero.
+        assert_eq!(parse_frame_rate("0/0"), None);
+        assert_eq!(parse_frame_rate("garbage"), None);
+    }
 }

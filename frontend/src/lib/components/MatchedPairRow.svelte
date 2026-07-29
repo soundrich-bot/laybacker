@@ -196,9 +196,17 @@
   let durationDiff = $derived(pair.video ? pair.audio.durationSecs - pair.video.durationSecs : 0);
   let audioLonger = $derived(durationDiff > 0.5);
   let audioShorter = $derived(durationDiff < -0.5);
+  // Once the user has chosen how to reconcile an over-length audio (in the
+  // export prompt), the warning reflects that choice instead of assuming a cut.
+  let lengthFixLabel = $derived(
+    !pair.lengthFixChosen ? 'You will be asked how you would like to resolve this on layback.'
+      : pair.lengthFix === 'fade' ? 'The sound will fade out over the last 12 frames.'
+      : pair.lengthFix === 'freeze' ? 'The last video frame will be held to keep all the sound.'
+      : 'The audio will be cut at the end of the video.'
+  );
   let durationWarning = $derived(
     audioLonger
-      ? `Audio is ${Math.abs(durationDiff).toFixed(1)}s longer than video — audio will be cut off`
+      ? `Audio is ${Math.abs(durationDiff).toFixed(1)}s longer than video. ${lengthFixLabel}`
       : audioShorter
         ? `Audio is ${Math.abs(durationDiff).toFixed(1)}s shorter than video — end of video will be silent`
         : null
@@ -524,7 +532,7 @@
       </svg>
       DURATION MISMATCH
     </div>
-    <p class="silence-detail-note">{durationWarning}. The output is trimmed to the shorter of the two, so nothing breaks — just check the pairing is right.</p>
+    <p class="silence-detail-note">{durationWarning}</p>
   </div>
 {/if}
 

@@ -180,6 +180,7 @@ mod tests {
             codec_info: None,
             sample_rate: None,
             channel_count: None,
+            frame_rate: None,
             thumbnail_data: None,
         }
     }
@@ -196,6 +197,7 @@ mod tests {
             codec_info: None,
             sample_rate: None,
             channel_count: None,
+            frame_rate: None,
             thumbnail_data: None,
         }
     }
@@ -253,6 +255,7 @@ mod tests {
             silence_ms: 240.0,
             fade_ms: 5.0,
             clock_enabled: false,
+            length_fix: LengthFix::default(),
         }
     }
 

@@ -21,6 +21,10 @@ pub struct MediaFile {
     pub codec_info: Option<String>,
     pub sample_rate: Option<f64>,
     pub channel_count: Option<u32>,
+    /// Video frame rate (fps), when known — used to size a "12-frame" fade and
+    /// to talk about frames in the UI. None for audio, or if ffprobe can't tell.
+    #[serde(default)]
+    pub frame_rate: Option<f64>,
     pub thumbnail_data: Option<String>,
 }
 
@@ -48,6 +52,24 @@ pub struct MatchedPair {
     /// on export. Gated in the UI behind a levels + head/tail-silence check.
     #[serde(default)]
     pub clock_enabled: bool,
+    /// What to do when the audio is longer than the video. Chosen per file in a
+    /// blocking prompt at export time; defaults to a plain cut (today's behaviour).
+    #[serde(default)]
+    pub length_fix: LengthFix,
+}
+
+/// How to reconcile an audio file that runs longer than its video.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum LengthFix {
+    /// Trim the audio hard at the end of the video (ffmpeg `-shortest`).
+    #[default]
+    Cut,
+    /// Keep the video length, but fade the audio out over the final 12 frames.
+    Fade,
+    /// Hold the last video frame until the video is as long as the audio, so no
+    /// sound is lost. Requires re-encoding the video.
+    Freeze,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
