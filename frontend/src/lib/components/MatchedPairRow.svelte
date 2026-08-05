@@ -302,12 +302,14 @@
       <span class="qc-badge fail" title={qcResult.error}>QC &#10007;</span>
     {:else if qcResult}
       {#if qcResult.pass}
-        <span class="qc-badge pass" title="QC passed — {qcResult.measuredLufs.toFixed(1)} LUFS / {qcResult.measuredTP.toFixed(1)} dBTP">
-          &#10003; {qcResult.measuredLufs.toFixed(1)}
+        <span class="qc-badge pass" title="QC passed — {qcResult.measuredLufs.toFixed(1)} LUFS integrated, {qcResult.measuredTP.toFixed(1)} dBTP true peak">
+          &#10003; {qcResult.measuredLufs.toFixed(1)} LUFS
+          <span class="qc-tp">· {qcResult.measuredTP.toFixed(1)} dBTP</span>
         </span>
       {:else}
         <span class="qc-badge fail" title="QC failed — {qcReason}">
           {qcResult.measuredLufs.toFixed(1)} LUFS
+          <span class="qc-tp" class:over={!qcResult.peakPass}>· {qcResult.measuredTP.toFixed(1)} dBTP</span>
         </span>
       {/if}
       {#if qcResult.silenceChecked}
@@ -1424,6 +1426,15 @@
     color: var(--neon-orange);
     background: rgba(255, 159, 28, 0.1);
     border: 1px solid rgba(255, 159, 28, 0.4);
+  }
+  /* True-peak reading sits alongside the loudness value, shown just as boldly.
+     If the peak is over the ceiling it also gets underlined to stand out. */
+  .qc-tp {
+    opacity: 1;
+    font-weight: 700;
+  }
+  .qc-tp.over {
+    text-decoration: underline;
   }
 
   .clock-proceed {
