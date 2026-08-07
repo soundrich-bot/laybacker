@@ -462,6 +462,19 @@ async function processAll() {
   }
 }
 
+// The main action button does the job it's LABELLED for. For an audio-only
+// batch that means normalising to the QC spec (or clocking) — not a plain
+// passthrough, which would leave the files untouched. Video laybacks lay back.
+async function runMainAction() {
+  if (matchedPairs.length === 0) return;
+  const audioOnly = matchedPairs.every(p => !p.video);
+  if (!audioOnly) return processAll();
+
+  const clockOnly = matchedPairs.some(p => p.clockEnabled)
+    && !matchedPairs.some(p => p.normalizationEnabled);
+  return clockOnly ? clockAllNow() : normalizeAllNow();
+}
+
 function updateProgress(progress) {
   progressMap = { ...progressMap, [progress.pairId]: progress };
 }
@@ -662,6 +675,7 @@ export function getAppState() {
     autoMatch,
     regenerateNames,
     processAll,
+    runMainAction,
     cancelProcessing,
     get lengthPrompt() { return lengthPrompt; },
     resolveLengthFix,

@@ -6,7 +6,7 @@
 use std::path::Path;
 
 use app_lib::models::*;
-use app_lib::services::{ffmpeg, inspector, loudness, processor};
+use app_lib::services::{ffmpeg, inspector, loudness, namer, processor};
 
 fn test_fixture(name: &str) -> String {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
@@ -69,6 +69,56 @@ fn make_audio_pair(fixture_name: &str, output_filename: &str, norm_enabled: bool
         fade_ms: 5.0,
         clock_enabled: false,
         length_fix: LengthFix::default(),    }
+}
+
+/// End-to-end peak-mode naming: the store sets target_lufs = 0 (full-scale) with
+/// a dBTP ceiling, lets the namer fill the output name, then renders. Confirm the
+/// file on disk is "..._-1dBTP.wav", and that reloading it (a plain passthrough)
+/// keeps that name rather than flattening it back to the bare stem.
+#[test]
+fn test_peak_mode_names_and_survives_reload() {
+    // 1. Peak-mode pair with an EMPTY output name — the namer computes it.
+    let mut pairs = vec![make_audio_pair("test_tone.wav", "", true, 0.0, -1.0)];
+    namer::generate_names(&mut pairs, true, "wav");
+    assert_eq!(
+        pairs[0].output_filename, "test_tone_-1dBTP.wav",
+        "peak-mode output should carry the dBTP spec"
+    );
+
+    // 2. Render it and confirm the file on disk is named with the dBTP spec.
+    let result = processor::process_pair(&pairs[0], &ExportSettings::default(), |_| {});
+    assert!(result.success, "process failed: {:?}", result.error);
+    let out = result.output_path.expect("no output path");
+    assert!(
+        out.ends_with("_-1dBTP.wav"),
+        "written file should keep the dBTP suffix, got: {out}"
+    );
+    assert!(Path::new(&out).exists(), "output file missing on disk");
+
+    // 2b. The LEVEL must actually move: test_tone is ~-14 dBTP, so peak mode
+    //     should boost it to land on -1 dBTP. A neutral (unchanged) output is
+    //     the bug we're hunting.
+    let m = loudness::measure(&out).expect("measure output");
+    eprintln!("OUTPUT_TP={:.2} dBTP (target -1.0)", m.true_peak_dbtp);
+    assert!(
+        (m.true_peak_dbtp - (-1.0)).abs() <= 0.5,
+        "peak normalise should land near -1 dBTP, but output is {:.2} dBTP (neutral == not applied)",
+        m.true_peak_dbtp
+    );
+
+    // 3. Reload the rendered file as a plain passthrough (no norm) — the name
+    //    must survive, exactly as the batch list shows after a normalise pass.
+    let reloaded = inspector::inspect_file(&out).expect("inspect reloaded output");
+    let mut reload_pairs = vec![make_audio_pair("test_tone.wav", "", false, 0.0, -1.0)];
+    reload_pairs[0].audio = reloaded;
+    reload_pairs[0].normalization_enabled = false; // reloaded pairs arrive un-flagged
+    namer::generate_names(&mut reload_pairs, true, "wav");
+    assert_eq!(
+        reload_pairs[0].output_filename, "test_tone_-1dBTP.wav",
+        "reloaded passthrough must keep the dBTP name"
+    );
+
+    cleanup(&out);
 }
 
 // ── Measurement tests ──

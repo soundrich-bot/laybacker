@@ -135,7 +135,7 @@
     pairCount={app.matchedPairs.length}
     fileCount={app.files.length}
     isProcessing={app.isProcessing}
-    onProcess={app.processAll}
+    onProcess={app.runMainAction}
     onCancel={app.cancelProcessing}
     onClear={app.clearAll}
     audioOnly={app.matchedPairs.length > 0 && app.matchedPairs.every(p => !p.video)}
