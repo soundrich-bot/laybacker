@@ -26,7 +26,22 @@ const LENGTH_MISMATCH_TOLERANCE = 0.5;
 // NORM corrects to. Loudness is the headline metric; the true-peak ceiling
 // (-1 dBTP) is a background check, deemphasised in the UI and the naming.
 let qcTargetLufs = $state(-23);
+// True-peak value for the whole batch. Its role depends on qcMode:
+//  - 'lufs' mode: a ceiling — NORM levels to LUFS but never pushes peak above it.
+//  - 'peak' mode: THE target — NORM boosts/cuts each file so its peak lands here,
+//    LUFS ignored entirely. (This maps to the engine's full-scale path, which it
+//    triggers when target_lufs >= 0, so peak mode carries target_lufs = 0.)
+let qcTruePeak = $state(-1.0);
+let qcMode = $state('lufs'); // 'lufs' | 'peak'
 let qcCheckSilence = $state(false);
+
+// The batch normalization spec every pair carries, derived from the current mode
+// and targets. Peak mode uses target_lufs = 0 to select the engine's peak path.
+function batchNormSettings(existing = {}) {
+  return qcMode === 'peak'
+    ? { ...existing, targetLufs: 0, truePeakLimit: qcTruePeak }
+    : { ...existing, targetLufs: qcTargetLufs, truePeakLimit: qcTruePeak };
+}
 let qcResults = $state({}); // { [pairId]: { pass, lufsPass, peakPass, silencePass, measuredLufs, measuredTP, headHasAudio, tailHasAudio, error? } }
 let qcRunning = $state(false);
 let qcProgress = $state({ done: 0, total: 0 });
@@ -37,11 +52,36 @@ function setQcTargetLufs(value) {
   qcTargetLufs = value;
   matchedPairs = matchedPairs.map(p => ({
     ...p,
-    normalizationSettings: { ...p.normalizationSettings, targetLufs: value },
+    normalizationSettings: batchNormSettings(p.normalizationSettings),
   }));
   qcResults = {};
   clockChecks = {}; // clock verdicts were judged against the old target
   regenerateNames(); // the spec in the filename follows the target
+}
+
+// Changing the batch true-peak value retargets every pair and voids results
+// (the peak check and the NORM cap/target both depend on it).
+function setQcTruePeak(value) {
+  qcTruePeak = value;
+  matchedPairs = matchedPairs.map(p => ({
+    ...p,
+    normalizationSettings: batchNormSettings(p.normalizationSettings),
+  }));
+  qcResults = {};
+  clockChecks = {};
+  regenerateNames();
+}
+
+// Switch the whole batch between loudness (LUFS) and true-peak (dBTP) targeting.
+function setQcMode(mode) {
+  qcMode = mode;
+  matchedPairs = matchedPairs.map(p => ({
+    ...p,
+    normalizationSettings: batchNormSettings(p.normalizationSettings),
+  }));
+  qcResults = {};
+  clockChecks = {};
+  regenerateNames();
 }
 
 // ── Batch passes that act immediately ───────────────────────────────────────
@@ -95,7 +135,7 @@ async function normalizeAllNow() {
       ...p,
       normalizationEnabled: true,
       clockEnabled: false,
-      normalizationSettings: { ...p.normalizationSettings, targetLufs: qcTargetLufs },
+      normalizationSettings: batchNormSettings(p.normalizationSettings),
     }
   );
   await regenerateNames(); // output names carry the spec before rendering
@@ -162,13 +202,21 @@ async function runBatchQc() {
         });
       }
       const peakLimit = p.normalizationSettings?.truePeakLimit ?? -1.0;
-      const lufsPass = Math.abs(measuredLufs - qcTargetLufs) <= 1.0;
-      const peakPass = measuredTP <= peakLimit + 0.05; // ceiling, not a target
+      let lufsPass, peakPass;
+      if (qcMode === 'peak') {
+        // True-peak targeting: LUFS is irrelevant; the peak must land on target
+        // (a file under target is "wrong" here — NORM will boost it up).
+        lufsPass = true;
+        peakPass = Math.abs(measuredTP - qcTruePeak) <= 0.1;
+      } else {
+        lufsPass = Math.abs(measuredLufs - qcTargetLufs) <= 1.0;
+        peakPass = measuredTP <= peakLimit + 0.05; // ceiling, not a target
+      }
       const silencePass = qcCheckSilence ? (!headHasAudio && !tailHasAudio) : true;
       results[p.id] = {
         pass: lufsPass && peakPass && silencePass,
         lufsPass, peakPass, silencePass, silenceChecked: qcCheckSilence,
-        measuredLufs, measuredTP, headHasAudio, tailHasAudio, peakLimit,
+        measuredLufs, measuredTP, headHasAudio, tailHasAudio, peakLimit, mode: qcMode,
       };
     } catch (e) {
       results[p.id] = { error: String(e) };
@@ -285,7 +333,7 @@ async function autoMatch() {
         // QC-first workflow: files arrive untouched. QC (or NORM ALL / FIX)
         // decides what gets levelled — to the one batch target.
         normalizationEnabled: false,
-        normalizationSettings: { targetLufs: qcTargetLufs, truePeakLimit: -1.0 },
+        normalizationSettings: batchNormSettings(),
         timecodeOffsetSecs: 0,
         matchConfidence: 1.0,
         silenceCompliance: false,
@@ -313,11 +361,11 @@ async function autoMatch() {
       return p;
     });
 
-    // The batch loudness value is THE target — every pair carries it, including
-    // files dropped later, so QC and the export can never disagree.
+    // The batch spec (mode + targets) rides on every pair, including files
+    // dropped later, so QC and the export can never disagree.
     pairs = pairs.map(p => ({
       ...p,
-      normalizationSettings: { ...p.normalizationSettings, targetLufs: qcTargetLufs },
+      normalizationSettings: batchNormSettings(p.normalizationSettings),
     }));
 
     matchedPairs = pairs;
@@ -538,7 +586,7 @@ function toggleAllNorm() {
     ...p,
     normalizationEnabled: enable,
     normalizationSettings: enable
-      ? { ...p.normalizationSettings, targetLufs: qcTargetLufs }
+      ? batchNormSettings(p.normalizationSettings)
       : p.normalizationSettings,
   }));
   regenerateNames();
@@ -623,11 +671,15 @@ export function getAppState() {
     updatePairCompliance,
     updatePairClock,
     get qcTargetLufs() { return qcTargetLufs; },
+    get qcTruePeak() { return qcTruePeak; },
+    get qcMode() { return qcMode; },
     get qcCheckSilence() { return qcCheckSilence; },
     get qcResults() { return qcResults; },
     get qcRunning() { return qcRunning; },
     get qcProgress() { return qcProgress; },
     setQcTargetLufs,
+    setQcTruePeak,
+    setQcMode,
     setQcCheckSilence,
     runBatchQc,
     normalizeAllNow,

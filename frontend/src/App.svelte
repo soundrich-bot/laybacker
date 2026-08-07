@@ -98,11 +98,15 @@
     onToggleAllNorm={app.toggleAllNorm}
     {timestampFormat}
     qcTargetLufs={app.qcTargetLufs}
+    qcTruePeak={app.qcTruePeak}
+    qcMode={app.qcMode}
     qcCheckSilence={app.qcCheckSilence}
     qcResults={app.qcResults}
     qcRunning={app.qcRunning}
     qcProgress={app.qcProgress}
     onQcTargetChange={app.setQcTargetLufs}
+    onQcTruePeakChange={app.setQcTruePeak}
+    onQcModeChange={app.setQcMode}
     onQcSilenceChange={app.setQcCheckSilence}
     onRunQc={app.runBatchQc}
     onNormalizeAll={app.normalizeAllNow}

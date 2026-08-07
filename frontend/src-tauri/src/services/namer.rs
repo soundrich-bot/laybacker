@@ -85,16 +85,24 @@ pub fn generate_names(pairs: &mut [MatchedPair], remove_duplicates: bool, output
             pair.output_filename = generate_name(video, &pair.audio, remove_duplicates, output_ext);
         } else {
             // Audio-only: include the norm spec in the filename if enabled.
-            // Any spec suffix already on the source is stripped first so
-            // re-processing an output doesn't stack them.
-            let base_name = strip_spec_suffix(&pair.audio.filename_no_ext);
+            // Strip existing spec markers only when we're re-applying a spec,
+            // so a plain passthrough keeps the file's real name — e.g. a
+            // peak-normalised "MyMix_-1dBTP.wav" reloaded after the pass still
+            // reads _-1dBTP instead of being flattened back to "MyMix".
+            let any_spec = pair.normalization_enabled
+                || pair.silence_compliance
+                || pair.clock_enabled;
+            let base_name = if any_spec {
+                strip_spec_suffix(&pair.audio.filename_no_ext).to_string()
+            } else {
+                pair.audio.filename_no_ext.clone()
+            };
             // NORM and Clock compose; the name records each step that was
-            // actually applied. Loudness is the headline spec — the true-peak
-            // ceiling is a background check and stays out of the name (it only
-            // appears in full-scale mode, where the peak IS the spec).
+            // actually applied. In full-scale mode the peak IS the spec, so the
+            // name carries the dBTP target; in loudness mode it carries LUFS.
             // Applied in processing order: normalise, then the 6-frame mute,
             // then the clock handles — the name reflects each step taken.
-            let mut name = base_name.to_string();
+            let mut name = base_name;
             if pair.normalization_enabled {
                 if pair.normalization_settings.target_lufs >= 0.0 {
                     name = format!("{}_{}dBTP", name, pair.normalization_settings.true_peak_limit);
@@ -308,10 +316,27 @@ mod tests {
     }
 
     #[test]
-    fn test_audio_only_strips_suffix_when_norm_disabled() {
-        let mut pairs = vec![make_pair(None, "MyMix_normalised_-1dBTP", false, 0.0, -1.0)];
+    fn test_audio_only_passthrough_keeps_the_files_real_name() {
+        // No spec is being applied (plain passthrough) — keep the file's real
+        // name, including any spec it already carries. This is what a batch
+        // reload shows after a normalise pass, so the deliverable's name is
+        // visible in the list rather than flattened back to the bare stem.
+        let mut peak = vec![make_pair(None, "MyMix_-1dBTP", false, 0.0, -1.0)];
+        generate_names(&mut peak, true, "wav");
+        assert_eq!(peak[0].output_filename, "MyMix_-1dBTP.wav");
+
+        let mut lufs = vec![make_pair(None, "MyMix_-23LUFS", false, -23.0, -1.0)];
+        generate_names(&mut lufs, true, "wav");
+        assert_eq!(lufs[0].output_filename, "MyMix_-23LUFS.wav");
+    }
+
+    #[test]
+    fn test_audio_only_renormalise_still_strips_and_doesnt_stack() {
+        // Re-normalising an existing output DOES strip first, so specs never
+        // stack (e.g. peak-renormalising our own dBTP output stays single).
+        let mut pairs = vec![make_pair(None, "MyMix_-1dBTP", true, 0.0, -2.0)];
         generate_names(&mut pairs, true, "wav");
-        assert_eq!(pairs[0].output_filename, "MyMix.wav");
+        assert_eq!(pairs[0].output_filename, "MyMix_-2dBTP.wav");
     }
 
     #[test]

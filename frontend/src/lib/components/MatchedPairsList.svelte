@@ -19,11 +19,15 @@
     onToggleAllNorm,
     timestampFormat = 'YYYYMMDD_HHmm',
     qcTargetLufs = -23,
+    qcTruePeak = -1.0,
+    qcMode = 'lufs',
     qcCheckSilence = true,
     qcResults = {},
     qcRunning = false,
     qcProgress = { done: 0, total: 0 },
     onQcTargetChange,
+    onQcTruePeakChange,
+    onQcModeChange,
     onQcSilenceChange,
     onRunQc,
     onNormalizeAll,
@@ -122,18 +126,50 @@
       <!-- Batch QC: one spec for the whole batch -->
       {#if onRunQc}
         <div class="qc-bar">
-          <span class="qc-label" title="Check every file against one spec. The loudness value is also the NORM target used on export.">QC</span>
-          <span class="qc-target">
+          <span class="qc-label" title="Check every file against one spec. Choose the reference: level to a loudness target (LUFS) or set the true peak (dBTP). NORM corrects to whichever is selected.">QC</span>
+
+          <div class="qc-mode" role="group" aria-label="Normalisation reference">
+            <button
+              class="qc-mode-btn"
+              class:active={qcMode === 'lufs'}
+              disabled={busy}
+              onclick={() => onQcModeChange('lufs')}
+              title="Loudness: level each file to the LUFS target, capped at the true-peak ceiling"
+            >LUFS</button>
+            <button
+              class="qc-mode-btn"
+              class:active={qcMode === 'peak'}
+              disabled={busy}
+              onclick={() => onQcModeChange('peak')}
+              title="True Peak: set every file's peak to the dBTP target — boosts or cuts to hit it, loudness ignored"
+            >PEAK</button>
+          </div>
+
+          <span class="qc-target" class:dimmed={qcMode === 'peak'}>
             <input
               class="qc-input"
               type="number"
               step="0.5"
               value={qcTargetLufs}
-              disabled={busy}
+              disabled={busy || qcMode === 'peak'}
               onchange={(e) => onQcTargetChange(parseFloat(e.target.value))}
-              title="Loudness target for the whole batch"
+              title={qcMode === 'peak' ? 'Loudness is ignored in Peak mode' : 'Loudness target for the whole batch'}
             />
             <span class="qc-unit">LUFS</span>
+          </span>
+          <span class="qc-target" class:primary={qcMode === 'peak'}>
+            <input
+              class="qc-input"
+              type="number"
+              step="0.5"
+              value={qcTruePeak}
+              disabled={busy}
+              onchange={(e) => onQcTruePeakChange(parseFloat(e.target.value))}
+              title={qcMode === 'peak'
+                ? 'True-peak TARGET — every file is boosted or cut so its peak lands here'
+                : 'True-peak ceiling — NORM never pushes a file’s peak above it'}
+            />
+            <span class="qc-unit">dBTP</span>
           </span>
           <button
             class="qc-toggle"
@@ -154,9 +190,11 @@
               class="qc-fix-all"
               onclick={onNormalizeAll}
               disabled={busy}
-              title="Normalise every file to {qcTargetLufs} LUFS now — the new files are then measured and displayed"
+              title={qcMode === 'peak'
+                ? `Set every file's true peak to ${qcTruePeak} dBTP now (boost or cut) — the new files are then measured and displayed`
+                : `Normalise every file to ${qcTargetLufs} LUFS now — the new files are then measured and displayed`}
             >
-              {isProcessing ? 'WORKING…' : `NORMALISE ALL → ${qcTargetLufs} LUFS`}
+              {isProcessing ? 'WORKING…' : (qcMode === 'peak' ? `NORMALISE ALL → ${qcTruePeak} dBTP` : `NORMALISE ALL → ${qcTargetLufs} LUFS`)}
             </button>
           {/if}
 
@@ -348,6 +386,7 @@
   .qc-bar {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: var(--gap-sm);
     padding: 6px 10px;
     background: var(--bg-panel);
@@ -363,11 +402,42 @@
     cursor: help;
   }
 
+  /* LUFS / PEAK reference toggle — a small segmented control */
+  .qc-mode {
+    display: inline-flex;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    box-shadow: var(--cap-shadow);
+  }
+  .qc-mode-btn {
+    font-family: var(--font-display);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    background: var(--cap-face);
+    border: none;
+    padding: 4px 9px;
+    cursor: pointer;
+    transition: color 0.15s, background 0.15s;
+  }
+  .qc-mode-btn + .qc-mode-btn { border-left: 1px solid var(--border-color); }
+  .qc-mode-btn:hover:not(:disabled):not(.active) { color: var(--neon-cyan); }
+  .qc-mode-btn.active {
+    color: var(--bg-dark);
+    background: var(--neon-cyan);
+  }
+  .qc-mode-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
   .qc-target {
     display: flex;
     align-items: center;
     gap: 4px;
+    transition: opacity 0.15s;
   }
+  /* The reference NOT in use fades back; the active one is emphasised. */
+  .qc-target.dimmed { opacity: 0.4; }
+  .qc-target.primary .qc-unit { color: var(--neon-cyan); }
 
   .qc-input {
     width: 62px;

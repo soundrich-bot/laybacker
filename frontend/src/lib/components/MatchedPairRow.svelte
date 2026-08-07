@@ -64,7 +64,11 @@
     if (!qcResult || qcResult.error || qcResult.pass) return '';
     const bits = [];
     if (!qcResult.lufsPass) bits.push(`level is ${qcResult.measuredLufs.toFixed(1)} LUFS`);
-    if (!qcResult.peakPass) bits.push(`true peak ${qcResult.measuredTP.toFixed(1)} dBTP is over the ${qcResult.peakLimit} dBTP ceiling`);
+    if (!qcResult.peakPass) {
+      bits.push(qcResult.mode === 'peak'
+        ? `true peak ${qcResult.measuredTP.toFixed(1)} dBTP is not at the ${qcResult.peakLimit} dBTP target`
+        : `true peak ${qcResult.measuredTP.toFixed(1)} dBTP is over the ${qcResult.peakLimit} dBTP ceiling`);
+    }
     if (!qcResult.silencePass) {
       const where = qcResult.headHasAudio && qcResult.tailHasAudio ? 'head & tail'
         : qcResult.headHasAudio ? 'head' : 'tail';
@@ -302,13 +306,13 @@
       <span class="qc-badge fail" title={qcResult.error}>QC &#10007;</span>
     {:else if qcResult}
       {#if qcResult.pass}
-        <span class="qc-badge pass" title="QC passed — {qcResult.measuredLufs.toFixed(1)} LUFS integrated, {qcResult.measuredTP.toFixed(1)} dBTP true peak">
-          &#10003; {qcResult.measuredLufs.toFixed(1)} LUFS
+        <span class="qc-badge pass" class:peak={qcResult.mode === 'peak'} title="QC passed — {qcResult.measuredLufs.toFixed(1)} LUFS integrated, {qcResult.measuredTP.toFixed(1)} dBTP true peak">
+          &#10003; <span class="qc-lufs">{qcResult.measuredLufs.toFixed(1)} LUFS</span>
           <span class="qc-tp">· {qcResult.measuredTP.toFixed(1)} dBTP</span>
         </span>
       {:else}
-        <span class="qc-badge fail" title="QC failed — {qcReason}">
-          {qcResult.measuredLufs.toFixed(1)} LUFS
+        <span class="qc-badge fail" class:peak={qcResult.mode === 'peak'} title="QC failed — {qcReason}">
+          <span class="qc-lufs">{qcResult.measuredLufs.toFixed(1)} LUFS</span>
           <span class="qc-tp" class:over={!qcResult.peakPass}>· {qcResult.measuredTP.toFixed(1)} dBTP</span>
         </span>
       {/if}
@@ -1435,6 +1439,12 @@
   }
   .qc-tp.over {
     text-decoration: underline;
+  }
+  /* In true-peak mode the loudness reading is just informational — fade it so
+     the dBTP value reads as the one that matters. */
+  .qc-badge.peak .qc-lufs {
+    opacity: 0.5;
+    font-weight: 400;
   }
 
   .clock-proceed {
