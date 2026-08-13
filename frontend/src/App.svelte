@@ -12,6 +12,7 @@
   import ErrorBar from './lib/components/ErrorBar.svelte';
   import UpdateBanner from './lib/components/UpdateBanner.svelte';
   import LengthFixModal from './lib/components/LengthFixModal.svelte';
+  import SlateEditor from './lib/components/SlateEditor.svelte';
 
   const app = getAppState();
   let isDraggingOver = $state(false);
@@ -41,6 +42,11 @@
       app.updateProgress(event.payload);
     });
 
+    // Solo-video slate encode progress (video dropped without audio)
+    await listen('slate-progress', (event) => {
+      app.updateSoloSlateProgress(event.payload);
+    });
+
     // Listen for native Tauri drag-drop events (gives us full file paths)
     const currentWindow = getCurrentWindow();
 
@@ -65,8 +71,9 @@
 
   function handleSettingsChange(newSettings) {
     app.exportSettings = newSettings;
-    // Regenerate names when output format changes
-    app.regenerateNames();
+    // The container extension follows the format, but the NAME is the user's —
+    // they may have edited it, so only the extension is swapped, never the name.
+    app.updateOutputExtensions();
   }
 </script>
 
@@ -112,6 +119,8 @@
     onNormalizeAll={app.normalizeAllNow}
     onClockAll={app.clockAllNow}
     onSixFrAll={app.sixFrAllNow}
+    onOpenSlate={app.openSlateEditor}
+    soloSlateStatus={app.soloSlateStatus}
     isProcessing={app.isProcessing}
     clockChecks={app.clockChecks}
     clockRunning={app.clockRunning}
@@ -151,6 +160,21 @@
     prompt={app.lengthPrompt}
     onChoose={app.resolveLengthFix}
     onCancel={app.cancelLengthFix}
+  />
+{/if}
+
+{#if app.slateEditor}
+  <SlateEditor
+    editor={app.slateEditor}
+    isBatch={app.slateEditor.scope === 'batch'}
+    isSolo={app.slateEditor.scope === 'solo'}
+    videoCount={app.matchedPairs.filter(p => p.video).length}
+    onApply={app.applySlate}
+    onRemove={(app.slateEditor.scope === 'batch'
+      ? app.matchedPairs.some(p => p.video && p.slateEnabled)
+      : app.matchedPairs.find(p => p.id === app.slateEditor.scope)?.slateEnabled)
+      ? app.removeSlate : null}
+    onCancel={app.closeSlateEditor}
   />
 {/if}
 

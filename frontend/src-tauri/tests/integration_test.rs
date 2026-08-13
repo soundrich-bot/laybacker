@@ -58,6 +58,8 @@ fn make_audio_pair(fixture_name: &str, output_filename: &str, norm_enabled: bool
             sample_rate: Some(48000.0),
             channel_count: Some(2),
             frame_rate: None,
+            width: None,
+            height: None,
             thumbnail_data: None,        },
         output_filename: output_filename.to_string(),
         normalization_enabled: norm_enabled,
@@ -68,7 +70,11 @@ fn make_audio_pair(fixture_name: &str, output_filename: &str, norm_enabled: bool
         silence_ms: 240.0,
         fade_ms: 5.0,
         clock_enabled: false,
-        length_fix: LengthFix::default(),    }
+        length_fix: LengthFix::default(),
+        slate_enabled: false,
+        slate_duration_secs: 5.0,
+        slate_text: String::new(),
+        slate_image: None,    }
 }
 
 /// End-to-end peak-mode naming: the store sets target_lufs = 0 (full-scale) with
@@ -119,6 +125,89 @@ fn test_peak_mode_names_and_survives_reload() {
     );
 
     cleanup(&out);
+}
+
+/// End-to-end slate: build a real 2s video, attach a 3s slate card (base64 JPEG,
+/// exactly as the frontend sends it), process, and confirm the output runs
+/// slate + programme with the audio pushed back to the programme start.
+#[test]
+fn test_slate_prepends_card_and_delays_audio() {
+    let dir = output_dir();
+
+    // Build a small real video from the slate fixture (image2 loop → H.264),
+    // the same mechanism the slate itself uses.
+    let video_path = format!("{}/slate_test_video.mov", dir);
+    let jpg = test_fixture("slate_320x180.jpg");
+    let build_args: Vec<String> = [
+        "-y", "-loop", "1", "-framerate", "25", "-t", "2", "-i", jpg.as_str(),
+        "-c:v", "libx264", "-pix_fmt", "yuv420p", video_path.as_str(),
+    ].iter().map(|s| s.to_string()).collect();
+    ffmpeg::run_ffmpeg(&build_args).expect("failed to build test video fixture");
+
+    let video = inspector::inspect_file(&video_path).expect("inspect test video");
+    assert_eq!(video.width, Some(320), "probe should report frame width");
+
+    use base64::Engine as _;
+    let jpg_b64 = base64::engine::general_purpose::STANDARD
+        .encode(std::fs::read(&jpg).unwrap());
+
+    let mut pair = make_audio_pair("test_tone.wav", "slated_out.mov", false, 0.0, -1.0);
+    pair.video = Some(video);
+    pair.slate_enabled = true;
+    pair.slate_duration_secs = 3.0;
+    pair.slate_image = Some(format!("data:image/jpeg;base64,{}", jpg_b64));
+
+    let output = temp_output("slated_out.mov");
+    cleanup(&output);
+    let result = processor::process_pair(&pair, &ExportSettings::default(), |_| {});
+    assert!(result.success, "slated process failed: {:?}", result.error);
+
+    // 3s slate + 2s programme ≈ 5s output.
+    let out = inspector::inspect_file(&output).expect("inspect slated output");
+    assert!(
+        (out.duration_secs - 5.0).abs() < 0.2,
+        "expected ~5s (3s slate + 2s programme), got {:.2}s",
+        out.duration_secs
+    );
+
+    cleanup(&output);
+    cleanup(&video_path);
+}
+
+/// Solo slate: a video with its OWN soundtrack gets the card prepended and its
+/// audio kept, delayed by the slate duration.
+#[test]
+fn test_solo_slate_keeps_own_audio() {
+    let dir = output_dir();
+    let jpg = test_fixture("slate_320x180.jpg");
+
+    // Build a 2s video WITH an embedded soundtrack (tone muxed in).
+    let video_path = format!("{}/solo_slate_video.mov", dir);
+    let build_args: Vec<String> = [
+        "-y", "-loop", "1", "-framerate", "25", "-t", "2", "-i", jpg.as_str(),
+        "-i", test_fixture("test_tone.wav").as_str(),
+        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "pcm_s16le",
+        "-shortest", video_path.as_str(),
+    ].iter().map(|s| s.to_string()).collect();
+    ffmpeg::run_ffmpeg(&build_args).expect("failed to build solo test video");
+
+    let output = temp_output("solo_slated.mov");
+    cleanup(&output);
+    let spec = ffmpeg::SlateSpec { image_path: jpg.clone(), duration_secs: 3.0 };
+    let args = ffmpeg::build_solo_slate_command(&video_path, &output, &spec, Some(25.0), true);
+    ffmpeg::run_ffmpeg(&args).expect("solo slate render failed");
+
+    let out = inspector::inspect_file(&output).expect("inspect solo slated output");
+    assert!(
+        (out.duration_secs - 5.0).abs() < 0.2,
+        "expected ~5s (3s slate + 2s video), got {:.2}s",
+        out.duration_secs
+    );
+    // The soundtrack must survive the slate (probe reports audio fields).
+    assert!(out.channel_count.is_some(), "output lost its audio track");
+
+    cleanup(&output);
+    cleanup(&video_path);
 }
 
 // ── Measurement tests ──
@@ -274,6 +363,8 @@ fn test_reprocessing_generated_output_does_not_fail() {
             sample_rate: Some(48000.0),
             channel_count: Some(2),
             frame_rate: None,
+            width: None,
+            height: None,
             thumbnail_data: None,        },
         output_filename: src_name.into(), // namer regenerates a name identical to the source
         normalization_enabled: true,
@@ -284,7 +375,11 @@ fn test_reprocessing_generated_output_does_not_fail() {
         silence_ms: 240.0,
         fade_ms: 5.0,
         clock_enabled: false,
-        length_fix: LengthFix::default(),    };
+        length_fix: LengthFix::default(),
+        slate_enabled: false,
+        slate_duration_secs: 5.0,
+        slate_text: String::new(),
+        slate_image: None,    };
     let settings = ExportSettings::default();
     let result = processor::process_pair(&pair, &settings, |_| {});
 

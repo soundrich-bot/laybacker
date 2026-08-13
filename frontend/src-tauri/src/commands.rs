@@ -247,6 +247,63 @@ pub async fn create_prores(
     .map_err(|e| format!("Task failed: {}", e))?
 }
 
+/// Slate a solo video (dropped without audio): prepend the user's text card,
+/// keep the video's own soundtrack (delayed to match), saved next to the source
+/// as "<name>_Slated.mov". Emits `slate-progress` events keyed by videoPath.
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub async fn slate_video(
+    window: Window,
+    video_path: String,
+    video_duration_secs: f64,
+    slate_image: String,
+    slate_duration_secs: f64,
+    frame_rate: Option<f64>,
+    has_audio: bool,
+) -> Result<String, String> {
+    let video_for_event = video_path.clone();
+    tokio::task::spawn_blocking(move || {
+        // The card arrives as a base64 JPEG from the frontend canvas (the
+        // bundled ffmpeg decodes mjpeg but not PNG, and can't draw text).
+        let payload = slate_image.rsplit(',').next().unwrap_or(&slate_image);
+        use base64::Engine as _;
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(payload.trim())
+            .map_err(|e| format!("Slate image decode failed: {}", e))?;
+        let img_path = std::env::temp_dir()
+            .join(format!("laybacker_slate_solo_{}.jpg", uuid::Uuid::new_v4()));
+        let img_path = img_path.to_string_lossy().to_string();
+        std::fs::write(&img_path, bytes).map_err(|e| format!("Slate image write failed: {}", e))?;
+
+        let path = std::path::Path::new(&video_path);
+        let dir = path
+            .parent()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|| ".".to_string());
+        let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("video");
+        let output = format!("{}/{}_Slated.mov", dir, stem);
+
+        let spec = ffmpeg::SlateSpec {
+            image_path: img_path.clone(),
+            duration_secs: slate_duration_secs.max(0.5),
+        };
+        let args =
+            ffmpeg::build_solo_slate_command(&video_path, &output, &spec, frame_rate, has_audio);
+        let total = video_duration_secs + spec.duration_secs;
+        let result = ffmpeg::run_ffmpeg_with_progress(&args, total, |pct| {
+            let _ = window.emit(
+                "slate-progress",
+                serde_json::json!({ "videoPath": video_for_event, "progress": pct }),
+            );
+        });
+        let _ = std::fs::remove_file(&img_path);
+        result?;
+        Ok(output)
+    })
+    .await
+    .map_err(|e| format!("Task failed: {}", e))?
+}
+
 #[cfg(test)]
 mod tests {
     /// URL validation logic (extracted for testability)

@@ -1,6 +1,7 @@
 <script>
   import MatchedPairRow from './MatchedPairRow.svelte';
   import ProResButton from './ProResButton.svelte';
+  import SoloSlateButton from './SoloSlateButton.svelte';
 
   let {
     pairs = [],
@@ -33,6 +34,8 @@
     onNormalizeAll,
     onClockAll,
     onSixFrAll,
+    onOpenSlate,
+    soloSlateStatus = {},
     isProcessing = false,
     clockChecks = {},
     clockRunning = false,
@@ -80,7 +83,7 @@
           <span class="checkmark">✓</span>
         </div>
         <p class="waiting-text">{videoCount} VIDEO{videoCount !== 1 ? 'S' : ''} LOADED</p>
-        <p class="waiting-hint">Drop audio to lay back — or make a ProRes working file for Pro Tools</p>
+        <p class="waiting-hint">Drop audio to lay back — or slate the video, or make a ProRes working file for Pro Tools</p>
         <div class="video-prores-list">
           {#each videos as v (v.path)}
             <div class="video-prores-item">
@@ -95,6 +98,9 @@
                 {/if}
               </div>
               <span class="vp-name" title={v.filename}>{v.filename}</span>
+              {#if onOpenSlate}
+                <SoloSlateButton video={v} status={soloSlateStatus[v.path] ?? null} {onOpenSlate} {onReveal} />
+              {/if}
               <ProResButton videoPath={v.path} durationSecs={v.durationSecs} {onCreateProres} {onReveal} />
             </div>
           {/each}
@@ -220,6 +226,18 @@
             </button>
           {/if}
 
+          {#if onOpenSlate && pairs.some(p => p.video)}
+            <button
+              class="qc-run"
+              class:slated={pairs.some(p => p.video && p.slateEnabled)}
+              onclick={() => onOpenSlate('batch')}
+              disabled={busy}
+              title="Add a text slate to the front of every video — you choose the wording and the duration; the slate is silent"
+            >
+              {pairs.some(p => p.video && p.slateEnabled) ? 'SLATE ✓' : 'SLATE ALL'}
+            </button>
+          {/if}
+
           {#if qcSummary}
             <span class="qc-summary" class:allpass={qcPassCount === qcChecked.length}>{qcSummary}</span>
           {/if}
@@ -262,6 +280,7 @@
           {onRemove}
           {onReveal}
           {onCreateProres}
+          {onOpenSlate}
           {timestampFormat}
         />
       {/each}
@@ -508,6 +527,12 @@
     background: var(--neon-cyan);
     border-color: var(--neon-cyan);
     box-shadow: var(--cap-shadow);
+  }
+  /* Batch SLATE button once a slate is applied */
+  .qc-run.slated {
+    color: var(--bg-dark);
+    background: var(--neon-cyan);
+    border-color: var(--neon-cyan);
   }
   .qc-toggle:disabled,
   .qc-run:disabled,

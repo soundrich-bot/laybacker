@@ -31,6 +31,7 @@ pub fn run() {
             commands::cancel_processing,
             commands::check_silence,
             commands::create_prores,
+            commands::slate_video,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

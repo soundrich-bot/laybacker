@@ -127,6 +127,22 @@ pub fn process_pair(
         None
     };
 
+    // Slate: the frontend rendered the card to a base64 PNG at the video's
+    // frame size — write it to a temp file for ffmpeg, cleaned up after the run.
+    let slate_spec = match write_slate_image(pair) {
+        Ok(spec) => spec,
+        Err(e) => {
+            return ProcessingResult {
+                pair_id,
+                success: false,
+                output_path: None,
+                error: Some(e),
+                measured_lufs,
+                measured_true_peak,
+            };
+        }
+    };
+
     let args = if let Some(ref video) = pair.video {
         ffmpeg::build_mux_command(
             &video.path,
@@ -140,6 +156,7 @@ pub fn process_pair(
             video.duration_secs,
             pair.audio.duration_secs,
             video.frame_rate,
+            slate_spec.as_ref(),
         )
     } else {
         ffmpeg::build_audio_only_command(
@@ -152,26 +169,40 @@ pub fn process_pair(
         )
     };
 
-    // Freeze re-encodes the whole video, which can take a while — stream ffmpeg's
-    // progress so the per-file bar advances instead of sitting at 50%.
+    // Freeze and slate both re-encode the whole video, which can take a while —
+    // stream ffmpeg's progress so the per-file bar advances instead of sitting
+    // at 50%.
     let freeze_reencode = pair.video.as_ref().is_some_and(|v| {
         pair.length_fix == LengthFix::Freeze
             && pair.audio.duration_secs > v.duration_secs + 0.04
     });
+    let slate_secs = slate_spec.as_ref().map(|s| s.duration_secs).unwrap_or(0.0);
+    let reencode = freeze_reencode || slate_spec.is_some();
 
-    let run_result = if freeze_reencode {
-        let total = pair.audio.duration_secs;
+    let run_result = if reencode {
+        let base = if freeze_reencode {
+            pair.audio.duration_secs
+        } else {
+            pair.video.as_ref().map(|v| v.duration_secs).unwrap_or(0.0)
+        };
+        let total = base + slate_secs;
+        let label = if slate_spec.is_some() { "Rendering slate + programme" } else { "Freezing last frame to match audio" };
         ffmpeg::run_ffmpeg_with_progress(&args, total, |pct| {
             progress_callback(ProcessingProgress {
                 pair_id: pair_id.clone(),
                 state: "muxing".to_string(),
                 progress: 0.5 + pct * 0.45,
-                message: format!("Freezing last frame to match audio… {}%", (pct * 100.0) as u32),
+                message: format!("{}… {}%", label, (pct * 100.0) as u32),
             });
         })
     } else {
         ffmpeg::run_ffmpeg(&args)
     };
+
+    // The slate image was only needed for the run.
+    if let Some(ref spec) = slate_spec {
+        let _ = std::fs::remove_file(&spec.image_path);
+    }
 
     match run_result {
         Ok(()) => {
@@ -233,6 +264,32 @@ pub fn process_batch(
     results
 }
 
+/// Decode the pair's slate image (base64 JPEG from the frontend canvas) into a
+/// temp file and return the SlateSpec for the ffmpeg command. None when no
+/// slate applies. JPEG, not PNG — the bundled lean ffmpeg ships an mjpeg
+/// decoder but no PNG decoder.
+fn write_slate_image(pair: &MatchedPair) -> Result<Option<ffmpeg::SlateSpec>, String> {
+    if !pair.slate_enabled || pair.video.is_none() {
+        return Ok(None);
+    }
+    let Some(ref b64) = pair.slate_image else {
+        return Err("Slate is enabled but no slate image was rendered".to_string());
+    };
+    // Accept both a raw base64 payload and a data URL ("data:image/jpeg;base64,…").
+    let payload = b64.rsplit(',').next().unwrap_or(b64);
+    use base64::Engine as _;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(payload.trim())
+        .map_err(|e| format!("Slate image decode failed: {}", e))?;
+    let path = std::env::temp_dir().join(format!("laybacker_slate_{}.jpg", pair.id));
+    let path = path.to_string_lossy().to_string();
+    std::fs::write(&path, bytes).map_err(|e| format!("Slate image write failed: {}", e))?;
+    Ok(Some(ffmpeg::SlateSpec {
+        image_path: path,
+        duration_secs: pair.slate_duration_secs.max(0.5),
+    }))
+}
+
 fn resolve_output_path(pair: &MatchedPair, settings: &ExportSettings) -> String {
     let directory = if settings.use_audio_file_location {
         Path::new(&pair.audio.path)
@@ -269,6 +326,24 @@ fn resolve_output_path(pair: &MatchedPair, settings: &ExportSettings) -> String 
         }
     } else {
         pair.output_filename.clone()
+    };
+
+    // Safety net: an extension-less name (a rename like "test slate") would
+    // make ffmpeg fail — it picks the container from the extension. Append the
+    // right one for the job rather than erroring out.
+    let has_ext = Path::new(&filename)
+        .extension()
+        .map(|e| !e.is_empty())
+        .unwrap_or(false);
+    let filename = if !has_ext {
+        let ext = if pair.video.is_some() {
+            settings.output_extension().to_string()
+        } else {
+            pair.audio.extension.clone()
+        };
+        format!("{}.{}", filename.trim_end_matches('.'), ext)
+    } else {
+        filename
     };
 
     let candidate = format!("{}/{}", directory, filename);
@@ -354,6 +429,8 @@ mod tests {
             sample_rate: None,
             channel_count: None,
             frame_rate: None,
+            width: None,
+            height: None,
             thumbnail_data: None,
         }
     }
@@ -371,6 +448,8 @@ mod tests {
             sample_rate: None,
             channel_count: None,
             frame_rate: None,
+            width: None,
+            height: None,
             thumbnail_data: None,
         }
     }
@@ -390,6 +469,10 @@ mod tests {
             fade_ms: 5.0,
             clock_enabled: false,
             length_fix: LengthFix::default(),
+            slate_enabled: false,
+            slate_duration_secs: 5.0,
+            slate_text: String::new(),
+            slate_image: None,
         }
     }
 
@@ -403,6 +486,31 @@ mod tests {
         let settings = ExportSettings { use_audio_file_location: true, ..ExportSettings::default() };
         let path = resolve_output_path(&pair, &settings);
         assert_eq!(path, "/projects/Output.mov");
+    }
+
+    #[test]
+    fn test_output_path_appends_missing_extension() {
+        // A rename like "test slate" (no extension) must not reach ffmpeg
+        // bare — it picks the container from the extension and errors without
+        // one. Video jobs get the export container, audio jobs keep their own.
+        let video_pair = make_pair(
+            Some(make_video("Video", "/projects/Video.mov")),
+            make_audio("Audio", "/projects/Audio.wav"),
+            "test slate",
+        );
+        let settings = ExportSettings { use_audio_file_location: true, ..ExportSettings::default() };
+        assert_eq!(resolve_output_path(&video_pair, &settings), "/projects/test slate.mov");
+
+        // Trailing dot is tidied, not doubled.
+        let dot_pair = make_pair(
+            Some(make_video("Video", "/projects/Video.mov")),
+            make_audio("Audio", "/projects/Audio.wav"),
+            "ts.",
+        );
+        assert_eq!(resolve_output_path(&dot_pair, &settings), "/projects/ts.mov");
+
+        let audio_pair = make_pair(None, make_audio("Audio", "/projects/Audio.wav"), "ts");
+        assert_eq!(resolve_output_path(&audio_pair, &settings), "/projects/ts.wav");
     }
 
     #[test]

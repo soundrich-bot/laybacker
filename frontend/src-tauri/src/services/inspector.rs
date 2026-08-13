@@ -54,6 +54,8 @@ pub fn inspect_file(path: &str) -> Result<MediaFile, String> {
         sample_rate: probe.sample_rate,
         channel_count: probe.channels,
         frame_rate: probe.frame_rate,
+        width: probe.width,
+        height: probe.height,
         thumbnail_data,
     })
 }
@@ -105,6 +107,8 @@ struct ProbeResult {
     sample_rate: Option<f64>,
     channels: Option<u32>,
     frame_rate: Option<f64>,
+    width: Option<u32>,
+    height: Option<u32>,
 }
 
 /// Parse an ffprobe frame-rate field like "25/1" or "30000/1001" into fps.
@@ -156,6 +160,8 @@ fn probe_file(path: &str) -> Result<ProbeResult, String> {
     let mut sample_rate = None;
     let mut channels = None;
     let mut frame_rate = None;
+    let mut width = None;
+    let mut height = None;
 
     if let Some(streams) = streams {
         // Find the video stream for video files, audio stream for audio files
@@ -175,6 +181,12 @@ fn probe_file(path: &str) -> Result<ProbeResult, String> {
                             .or_else(|| {
                                 stream["r_frame_rate"].as_str().and_then(parse_frame_rate)
                             });
+                    }
+                    if width.is_none() {
+                        width = stream["width"].as_u64().map(|w| w as u32);
+                    }
+                    if height.is_none() {
+                        height = stream["height"].as_u64().map(|h| h as u32);
                     }
                 }
                 "audio" => {
@@ -205,6 +217,8 @@ fn probe_file(path: &str) -> Result<ProbeResult, String> {
         sample_rate,
         channels,
         frame_rate,
+        width,
+        height,
     })
 }
 

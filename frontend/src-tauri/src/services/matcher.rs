@@ -40,6 +40,10 @@ pub fn match_files(files: &[MediaFile]) -> Vec<MatchedPair> {
                     fade_ms: 5.0,
                     clock_enabled: false,
                     length_fix: LengthFix::default(),
+                    slate_enabled: false,
+                    slate_duration_secs: 5.0,
+                    slate_text: String::new(),
+                    slate_image: None,
                 }
             })
             .collect();
@@ -104,6 +108,10 @@ pub fn match_files(files: &[MediaFile]) -> Vec<MatchedPair> {
             fade_ms: 5.0,
             clock_enabled: false,
             length_fix: LengthFix::default(),
+            slate_enabled: false,
+            slate_duration_secs: 5.0,
+            slate_text: String::new(),
+            slate_image: None,
         });
     }
 
@@ -127,6 +135,8 @@ mod tests {
             sample_rate: None,
             channel_count: None,
             frame_rate: None,
+            width: None,
+            height: None,
             thumbnail_data: None,
         }
     }
@@ -144,6 +154,8 @@ mod tests {
             sample_rate: None,
             channel_count: None,
             frame_rate: None,
+            width: None,
+            height: None,
             thumbnail_data: None,
         }
     }

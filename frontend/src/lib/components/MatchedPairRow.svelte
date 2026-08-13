@@ -18,6 +18,7 @@
     onRemove,
     onReveal,
     onCreateProres,
+    onOpenSlate,
     timestampFormat = 'YYYYMMDD_HHmm',
   } = $props();
 
@@ -113,8 +114,21 @@
   }
 
   function saveName() {
-    if (editName.trim() && editName !== pair.outputFilename) {
-      onUpdateFilename(pair.id, editName.trim());
+    let name = editName.trim();
+    if (name && name !== pair.outputFilename) {
+      // The extension is sticky: if the edit dropped it (e.g. renamed to
+      // "test slate"), put the original one back — ffmpeg needs the extension
+      // to pick the container, and an extension-less output fails the export.
+      const prevDot = pair.outputFilename.lastIndexOf('.');
+      const prevExt = prevDot > 0 ? pair.outputFilename.slice(prevDot) : '';
+      if (prevExt && !name.toLowerCase().endsWith(prevExt.toLowerCase())) {
+        const dot = name.lastIndexOf('.');
+        // No extension at all, or a trailing dot — restore the original.
+        if (dot <= 0 || dot === name.length - 1 || name.length - dot > 5) {
+          name = name.replace(/\.+$/, '') + prevExt;
+        }
+      }
+      onUpdateFilename(pair.id, name);
     }
     editingName = false;
   }
@@ -323,6 +337,20 @@
           <span class="qc-badge sixfr-fail" title="6-frame check — sound found at the {qcResult.headHasAudio && qcResult.tailHasAudio ? 'head & tail' : qcResult.headHasAudio ? 'head' : 'tail'}; use 6 Fr to mute it">6Fr &#10007;</span>
         {/if}
       {/if}
+    {/if}
+
+    <!-- Slate (video pairs): opens the editor for this file's card -->
+    {#if !isAudioOnly && onOpenSlate}
+      <button
+        class="slate-toggle"
+        class:active={pair.slateEnabled}
+        onclick={() => onOpenSlate(pair.id)}
+        title={pair.slateEnabled
+          ? `Slate ON — ${pair.slateDurationSecs}s card at the head; click to edit or remove`
+          : "Add a text slate to the front of this video"}
+      >
+        SLATE
+      </button>
     {/if}
 
     <!-- Norm -->
@@ -979,6 +1007,37 @@
     color: var(--bg-dark);
     background: var(--neon-yellow);
     box-shadow: var(--cap-shadow), 0 0 8px rgba(237, 255, 33, 0.3);
+  }
+
+  /* Slate chip — same key-cap as NORM, cyan when a slate is applied */
+  .slate-toggle {
+    padding: 4px 10px;
+    border-radius: var(--radius-sm);
+    border: 2px solid var(--border-accent);
+    background: var(--cap-face);
+    color: var(--text-muted);
+    font-family: var(--font-display);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: var(--cap-shadow);
+    flex-shrink: 0;
+  }
+  .slate-toggle:hover {
+    border-color: var(--neon-cyan);
+    color: var(--text-secondary);
+    box-shadow: var(--cap-shadow-hover);
+  }
+  .slate-toggle:active {
+    transform: translateY(1px);
+    box-shadow: var(--cap-shadow-pressed);
+  }
+  .slate-toggle.active {
+    border-color: var(--neon-cyan);
+    color: var(--bg-dark);
+    background: var(--neon-cyan);
+    box-shadow: var(--cap-shadow), 0 0 8px rgba(8, 247, 254, 0.3);
   }
 
   .norm-settings-btn {

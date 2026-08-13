@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { renderSlateImage } from '../slate.js';
 
 // Reactive state using Svelte 5 runes
 let files = $state([]);
@@ -17,6 +18,118 @@ let _lengthResolve = null;
 
 // How much longer (seconds) the audio must run before we ask about it.
 const LENGTH_MISMATCH_TOLERANCE = 0.5;
+
+// ── Slate ───────────────────────────────────────────────────────────────────
+// A user-written text card prepended to the video for a chosen duration,
+// silent underneath, audio delayed to match. One batch text with per-file
+// tweaks. The card is drawn to a canvas at the video's exact frame size and
+// sent to the backend as a base64 JPEG at export.
+let slateEditor = $state(null); // { scope: 'batch' | 'solo' | <pairId>, text, duration, video? } | null
+let batchSlate = $state({ text: '', duration: 5 });
+// Solo-video slating (video dropped without audio): render state per video path.
+let soloSlateStatus = $state({}); // { [videoPath]: { state: 'working'|'done'|'error', pct, output? } }
+
+function openSlateEditor(scope) {
+  if (scope === 'batch') {
+    slateEditor = { scope, text: batchSlate.text, duration: batchSlate.duration };
+    return;
+  }
+  // A solo video (no pair) — the object form carries the MediaFile itself.
+  if (typeof scope === 'object' && scope?.path) {
+    slateEditor = {
+      scope: 'solo',
+      video: scope,
+      text: batchSlate.text,
+      duration: batchSlate.duration,
+    };
+    return;
+  }
+  const p = matchedPairs.find(p => p.id === scope);
+  if (!p) return;
+  slateEditor = {
+    scope,
+    // A pair with no text of its own starts from the batch slate.
+    text: p.slateText || batchSlate.text,
+    duration: p.slateEnabled ? p.slateDurationSecs : batchSlate.duration,
+  };
+}
+
+function closeSlateEditor() {
+  slateEditor = null;
+}
+
+// Solo slate: render the card and run the slate job immediately — there's no
+// pair or export step to defer to. Keeps the video's own soundtrack.
+async function applySoloSlate(video, text, dur) {
+  const path = video.path;
+  soloSlateStatus = { ...soloSlateStatus, [path]: { state: 'working', pct: 0 } };
+  try {
+    const image = renderSlateImage(text, video.width, video.height);
+    const output = await invoke('slate_video', {
+      videoPath: path,
+      videoDurationSecs: video.durationSecs,
+      slateImage: image,
+      slateDurationSecs: dur,
+      frameRate: video.frameRate ?? null,
+      // The probe reports audio-stream fields for videos with a soundtrack.
+      hasAudio: video.channelCount != null || video.sampleRate != null,
+    });
+    soloSlateStatus = { ...soloSlateStatus, [path]: { state: 'done', pct: 100, output } };
+    playCompletionSound();
+  } catch (e) {
+    errors = [...errors, `Slate failed: ${e}`];
+    soloSlateStatus = { ...soloSlateStatus, [path]: { state: 'error', pct: 0 } };
+  }
+}
+
+// Live encode progress from the backend (slate-progress events).
+function updateSoloSlateProgress(payload) {
+  const cur = soloSlateStatus[payload?.videoPath];
+  if (!cur || cur.state !== 'working') return;
+  soloSlateStatus = {
+    ...soloSlateStatus,
+    [payload.videoPath]: { ...cur, pct: Math.min(100, Math.round((payload.progress ?? 0) * 100)) },
+  };
+}
+
+// Apply the editor: batch scope stamps every video pair, a pair scope just one,
+// solo scope renders straight away.
+function applySlate(text, duration) {
+  if (!slateEditor) return;
+  const scope = slateEditor.scope;
+  const dur = Math.max(0.5, duration || 5);
+  if (scope === 'solo') {
+    const video = slateEditor.video;
+    batchSlate = { text, duration: dur }; // remember for the next slate
+    slateEditor = null;
+    applySoloSlate(video, text, dur);
+    return;
+  }
+  if (scope === 'batch') {
+    batchSlate = { text, duration: dur };
+    matchedPairs = matchedPairs.map(p =>
+      p.video ? { ...p, slateEnabled: true, slateText: text, slateDurationSecs: dur } : p
+    );
+  } else {
+    matchedPairs = matchedPairs.map(p =>
+      p.id === scope ? { ...p, slateEnabled: true, slateText: text, slateDurationSecs: dur } : p
+    );
+  }
+  slateEditor = null;
+}
+
+// Remove the slate — from every video pair (batch scope) or one pair.
+function removeSlate() {
+  if (!slateEditor) return;
+  const scope = slateEditor.scope;
+  matchedPairs = matchedPairs.map(p =>
+    (scope === 'batch' ? !!p.video : p.id === scope)
+      ? { ...p, slateEnabled: false, slateImage: null }
+      : p
+  );
+  slateEditor = null;
+}
+
 
 // ── Batch QC ────────────────────────────────────────────────────────────────
 // One spec for the whole batch: a loudness value (which is ALSO every pair's
@@ -257,6 +370,19 @@ function getOutputExtension() {
   return exportSettings.audioFormat === 'original' ? 'mov' : 'mp4';
 }
 
+// Format toggled (Original/H.264, Original/AAC): the container extension must
+// follow, but the NAME is the user's — they may have edited it already, so
+// don't regenerate it, just swap the extension on video outputs.
+function updateOutputExtensions() {
+  const ext = getOutputExtension();
+  matchedPairs = matchedPairs.map(p => {
+    if (!p.video || !p.outputFilename) return p;
+    const dot = p.outputFilename.lastIndexOf('.');
+    const stem = dot > 0 ? p.outputFilename.slice(0, dot) : p.outputFilename;
+    return { ...p, outputFilename: `${stem}.${ext}` };
+  });
+}
+
 function getVideos() {
   return files.filter(f => f.mediaType === 'video');
 }
@@ -441,6 +567,14 @@ async function processAll() {
     const choice = await askLengthFix(p);
     if (choice === null) return; // user cancelled — export nothing
   }
+
+  // Render each slate card at its video's exact frame size (the backend can't
+  // draw text — the bundled ffmpeg has no freetype).
+  matchedPairs = matchedPairs.map(p =>
+    p.video && p.slateEnabled
+      ? { ...p, slateImage: renderSlateImage(p.slateText, p.video.width, p.video.height) }
+      : p
+  );
 
   isProcessing = true;
   processingResults = [];
@@ -628,6 +762,10 @@ function clearAll() {
   clockChecks = {};
   qcProgress = { done: 0, total: 0 };
   clockProgress = { done: 0, total: 0 };
+  // The slate belongs to the batch that was just cleared.
+  batchSlate = { text: '', duration: 5 };
+  slateEditor = null;
+  soloSlateStatus = {};
 }
 
 function dismissError(index) {
@@ -668,6 +806,7 @@ export function getAppState() {
     get namingSettings() { return namingSettings; },
     set namingSettings(v) { namingSettings = v; },
     getOutputExtension,
+    updateOutputExtensions,
     getVideos,
     getAudios,
     checkFfmpeg,
@@ -680,6 +819,13 @@ export function getAppState() {
     get lengthPrompt() { return lengthPrompt; },
     resolveLengthFix,
     cancelLengthFix,
+    get slateEditor() { return slateEditor; },
+    get soloSlateStatus() { return soloSlateStatus; },
+    openSlateEditor,
+    closeSlateEditor,
+    applySlate,
+    removeSlate,
+    updateSoloSlateProgress,
     updateProgress,
     updatePairNormalization,
     updatePairCompliance,

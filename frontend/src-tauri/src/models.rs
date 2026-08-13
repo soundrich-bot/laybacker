@@ -25,6 +25,12 @@ pub struct MediaFile {
     /// to talk about frames in the UI. None for audio, or if ffprobe can't tell.
     #[serde(default)]
     pub frame_rate: Option<f64>,
+    /// Video frame size in pixels, when known — the slate image is rendered at
+    /// exactly this size so no scaling happens on the concat.
+    #[serde(default)]
+    pub width: Option<u32>,
+    #[serde(default)]
+    pub height: Option<u32>,
     pub thumbnail_data: Option<String>,
 }
 
@@ -56,6 +62,23 @@ pub struct MatchedPair {
     /// blocking prompt at export time; defaults to a plain cut (today's behaviour).
     #[serde(default)]
     pub length_fix: LengthFix,
+    /// Slate: user-written text rendered as a card at the head of the video for
+    /// `slate_duration_secs`, silent underneath, audio delayed to match. The
+    /// frontend renders the text to a PNG (base64) at the video's exact frame
+    /// size; the backend never draws text (the bundled ffmpeg has no freetype).
+    #[serde(default)]
+    pub slate_enabled: bool,
+    #[serde(default = "default_slate_duration")]
+    pub slate_duration_secs: f64,
+    #[serde(default)]
+    pub slate_text: String,
+    /// Base64-encoded PNG of the rendered slate, set by the frontend at export.
+    #[serde(default)]
+    pub slate_image: Option<String>,
+}
+
+fn default_slate_duration() -> f64 {
+    5.0
 }
 
 /// How to reconcile an audio file that runs longer than its video.
