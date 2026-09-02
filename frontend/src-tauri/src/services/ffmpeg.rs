@@ -109,6 +109,17 @@ pub struct SlateSpec {
     pub duration_secs: f64,
 }
 
+/// Stamp the slate duration into the container so a re-dropped slated file
+/// knows where its programme audio belongs (the inspector reads it back).
+/// mov/mp4 only write custom tags with `use_metadata_tags`.
+fn slate_metadata_args(slate: &SlateSpec) -> Vec<String> {
+    vec![
+        "-movflags".to_string(), "use_metadata_tags".to_string(),
+        "-metadata".to_string(),
+        format!("{}={:.3}", crate::services::inspector::SLATE_TAG, slate.duration_secs),
+    ]
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn build_mux_command(
     video_path: &str,
@@ -153,7 +164,7 @@ pub fn build_mux_command(
     // filter too — when both apply, the freeze tpad folds into the same graph
     // (ffmpeg forbids mixing -vf with -filter_complex).
     let freeze_pad = (audio_duration_secs - video_duration_secs).max(0.0);
-    if slate.is_some() {
+    if let Some(s) = slate {
         let main_chain = if freeze {
             format!(
                 "tpad=stop_mode=clone:stop_duration={:.4},format=yuv420p,setsar=1",
@@ -170,6 +181,7 @@ pub fn build_mux_command(
             ),
         ]);
         args.extend(["-map".to_string(), "[v]".to_string()]);
+        args.extend(slate_metadata_args(s));
     } else {
         args.extend(["-map".to_string(), "0:v:0".to_string()]);
         // Freeze: pad the video by cloning its final frame to match the audio.
@@ -198,12 +210,6 @@ pub fn build_mux_command(
     // Audio filter chain
     let mut audio_filters: Vec<String> = Vec::new();
 
-    // Timecode offset (delay audio start)
-    if timecode_offset_secs > 0.0 {
-        let delay_ms = (timecode_offset_secs * 1000.0) as i64;
-        audio_filters.push(format!("adelay={}|{}", delay_ms, delay_ms));
-    }
-
     // Normalization gain (computed from the ebur128 measurement upstream)
     if let Some(gain) = audio_gain_db {
         if gain.abs() > 0.001 {
@@ -229,6 +235,14 @@ pub fn build_mux_command(
     // compliance/fade filters above time against the original audio timeline.
     if let Some(s) = slate {
         let delay_ms = (s.duration_secs * 1000.0).round() as i64;
+        audio_filters.push(format!("adelay={}|{}", delay_ms, delay_ms));
+    }
+
+    // Audio start offset (e.g. the picture carries its own slate, so the
+    // programme sound belongs later). Also LAST, for the same reason: every
+    // filter above is timed against the original audio, not the shifted one.
+    if timecode_offset_secs > 0.0 {
+        let delay_ms = (timecode_offset_secs * 1000.0).round() as i64;
         audio_filters.push(format!("adelay={}|{}", delay_ms, delay_ms));
     }
 
@@ -389,8 +403,9 @@ pub fn build_solo_slate_command(
         "-crf".to_string(), "18".to_string(),
         "-preset".to_string(), "medium".to_string(),
         "-pix_fmt".to_string(), "yuv420p".to_string(),
-        output_path.to_string(),
     ]);
+    args.extend(slate_metadata_args(slate));
+    args.push(output_path.to_string());
     args
 }
 
@@ -929,6 +944,47 @@ mod tests {
         let fc_idx = args.iter().position(|a| a == "-filter_complex").unwrap();
         assert!(args[fc_idx + 1].contains("tpad=stop_mode=clone:stop_duration=10.0000"), "got {}", args[fc_idx + 1]);
         assert!(!args.contains(&"-shortest".to_string()));
+    }
+
+    #[test]
+    fn test_slate_renders_stamp_the_duration_tag() {
+        // Both slate paths must write the container tag the inspector reads
+        // back, so a re-dropped slated file knows its programme offset.
+        let slate = SlateSpec { image_path: "/tmp/slate.png".into(), duration_secs: 4.5 };
+        let mux = build_mux_command(
+            "/video.mov", "/audio.wav", "/out.mov",
+            &default_settings(), None, 0.0, None,
+            LengthFix::Cut, 30.0, 30.0, Some(25.0), Some(&slate),
+        );
+        let solo = build_solo_slate_command("/video.mov", "/out.mov", &slate, Some(25.0), true);
+        for args in [&mux, &solo] {
+            assert!(args.contains(&"use_metadata_tags".to_string()));
+            assert!(args.contains(&"laybacker_slate_secs=4.500".to_string()), "got {:?}", args);
+        }
+        // No slate → no tag.
+        let plain = build_mux_command(
+            "/video.mov", "/audio.wav", "/out.mov",
+            &default_settings(), None, 0.0, None,
+            LengthFix::Cut, 30.0, 30.0, Some(25.0), None,
+        );
+        assert!(!plain.iter().any(|a| a.contains("laybacker_slate_secs")));
+    }
+
+    #[test]
+    fn test_timecode_offset_is_applied_after_compliance() {
+        // The offset must be the LAST audio filter: compliance fades are timed
+        // against the original audio, so shifting first would land them early.
+        let args = build_mux_command(
+            "/video.mov", "/audio.wav", "/out.mov",
+            &default_settings(), None, 2.0,
+            Some((30.0, 240.0, 5.0)),
+            LengthFix::Cut, 32.0, 30.0, Some(25.0), None,
+        );
+        let af_idx = args.iter().position(|a| a == "-af").unwrap();
+        let chain = &args[af_idx + 1];
+        let fade = chain.find("afade=t=out").expect("compliance fade present");
+        let delay = chain.find("adelay=2000|2000").expect("offset present");
+        assert!(delay > fade, "adelay must come after the compliance fade: {chain}");
     }
 
     // ── build_audio_only_command ──

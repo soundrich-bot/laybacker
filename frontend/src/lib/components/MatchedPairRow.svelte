@@ -222,11 +222,22 @@
       : pair.lengthFix === 'freeze' ? 'The last video frame will be held to keep all the sound.'
       : 'The audio will be cut at the end of the video.'
   );
+  // Audio shorter than video (a slated/headed picture): reflect where the user
+  // put the sound once they've been asked at layback.
+  let audioStartLabel = $derived(
+    !pair.startChosen
+      ? (pair.video?.slateSecs != null
+          ? `This picture carries a ${pair.video.slateSecs.toFixed(1)}s Laybacker slate. You will be asked where the sound belongs on layback.`
+          : 'You will be asked where the sound belongs on layback.')
+      : pair.audioStart === 'end'
+        ? 'The sound is lined up with the end of the picture.'
+        : 'The sound starts on the first frame; the end of the picture will be silent.'
+  );
   let durationWarning = $derived(
     audioLonger
       ? `Audio is ${Math.abs(durationDiff).toFixed(1)}s longer than video. ${lengthFixLabel}`
       : audioShorter
-        ? `Audio is ${Math.abs(durationDiff).toFixed(1)}s shorter than video — end of video will be silent`
+        ? `Audio is ${Math.abs(durationDiff).toFixed(1)}s shorter than video. ${audioStartLabel}`
         : null
   );
 </script>

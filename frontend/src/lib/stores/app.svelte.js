@@ -553,6 +553,47 @@ function cancelLengthFix() {
   if (r) r(null);
 }
 
+// ── Audio shorter than video: where does the sound belong? ──────────────────
+// A slated picture is longer than its programme audio by exactly the slate
+// length, so "line the sound up with the end" is correct by construction — no
+// picture analysis needed. If Laybacker made the slate, the file carries a tag
+// with the exact length and the prompt pre-selects END.
+let startPrompt = $state(null); // { pairId, filename, shortBy, slateSecs } | null
+let _startResolve = null;
+
+function askAudioStart(pair) {
+  startPrompt = {
+    pairId: pair.id,
+    filename: pair.audio.filename,
+    shortBy: pair.video.durationSecs - pair.audio.durationSecs,
+    slateSecs: pair.video.slateSecs ?? null,
+  };
+  return new Promise((resolve) => { _startResolve = resolve; });
+}
+
+// choice: 'start' (sound from the first frame) | 'end' (sound ends with picture)
+function resolveAudioStart(choice) {
+  const id = startPrompt?.pairId;
+  if (id) {
+    matchedPairs = matchedPairs.map(p => {
+      if (p.id !== id) return p;
+      const offset = choice === 'end'
+        ? Math.max(0, p.video.durationSecs - p.audio.durationSecs)
+        : 0;
+      return { ...p, timecodeOffsetSecs: offset, audioStart: choice, startChosen: true };
+    });
+  }
+  startPrompt = null;
+  const r = _startResolve; _startResolve = null;
+  if (r) r(choice);
+}
+
+function cancelAudioStart() {
+  startPrompt = null;
+  const r = _startResolve; _startResolve = null;
+  if (r) r(null);
+}
+
 async function processAll() {
   if (matchedPairs.length === 0) return;
 
@@ -566,6 +607,18 @@ async function processAll() {
   for (const p of overLong) {
     const choice = await askLengthFix(p);
     if (choice === null) return; // user cancelled — export nothing
+  }
+
+  // …and for every pair whose audio is SHORTER than its video (a slated or
+  // headed picture), ask where the sound belongs.
+  const overShort = matchedPairs.filter(p =>
+    p.video &&
+    !p.startChosen &&
+    (p.video.durationSecs - p.audio.durationSecs) > LENGTH_MISMATCH_TOLERANCE
+  );
+  for (const p of overShort) {
+    const choice = await askAudioStart(p);
+    if (choice === null) return;
   }
 
   // Render each slate card at its video's exact frame size (the backend can't
@@ -819,6 +872,9 @@ export function getAppState() {
     get lengthPrompt() { return lengthPrompt; },
     resolveLengthFix,
     cancelLengthFix,
+    get startPrompt() { return startPrompt; },
+    resolveAudioStart,
+    cancelAudioStart,
     get slateEditor() { return slateEditor; },
     get soloSlateStatus() { return soloSlateStatus; },
     openSlateEditor,

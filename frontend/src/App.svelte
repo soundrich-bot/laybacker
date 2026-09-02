@@ -13,6 +13,7 @@
   import UpdateBanner from './lib/components/UpdateBanner.svelte';
   import LengthFixModal from './lib/components/LengthFixModal.svelte';
   import SlateEditor from './lib/components/SlateEditor.svelte';
+  import AudioStartModal from './lib/components/AudioStartModal.svelte';
 
   const app = getAppState();
   let isDraggingOver = $state(false);
@@ -160,6 +161,14 @@
     prompt={app.lengthPrompt}
     onChoose={app.resolveLengthFix}
     onCancel={app.cancelLengthFix}
+  />
+{/if}
+
+{#if app.startPrompt}
+  <AudioStartModal
+    prompt={app.startPrompt}
+    onChoose={app.resolveAudioStart}
+    onCancel={app.cancelAudioStart}
   />
 {/if}
 

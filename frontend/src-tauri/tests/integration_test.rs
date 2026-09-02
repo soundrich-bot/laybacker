@@ -60,6 +60,7 @@ fn make_audio_pair(fixture_name: &str, output_filename: &str, norm_enabled: bool
             frame_rate: None,
             width: None,
             height: None,
+            slate_secs: None,
             thumbnail_data: None,        },
         output_filename: output_filename.to_string(),
         normalization_enabled: norm_enabled,
@@ -169,6 +170,8 @@ fn test_slate_prepends_card_and_delays_audio() {
         "expected ~5s (3s slate + 2s programme), got {:.2}s",
         out.duration_secs
     );
+    // The render stamps its slate length into the container; a re-drop reads it.
+    assert_eq!(out.slate_secs, Some(3.0), "slated output should carry the slate tag");
 
     cleanup(&output);
     cleanup(&video_path);
@@ -205,6 +208,7 @@ fn test_solo_slate_keeps_own_audio() {
     );
     // The soundtrack must survive the slate (probe reports audio fields).
     assert!(out.channel_count.is_some(), "output lost its audio track");
+    assert_eq!(out.slate_secs, Some(3.0), "solo slated output should carry the slate tag");
 
     cleanup(&output);
     cleanup(&video_path);
@@ -365,6 +369,7 @@ fn test_reprocessing_generated_output_does_not_fail() {
             frame_rate: None,
             width: None,
             height: None,
+            slate_secs: None,
             thumbnail_data: None,        },
         output_filename: src_name.into(), // namer regenerates a name identical to the source
         normalization_enabled: true,

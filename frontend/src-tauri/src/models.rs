@@ -31,6 +31,11 @@ pub struct MediaFile {
     pub width: Option<u32>,
     #[serde(default)]
     pub height: Option<u32>,
+    /// A slate Laybacker itself rendered onto this file, read back from the
+    /// container tag it wrote (`laybacker_slate_secs`). Lets a re-dropped
+    /// slated picture know where its programme audio belongs.
+    #[serde(default)]
+    pub slate_secs: Option<f64>,
     pub thumbnail_data: Option<String>,
 }
 

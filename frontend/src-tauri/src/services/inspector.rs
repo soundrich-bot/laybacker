@@ -56,6 +56,7 @@ pub fn inspect_file(path: &str) -> Result<MediaFile, String> {
         frame_rate: probe.frame_rate,
         width: probe.width,
         height: probe.height,
+        slate_secs: probe.slate_secs,
         thumbnail_data,
     })
 }
@@ -109,7 +110,11 @@ struct ProbeResult {
     frame_rate: Option<f64>,
     width: Option<u32>,
     height: Option<u32>,
+    slate_secs: Option<f64>,
 }
+
+/// The container tag Laybacker writes when it renders a slate onto a file.
+pub const SLATE_TAG: &str = "laybacker_slate_secs";
 
 /// Parse an ffprobe frame-rate field like "25/1" or "30000/1001" into fps.
 fn parse_frame_rate(s: &str) -> Option<f64> {
@@ -152,6 +157,12 @@ fn probe_file(path: &str) -> Result<ProbeResult, String> {
         .as_str()
         .and_then(|d| d.parse::<f64>().ok())
         .unwrap_or(0.0);
+
+    // A slate Laybacker rendered onto this file earlier (see SLATE_TAG).
+    let slate_secs = json["format"]["tags"][SLATE_TAG]
+        .as_str()
+        .and_then(|s| s.trim().parse::<f64>().ok())
+        .filter(|v| *v > 0.0);
 
     // Get codec info from first relevant stream
     let streams = json["streams"].as_array();
@@ -219,6 +230,7 @@ fn probe_file(path: &str) -> Result<ProbeResult, String> {
         frame_rate,
         width,
         height,
+        slate_secs,
     })
 }
 

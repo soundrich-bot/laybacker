@@ -137,6 +137,7 @@ mod tests {
             frame_rate: None,
             width: None,
             height: None,
+            slate_secs: None,
             thumbnail_data: None,
         }
     }
@@ -156,6 +157,7 @@ mod tests {
             frame_rate: None,
             width: None,
             height: None,
+            slate_secs: None,
             thumbnail_data: None,
         }
     }
