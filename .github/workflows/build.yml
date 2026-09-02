@@ -157,7 +157,7 @@ jobs:
       - name: Scan installers on VirusTotal
         if: ${{ env.VT_API_KEY != '' }}
         continue-on-error: true   # a VT hiccup must never fail/cancel a release
-        uses: crazy-max/ghaction-virustotal@d34968c958ae283fe976efed637081b9f9dcf74f # v4
+        uses: crazy-max/ghaction-virustotal@936d8c5c00afe97d3d9a1af26d017cfdf26800a2 # v5.0.0
         with:
           vt_api_key: ${{ env.VT_API_KEY }}
           update_release_body: false   # the finalize job sets notes race-free
