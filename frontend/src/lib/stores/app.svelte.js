@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
-import { renderSlateImage } from '../slate.js';
+import { renderSlateImage, loadImage, DEFAULT_SLATE_STYLE } from '../slate.js';
+import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { nameForRule } from '../naming.js';
 
 // Small persisted preferences (localStorage in the webview). Guarded — a
@@ -16,7 +17,10 @@ function savePref(key, value) {
 
 // Flags the frontend owns on a pair. The Rust namer round-trip drops unknown
 // fields, so these are merged back after every generate_names call.
-const FRONTEND_FLAGS = ['nameCustomized', 'lengthFixChosen', 'audioStart', 'startChosen'];
+const FRONTEND_FLAGS = [
+  'nameCustomized', 'lengthFixChosen', 'audioStart', 'startChosen',
+  'slateFont', 'slateSize', 'slateBgId', 'slateFit', 'slateScale', 'slateAnchor', 'slateTextPos',
+];
 function keepFrontendFlags(fresh, previous) {
   const byId = new Map(previous.map(p => [p.id, p]));
   return fresh.map(p => {
@@ -52,32 +56,77 @@ const LENGTH_MISMATCH_TOLERANCE = 0.5;
 // tweaks. The card is drawn to a canvas at the video's exact frame size and
 // sent to the backend as a base64 JPEG at export.
 let slateEditor = $state(null); // { scope: 'batch' | 'solo' | <pairId>, text, duration, video? } | null
-let batchSlate = $state({ text: '', duration: 5 });
+let batchSlate = $state({ text: '', duration: 5, ...DEFAULT_SLATE_STYLE });
 // Solo-video slating (video dropped without audio): render state per video path.
 let soloSlateStatus = $state({}); // { [videoPath]: { state: 'working'|'done'|'error', pct, output? } }
+// User-supplied slate background images, kept out of the pair objects (which
+// cross the IPC boundary on every call) and referenced by id.
+let slateAssets = $state({}); // { [id]: { dataUrl, img: HTMLImageElement, name } }
+
+// Style for a pair's slate: its own choices, else the batch's.
+function slateStyleFor(p) {
+  const bgId = p.slateBgId ?? batchSlate.bgId;
+  return {
+    font: p.slateFont ?? batchSlate.font,
+    size: p.slateSize ?? batchSlate.size,
+    bgId,
+    bgImage: bgId ? (slateAssets[bgId]?.img ?? null) : null,
+    fit: p.slateFit ?? batchSlate.fit,
+    scale: p.slateScale ?? batchSlate.scale,
+    anchor: p.slateAnchor ?? batchSlate.anchor,
+    textPos: p.slateTextPos ?? batchSlate.textPos,
+    black: p.slateEnabled ? (p.slateBlackSecs ?? 0) : batchSlate.black,
+  };
+}
+
+// Pick an image from disk for a slate background. Returns its asset id, or
+// null if the user cancelled. Read via the backend as a data URL (see
+// read_image_data_url) so drawing it never taints the canvas.
+async function pickSlateImage() {
+  const path = await openDialog({
+    multiple: false,
+    title: 'Choose a slate image',
+    filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'] }],
+  });
+  if (!path) return null;
+  try {
+    const dataUrl = await invoke('read_image_data_url', { path });
+    const img = await loadImage(dataUrl);
+    const id = crypto.randomUUID();
+    slateAssets = { ...slateAssets, [id]: { dataUrl, img, name: String(path).split('/').pop() } };
+    return id;
+  } catch (e) {
+    errors = [...errors, `Slate image: ${e}`];
+    return null;
+  }
+}
 
 function openSlateEditor(scope) {
+  const base = {
+    font: batchSlate.font, size: batchSlate.size, bgId: batchSlate.bgId,
+    fit: batchSlate.fit, scale: batchSlate.scale, anchor: batchSlate.anchor, textPos: batchSlate.textPos,
+    black: batchSlate.black,
+  };
   if (scope === 'batch') {
-    slateEditor = { scope, text: batchSlate.text, duration: batchSlate.duration };
+    slateEditor = { scope, text: batchSlate.text, duration: batchSlate.duration, ...base };
     return;
   }
   // A solo video (no pair) — the object form carries the MediaFile itself.
   if (typeof scope === 'object' && scope?.path) {
-    slateEditor = {
-      scope: 'solo',
-      video: scope,
-      text: batchSlate.text,
-      duration: batchSlate.duration,
-    };
+    slateEditor = { scope: 'solo', video: scope, text: batchSlate.text, duration: batchSlate.duration, ...base };
     return;
   }
   const p = matchedPairs.find(p => p.id === scope);
   if (!p) return;
+  const own = slateStyleFor(p);
   slateEditor = {
     scope,
     // A pair with no text of its own starts from the batch slate.
     text: p.slateText || batchSlate.text,
     duration: p.slateEnabled ? p.slateDurationSecs : batchSlate.duration,
+    font: own.font, size: own.size, bgId: own.bgId,
+    fit: own.fit, scale: own.scale, anchor: own.anchor, textPos: own.textPos,
+    black: own.black,
   };
 }
 
@@ -87,16 +136,20 @@ function closeSlateEditor() {
 
 // Solo slate: render the card and run the slate job immediately — there's no
 // pair or export step to defer to. Keeps the video's own soundtrack.
-async function applySoloSlate(video, text, dur) {
+async function applySoloSlate(video, text, dur, style = {}) {
   const path = video.path;
   soloSlateStatus = { ...soloSlateStatus, [path]: { state: 'working', pct: 0 } };
   try {
-    const image = renderSlateImage(text, video.width, video.height);
+    const image = renderSlateImage(text, video.width, video.height, {
+      ...style,
+      bgImage: style.bgId ? (slateAssets[style.bgId]?.img ?? null) : null,
+    });
     const output = await invoke('slate_video', {
       videoPath: path,
       videoDurationSecs: video.durationSecs,
       slateImage: image,
       slateDurationSecs: dur,
+      slateBlackSecs: Math.max(0, style.black ?? 0),
       frameRate: video.frameRate ?? null,
       // The probe reports audio-stream fields for videos with a soundtrack.
       hasAudio: video.channelCount != null || video.sampleRate != null,
@@ -121,26 +174,31 @@ function updateSoloSlateProgress(payload) {
 
 // Apply the editor: batch scope stamps every video pair, a pair scope just one,
 // solo scope renders straight away.
-function applySlate(text, duration) {
+// `style`: { font, size, bgId } from the editor.
+function applySlate(text, duration, style = {}) {
   if (!slateEditor) return;
   const scope = slateEditor.scope;
   const dur = Math.max(0.5, duration || 5);
+  const st = {
+    font: style.font ?? 'helvetica', size: style.size ?? 'm', bgId: style.bgId ?? null,
+    fit: style.fit ?? 'fit', scale: style.scale ?? 0.7, anchor: style.anchor ?? 'c', textPos: style.textPos ?? 'middle',
+    black: Math.max(0, style.black ?? 0),
+  };
+  const stamp = { slateEnabled: true, slateText: text, slateDurationSecs: dur, slateBlackSecs: st.black,
+                  slateFont: st.font, slateSize: st.size, slateBgId: st.bgId,
+                  slateFit: st.fit, slateScale: st.scale, slateAnchor: st.anchor, slateTextPos: st.textPos };
   if (scope === 'solo') {
     const video = slateEditor.video;
-    batchSlate = { text, duration: dur }; // remember for the next slate
+    batchSlate = { text, duration: dur, ...st }; // remember for the next slate
     slateEditor = null;
-    applySoloSlate(video, text, dur);
+    applySoloSlate(video, text, dur, st);
     return;
   }
   if (scope === 'batch') {
-    batchSlate = { text, duration: dur };
-    matchedPairs = matchedPairs.map(p =>
-      p.video ? { ...p, slateEnabled: true, slateText: text, slateDurationSecs: dur } : p
-    );
+    batchSlate = { text, duration: dur, ...st };
+    matchedPairs = matchedPairs.map(p => (p.video ? { ...p, ...stamp } : p));
   } else {
-    matchedPairs = matchedPairs.map(p =>
-      p.id === scope ? { ...p, slateEnabled: true, slateText: text, slateDurationSecs: dur } : p
-    );
+    matchedPairs = matchedPairs.map(p => (p.id === scope ? { ...p, ...stamp } : p));
   }
   slateEditor = null;
 }
@@ -676,7 +734,7 @@ async function processAll() {
   // draw text — the bundled ffmpeg has no freetype).
   matchedPairs = matchedPairs.map(p =>
     p.video && p.slateEnabled
-      ? { ...p, slateImage: renderSlateImage(p.slateText, p.video.width, p.video.height) }
+      ? { ...p, slateImage: renderSlateImage(p.slateText, p.video.width, p.video.height, slateStyleFor(p)) }
       : p
   );
 
@@ -922,7 +980,7 @@ function clearAll() {
   qcProgress = { done: 0, total: 0 };
   clockProgress = { done: 0, total: 0 };
   // The slate belongs to the batch that was just cleared.
-  batchSlate = { text: '', duration: 5 };
+  batchSlate = { text: '', duration: 5, ...DEFAULT_SLATE_STYLE };
   slateEditor = null;
   soloSlateStatus = {};
   // The naming rule was for the batch that was just cleared — back to the default.
@@ -995,6 +1053,8 @@ export function getAppState() {
     applySlate,
     removeSlate,
     updateSoloSlateProgress,
+    get slateAssets() { return slateAssets; },
+    pickSlateImage,
     updateProgress,
     updatePairNormalization,
     updatePairCompliance,

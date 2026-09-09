@@ -77,9 +77,13 @@ pub struct MatchedPair {
     pub slate_duration_secs: f64,
     #[serde(default)]
     pub slate_text: String,
-    /// Base64-encoded PNG of the rendered slate, set by the frontend at export.
+    /// Base64-encoded JPEG of the rendered slate, set by the frontend at export.
     #[serde(default)]
     pub slate_image: Option<String>,
+    /// Black (silent) run between the slate card and the first frame of
+    /// programme — e.g. a 5s preroll of 4s slate + 1s black.
+    #[serde(default)]
+    pub slate_black_secs: f64,
 }
 
 fn default_slate_duration() -> f64 {

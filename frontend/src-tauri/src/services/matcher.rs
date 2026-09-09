@@ -44,6 +44,7 @@ pub fn match_files(files: &[MediaFile]) -> Vec<MatchedPair> {
                     slate_duration_secs: 5.0,
                     slate_text: String::new(),
                     slate_image: None,
+                    slate_black_secs: 0.0,
                 }
             })
             .collect();
@@ -112,6 +113,7 @@ pub fn match_files(files: &[MediaFile]) -> Vec<MatchedPair> {
             slate_duration_secs: 5.0,
             slate_text: String::new(),
             slate_image: None,
+            slate_black_secs: 0.0,
         });
     }
 

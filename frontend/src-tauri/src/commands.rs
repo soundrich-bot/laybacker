@@ -260,7 +260,9 @@ pub async fn slate_video(
     slate_duration_secs: f64,
     frame_rate: Option<f64>,
     has_audio: bool,
+    slate_black_secs: Option<f64>,
 ) -> Result<String, String> {
+    let black_secs = slate_black_secs.unwrap_or(0.0).max(0.0);
     let video_for_event = video_path.clone();
     tokio::task::spawn_blocking(move || {
         // The card arrives as a base64 JPEG from the frontend canvas (the
@@ -286,10 +288,11 @@ pub async fn slate_video(
         let spec = ffmpeg::SlateSpec {
             image_path: img_path.clone(),
             duration_secs: slate_duration_secs.max(0.5),
+            black_secs,
         };
         let args =
             ffmpeg::build_solo_slate_command(&video_path, &output, &spec, frame_rate, has_audio);
-        let total = video_duration_secs + spec.duration_secs;
+        let total = video_duration_secs + spec.preroll_secs();
         let result = ffmpeg::run_ffmpeg_with_progress(&args, total, |pct| {
             let _ = window.emit(
                 "slate-progress",
@@ -299,6 +302,37 @@ pub async fn slate_video(
         let _ = std::fs::remove_file(&img_path);
         result?;
         Ok(output)
+    })
+    .await
+    .map_err(|e| format!("Task failed: {}", e))?
+}
+
+/// Read a user-chosen image (for a slate background) and hand it to the
+/// webview as a data URL. Read here rather than via the asset protocol because
+/// an asset:// image would taint the slate canvas and block toDataURL.
+#[tauri::command]
+pub async fn read_image_data_url(path: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        let bytes = std::fs::read(&path).map_err(|e| format!("Could not read image: {}", e))?;
+        if bytes.len() > 40 * 1024 * 1024 {
+            return Err("That image is over 40 MB — please use a smaller one".to_string());
+        }
+        let ext = std::path::Path::new(&path)
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|e| e.to_ascii_lowercase())
+            .unwrap_or_default();
+        let mime = match ext.as_str() {
+            "png" => "image/png",
+            "jpg" | "jpeg" => "image/jpeg",
+            "webp" => "image/webp",
+            "gif" => "image/gif",
+            "bmp" => "image/bmp",
+            _ => return Err(format!("Unsupported image type .{} — use PNG, JPEG, WebP, GIF or BMP", ext)),
+        };
+        use base64::Engine as _;
+        let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+        Ok(format!("data:{};base64,{}", mime, b64))
     })
     .await
     .map_err(|e| format!("Task failed: {}", e))?

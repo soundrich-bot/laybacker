@@ -55,6 +55,8 @@
 {#if showAbout}
   <div class="about-overlay" onclick={closeAbout}></div>
 {/if}
+<svelte:window onkeydown={(e) => { if (e.key === 'Escape' && showHelp) showHelp = false; }} />
+
 {#if showHelp}
   <div class="about-overlay" onclick={() => showHelp = false}></div>
 {/if}
@@ -101,19 +103,25 @@
       </button>
       {#if showHelp}
         <div class="help-panel">
-          <div class="help-title">HOW IT WORKS</div>
+          <div class="help-head">
+            <div class="help-title">HOW IT WORKS</div>
+            <button class="help-close" onclick={() => showHelp = false} title="Close (Esc)">✕ CLOSE</button>
+          </div>
           <div class="help-divider"></div>
-          <p class="help-intro">This tool batch replaces audio on video files and normalises audio for delivery.</p>
+          <p class="help-intro">Laybacker lays sound back onto picture in batches, checks and normalises audio for delivery, adds slates, and never touches your originals.</p>
           <ol class="help-steps">
-            <li><strong>Drop files</strong> — Drag video and audio files onto the window. Drop them all at once or one at a time. Laybacker pairs them by duration and filename similarity. You can mix durations and file types. Laybacker will figure it out. Drop a single audio file with several videos to lay that one mix onto every video.</li>
-            <li><strong>Preview Files</strong> — Each card shows a video + audio pairing. Use the play buttons to preview. If a pair is wrong, remove it and re-drop.</li>
-            <li><strong>Edit filenames</strong> — The Smart Filename is a blend of both filenames with duplicate information removed. Click to rename your new file. Use the clock icon to add a timestamp.</li>
-            <li><strong>Normalise</strong> — Click NORM on a file (or NORM ALL) to enable loudness or True Peak derived normalisation. Click the badge to choose a standard (EBU R128, streaming, full scale).</li>
-            <li><strong>Choose format</strong> — Pick ORIGINAL to leave the format untouched or H.264/AAC to make file sizes more manageable.</li>
-            <li><strong>6 Fr (Broadcast Silence)</strong> — Click 6 Fr on any file to enforce 6 frames of digital silence at the head and tail of the audio, as required by UK broadcasters. Laybacker checks your file and shows a warning if audio is present in those regions. On export, the silence is applied automatically with a short fade to prevent clicks.</li>
-            <li><strong>Batch QC &amp; delivery (audio only)</strong> — Drop audio on its own and the QC bar does the whole job: set your loudness target, hit <strong>RUN QC</strong> to measure every file, <strong>NORMALISE ALL</strong> to level them to the target there and then (the new files are re-measured and displayed), and <strong>CLOCK ALL</strong> to check each file and render the clocked versions — 10 seconds of silence at the head, 5 at the tail — for the ones that pass. The per-file <strong>Clock</strong> button does the same check one file at a time, and lets you proceed anyway if a file is off spec.</li>
-            <li><strong>ProRes (working file)</strong> — On any video, click <strong>ProRes</strong> to make an Apple ProRes 422 <code>.mov</code> copy next to the source — a smooth-playing guide picture to drop into Pro Tools, which doesn't handle H.264/mp4 well. It's separate from the layback and doesn't change your export. Choose the ProRes flavour (Proxy / LT / 422 / HQ) in the settings cog.</li>
-            <li><strong>Layback</strong> — Hit the green button. Output files are saved alongside your audio files.</li>
+            <li><strong>Drop files</strong> — Drag video and audio files onto the window, all at once or one at a time. Laybacker pairs them by duration and filename. Drop one mix with several videos to lay it onto every video. Drop a video on its own to make a ProRes working file or add a slate to it.</li>
+            <li><strong>Check the pairs</strong> — Each card shows a video + audio pairing with play buttons to preview. If a pair is wrong, remove it and re-drop.</li>
+            <li><strong>Filenames</strong> — The Smart Filename blends both names with duplicate information removed. Beside it: <strong>RENAME</strong> to type your own, <strong>DATE</strong> to stamp the time, and <strong>NAME ▾</strong> to use the audio filename, the video filename, bump the version number (v3 → v4) or go back to the smart blend. <strong>NAME ALL BY</strong> in the column header applies one choice to the whole batch (it's per batch — <strong>✕ CANCEL</strong> undoes it). Set your usual style under <strong>DEFAULT FILENAME</strong> in the settings cog. A name you've edited stays put whatever else you change; only the extension follows the format.</li>
+            <li><strong>Levels &amp; QC</strong> — The QC bar holds one spec for the batch. Pick the reference: <strong>LUFS</strong> (level to a loudness target, with dBTP as a ceiling) or <strong>PEAK</strong> (set every file's true peak to the dBTP value, loudness ignored). <strong>RUN QC</strong> measures every file and shows its LUFS and true peak on the card. <strong>NORM</strong> on a file, or the big <strong>NORMALIZE</strong> button, levels to that spec.</li>
+            <li><strong>6 Fr (broadcast silence)</strong> — <strong>6 Fr</strong> on a file (you'll be asked to confirm) or <strong>6 Fr ALL</strong> forces 6 frames of digital silence at the head and tail, with a short fade to avoid clicks, as UK broadcasters require. Turn on the <strong>6 Fr</strong> check in the QC bar to have RUN QC flag files with sound in those regions.</li>
+            <li><strong>When the lengths don't match</strong> — The card shows an orange <strong>AUDIO +/−</strong> pill. On layback you'll be asked what to do. Audio longer than picture: <strong>cut</strong> it, <strong>fade</strong> it out over the last 12 frames, or <strong>freeze</strong> the final frame while the sound plays out. Audio shorter than picture: start the sound at the first frame, or line it up with the <strong>end</strong> — right for a picture that already has a slate at the front. Pictures slated by Laybacker remember their slate length, so the right choice is pre-selected.</li>
+            <li><strong>Slates</strong> — <strong>SLATE ALL</strong> puts a text card at the front of every video, silent underneath, with the sound starting on the first frame of programme. Choose from fifteen <strong>fonts</strong> and four text sizes, or <strong>CHOOSE IMAGE…</strong> to use your own picture or logo — <strong>FIT</strong> shows it whole (with a 5–100% scale and a position grid), <strong>FILL</strong> covers the frame, and <strong>TEXT</strong> puts the words at the top, middle or bottom. The duration is <em>slate + black</em>: add a run of black after the card, or use a <strong>PREROLL</strong> preset (5s = 4s slate + 1s black). Each card's <strong>SLATE</strong> button tweaks one file's wording; a video dropped on its own gets a <strong>Slate</strong> button that renders a slated copy next to it, keeping its own soundtrack. Slates re-encode the video, so a progress bar shows.</li>
+            <li><strong>Format</strong> — <strong>ORIGINAL</strong> leaves the video and audio untouched (fastest, no loss). <strong>H.264</strong> and <strong>AAC</strong> make smaller files. Original audio gives a <code>.mov</code>; AAC gives an <code>.mp4</code>.</li>
+            <li><strong>Batch delivery (audio only)</strong> — Drop audio on its own and the QC bar does the whole job: <strong>RUN QC</strong>, then <strong>NORMALISE ALL</strong>, <strong>6 Fr ALL</strong> or <strong>CLOCK ALL</strong> render the new files there and then (clocked files get 10 seconds of silence at the head and 5 at the tail) and measure them again. The per-file <strong>Clock</strong> button checks one file at a time and lets you proceed if it's off spec.</li>
+            <li><strong>ProRes (working file)</strong> — On any video, <strong>ProRes</strong> makes an Apple ProRes 422 <code>.mov</code> copy next to the source — a smooth-playing guide picture for Pro Tools. It doesn't change your export. Choose the flavour (Proxy / LT / 422 / HQ) in the settings cog.</li>
+            <li><strong>Where files go</strong> — Outputs are saved beside your audio files unless you pick a folder under <strong>SAVE TO</strong> in the settings cog. Your format, QC spec, default filename style and save folder are remembered between sessions.</li>
+            <li><strong>Layback</strong> — Hit the green button. Each card shows progress, then <strong>SHOW</strong> to reveal the finished file in Finder. Laybacker always writes a new file; your originals are never touched.</li>
           </ol>
           <div class="help-divider"></div>
           <div class="help-note">All processing happens locally on your machine using FFmpeg. Nothing is uploaded anywhere.</div>
@@ -341,21 +349,57 @@
     color: var(--neon-cyan);
   }
 
+  /* The help is a centred, scrollable sheet — it outgrew the little dropdown
+     it started as, and was taller than the window with nowhere to scroll. */
   .help-panel {
-    position: absolute;
-    top: calc(100% + 10px);
-    right: 0;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: min(680px, calc(100vw - 48px));
+    max-height: min(82vh, calc(100vh - 72px));
+    overflow-y: auto;
+    overscroll-behavior: contain;
     background: var(--bg-raised);
     border: 1px solid var(--border-accent);
     border-radius: var(--radius-md);
-    padding: 16px 20px;
-    z-index: 100;
-    width: 360px;
+    padding: 18px 24px 22px;
+    z-index: 300;
     display: flex;
     flex-direction: column;
     gap: 8px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+    text-align: left;
+    cursor: default;
   }
+
+  .help-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: -18px; /* stays put while the steps scroll beneath it */
+    margin: -18px -24px 0;
+    padding: 18px 24px 8px;
+    background: var(--bg-raised);
+    z-index: 1;
+  }
+
+  .help-close {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-muted);
+    background: var(--cap-face);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 3px 9px;
+    cursor: pointer;
+    transition: all 0.15s;
+    box-shadow: var(--cap-shadow);
+  }
+  .help-close:hover { color: var(--text-primary); border-color: var(--neon-cyan); }
+  .help-close:active { transform: translateY(1px); box-shadow: var(--cap-shadow-pressed); }
 
   .help-title {
     font-family: var(--font-display);

@@ -107,16 +107,39 @@ const LENGTH_MISMATCH_TOLERANCE: f64 = 0.04;
 pub struct SlateSpec {
     pub image_path: String,
     pub duration_secs: f64,
+    /// Black (silent) run after the card, before programme — 0 for none.
+    pub black_secs: f64,
 }
 
-/// Stamp the slate duration into the container so a re-dropped slated file
-/// knows where its programme audio belongs (the inspector reads it back).
+impl SlateSpec {
+    /// Total preroll: card + black. This is where programme audio starts.
+    pub fn preroll_secs(&self) -> f64 {
+        self.duration_secs + self.black_secs.max(0.0)
+    }
+
+    /// The slate stream's filter chain: pixel format, SAR, and black padding
+    /// after the card when asked (tpad adds black frames — the lean ffmpeg has
+    /// no black *source*, but it can extend a stream with black).
+    fn stream_chain(&self) -> String {
+        if self.black_secs > 0.0 {
+            format!(
+                "format=yuv420p,setsar=1,tpad=stop_mode=add:stop_duration={:.4}:color=black",
+                self.black_secs
+            )
+        } else {
+            "format=yuv420p,setsar=1".to_string()
+        }
+    }
+}
+
+/// Stamp the preroll (slate + black) into the container so a re-dropped slated
+/// file knows where its programme audio belongs (the inspector reads it back).
 /// mov/mp4 only write custom tags with `use_metadata_tags`.
 fn slate_metadata_args(slate: &SlateSpec) -> Vec<String> {
     vec![
         "-movflags".to_string(), "use_metadata_tags".to_string(),
         "-metadata".to_string(),
-        format!("{}={:.3}", crate::services::inspector::SLATE_TAG, slate.duration_secs),
+        format!("{}={:.3}", crate::services::inspector::SLATE_TAG, slate.preroll_secs()),
     ]
 }
 
@@ -176,7 +199,8 @@ pub fn build_mux_command(
         args.extend([
             "-filter_complex".to_string(),
             format!(
-                "[2:v]format=yuv420p,setsar=1[sl];[0:v]{}[mv];[sl][mv]concat=n=2:v=1:a=0[v]",
+                "[2:v]{}[sl];[0:v]{}[mv];[sl][mv]concat=n=2:v=1:a=0[v]",
+                s.stream_chain(),
                 main_chain
             ),
         ]);
@@ -234,7 +258,7 @@ pub fn build_mux_command(
     // starts with the original first frame of picture. Applied LAST — the
     // compliance/fade filters above time against the original audio timeline.
     if let Some(s) = slate {
-        let delay_ms = (s.duration_secs * 1000.0).round() as i64;
+        let delay_ms = (s.preroll_secs() * 1000.0).round() as i64;
         audio_filters.push(format!("adelay={}|{}", delay_ms, delay_ms));
     }
 
@@ -387,11 +411,11 @@ pub fn build_solo_slate_command(
         "-t".to_string(), format!("{:.4}", slate.duration_secs),
         "-i".to_string(), slate.image_path.clone(),
         "-filter_complex".to_string(),
-        "[1:v]format=yuv420p,setsar=1[sl];[0:v]format=yuv420p,setsar=1[mv];[sl][mv]concat=n=2:v=1:a=0[v]".to_string(),
+        format!("[1:v]{}[sl];[0:v]format=yuv420p,setsar=1[mv];[sl][mv]concat=n=2:v=1:a=0[v]", slate.stream_chain()),
         "-map".to_string(), "[v]".to_string(),
     ];
     if has_audio {
-        let delay_ms = (slate.duration_secs * 1000.0).round() as i64;
+        let delay_ms = (slate.preroll_secs() * 1000.0).round() as i64;
         args.extend([
             "-map".to_string(), "0:a:0".to_string(),
             "-af".to_string(), format!("adelay={}|{}", delay_ms, delay_ms),
@@ -910,7 +934,7 @@ mod tests {
 
     #[test]
     fn test_slate_concats_delays_audio_and_reencodes() {
-        let slate = SlateSpec { image_path: "/tmp/slate.png".into(), duration_secs: 5.0 };
+        let slate = SlateSpec { image_path: "/tmp/slate.png".into(), duration_secs: 5.0, black_secs: 0.0 };
         let args = build_mux_command(
             "/video.mov", "/audio.wav", "/out.mov",
             &default_settings(), None, 0.0, None,
@@ -934,7 +958,7 @@ mod tests {
     fn test_slate_with_freeze_folds_tpad_into_graph() {
         // Slate + freeze together: tpad must live inside filter_complex (ffmpeg
         // forbids mixing -vf and -filter_complex), and -shortest is dropped.
-        let slate = SlateSpec { image_path: "/tmp/slate.png".into(), duration_secs: 3.0 };
+        let slate = SlateSpec { image_path: "/tmp/slate.png".into(), duration_secs: 3.0, black_secs: 0.0 };
         let args = build_mux_command(
             "/video.mov", "/audio.wav", "/out.mov",
             &default_settings(), None, 0.0, None,
@@ -950,7 +974,7 @@ mod tests {
     fn test_slate_renders_stamp_the_duration_tag() {
         // Both slate paths must write the container tag the inspector reads
         // back, so a re-dropped slated file knows its programme offset.
-        let slate = SlateSpec { image_path: "/tmp/slate.png".into(), duration_secs: 4.5 };
+        let slate = SlateSpec { image_path: "/tmp/slate.png".into(), duration_secs: 4.5, black_secs: 0.0 };
         let mux = build_mux_command(
             "/video.mov", "/audio.wav", "/out.mov",
             &default_settings(), None, 0.0, None,
@@ -985,6 +1009,28 @@ mod tests {
         let fade = chain.find("afade=t=out").expect("compliance fade present");
         let delay = chain.find("adelay=2000|2000").expect("offset present");
         assert!(delay > fade, "adelay must come after the compliance fade: {chain}");
+    }
+
+    #[test]
+    fn test_slate_black_pads_card_and_delays_by_preroll() {
+        // 4s card + 1s black = 5s preroll: the slate stream is padded with
+        // black frames, the audio is pushed back by the full 5s, and the
+        // container tag records 5s (where programme starts).
+        let slate = SlateSpec { image_path: "/tmp/slate.png".into(), duration_secs: 4.0, black_secs: 1.0 };
+        let args = build_mux_command(
+            "/video.mov", "/audio.wav", "/out.mov",
+            &default_settings(), None, 0.0, None,
+            LengthFix::Cut, 30.0, 30.0, Some(25.0), Some(&slate),
+        );
+        let fc_idx = args.iter().position(|a| a == "-filter_complex").unwrap();
+        assert!(args[fc_idx + 1].contains("tpad=stop_mode=add:stop_duration=1.0000:color=black"), "got {}", args[fc_idx + 1]);
+        let af_idx = args.iter().position(|a| a == "-af").unwrap();
+        assert!(args[af_idx + 1].contains("adelay=5000|5000"), "got {}", args[af_idx + 1]);
+        assert!(args.contains(&"laybacker_slate_secs=5.000".to_string()));
+        // Solo path gets the same treatment.
+        let solo = build_solo_slate_command("/video.mov", "/out.mov", &slate, Some(25.0), true);
+        assert!(solo.iter().any(|a| a.contains("stop_duration=1.0000:color=black")));
+        assert!(solo.iter().any(|a| a.contains("adelay=5000|5000")));
     }
 
     // ── build_audio_only_command ──

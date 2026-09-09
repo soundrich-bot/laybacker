@@ -218,6 +218,8 @@
       ? app.matchedPairs.some(p => p.video && p.slateEnabled)
       : app.matchedPairs.find(p => p.id === app.slateEditor.scope)?.slateEnabled)
       ? app.removeSlate : null}
+    assets={app.slateAssets}
+    onPickImage={app.pickSlateImage}
     onCancel={app.closeSlateEditor}
   />
 {/if}

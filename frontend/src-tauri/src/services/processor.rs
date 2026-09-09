@@ -176,7 +176,7 @@ pub fn process_pair(
         pair.length_fix == LengthFix::Freeze
             && pair.audio.duration_secs > v.duration_secs + 0.04
     });
-    let slate_secs = slate_spec.as_ref().map(|s| s.duration_secs).unwrap_or(0.0);
+    let slate_secs = slate_spec.as_ref().map(|s| s.preroll_secs()).unwrap_or(0.0);
     let reencode = freeze_reencode || slate_spec.is_some();
 
     let run_result = if reencode {
@@ -287,6 +287,7 @@ fn write_slate_image(pair: &MatchedPair) -> Result<Option<ffmpeg::SlateSpec>, St
     Ok(Some(ffmpeg::SlateSpec {
         image_path: path,
         duration_secs: pair.slate_duration_secs.max(0.5),
+        black_secs: pair.slate_black_secs.max(0.0),
     }))
 }
 
@@ -475,6 +476,7 @@ mod tests {
             slate_duration_secs: 5.0,
             slate_text: String::new(),
             slate_image: None,
+            slate_black_secs: 0.0,
         }
     }
 

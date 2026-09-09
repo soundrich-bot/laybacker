@@ -75,7 +75,8 @@ fn make_audio_pair(fixture_name: &str, output_filename: &str, norm_enabled: bool
         slate_enabled: false,
         slate_duration_secs: 5.0,
         slate_text: String::new(),
-        slate_image: None,    }
+        slate_image: None,
+        slate_black_secs: 0.0,    }
 }
 
 /// End-to-end peak-mode naming: the store sets target_lufs = 0 (full-scale) with
@@ -156,6 +157,7 @@ fn test_slate_prepends_card_and_delays_audio() {
     pair.video = Some(video);
     pair.slate_enabled = true;
     pair.slate_duration_secs = 3.0;
+    pair.slate_black_secs = 1.0; // 3s card + 1s black = 4s preroll
     pair.slate_image = Some(format!("data:image/jpeg;base64,{}", jpg_b64));
 
     let output = temp_output("slated_out.mov");
@@ -163,15 +165,16 @@ fn test_slate_prepends_card_and_delays_audio() {
     let result = processor::process_pair(&pair, &ExportSettings::default(), |_| {});
     assert!(result.success, "slated process failed: {:?}", result.error);
 
-    // 3s slate + 2s programme ≈ 5s output.
+    // 3s slate + 1s black + 2s programme ≈ 6s output.
     let out = inspector::inspect_file(&output).expect("inspect slated output");
     assert!(
-        (out.duration_secs - 5.0).abs() < 0.2,
-        "expected ~5s (3s slate + 2s programme), got {:.2}s",
+        (out.duration_secs - 6.0).abs() < 0.2,
+        "expected ~6s (3s slate + 1s black + 2s programme), got {:.2}s",
         out.duration_secs
     );
-    // The render stamps its slate length into the container; a re-drop reads it.
-    assert_eq!(out.slate_secs, Some(3.0), "slated output should carry the slate tag");
+    // The render stamps the PREROLL (card + black) into the container — that's
+    // where programme starts — and a re-drop reads it back.
+    assert_eq!(out.slate_secs, Some(4.0), "slated output should carry the preroll tag");
 
     cleanup(&output);
     cleanup(&video_path);
@@ -196,7 +199,7 @@ fn test_solo_slate_keeps_own_audio() {
 
     let output = temp_output("solo_slated.mov");
     cleanup(&output);
-    let spec = ffmpeg::SlateSpec { image_path: jpg.clone(), duration_secs: 3.0 };
+    let spec = ffmpeg::SlateSpec { image_path: jpg.clone(), duration_secs: 3.0, black_secs: 0.0 };
     let args = ffmpeg::build_solo_slate_command(&video_path, &output, &spec, Some(25.0), true);
     ffmpeg::run_ffmpeg(&args).expect("solo slate render failed");
 
@@ -384,7 +387,8 @@ fn test_reprocessing_generated_output_does_not_fail() {
         slate_enabled: false,
         slate_duration_secs: 5.0,
         slate_text: String::new(),
-        slate_image: None,    };
+        slate_image: None,
+        slate_black_secs: 0.0,    };
     let settings = ExportSettings::default();
     let result = processor::process_pair(&pair, &settings, |_| {});
 
