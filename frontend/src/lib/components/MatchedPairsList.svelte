@@ -268,6 +268,11 @@
                 onclick={() => onNameRuleChange('video')}
                 title="Each output takes its video file's name">VIDEO</button>
             {/if}
+            {#if nameRule !== 'smart'}
+              <button class="name-rule-cancel"
+                onclick={() => onNameRuleChange('smart')}
+                title="Cancel the batch naming rule — back to smart filenames">✕ CANCEL</button>
+            {/if}
           </div>
         {/if}
         {#if !isAudioOnlyBatch}
@@ -466,6 +471,29 @@
     color: var(--bg-dark);
     background: var(--neon-cyan);
     border-color: var(--neon-cyan);
+  }
+
+  .name-rule-cancel {
+    font-family: var(--font-display);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    color: var(--neon-orange);
+    background: var(--cap-face);
+    border: 1px solid rgba(255, 149, 0, 0.45);
+    border-radius: var(--radius-sm);
+    padding: 2px 8px;
+    margin-left: 4px;
+    cursor: pointer;
+    transition: all 0.15s;
+    box-shadow: var(--cap-shadow);
+  }
+  .name-rule-cancel:hover {
+    border-color: var(--neon-orange);
+    box-shadow: var(--cap-shadow-hover);
+  }
+  .name-rule-cancel:active {
+    transform: translateY(1px);
+    box-shadow: var(--cap-shadow-pressed);
   }
 
   /* ── Batch QC bar ── */

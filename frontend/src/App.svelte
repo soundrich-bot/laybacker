@@ -161,6 +161,8 @@
     onTimestampFormatChange={(fmt) => { timestampFormat = fmt; localStorage.setItem('timestampFormat', fmt); }}
     onChooseOutputDir={chooseOutputDir}
     onClearOutputDir={clearOutputDir}
+    defaultNameRule={app.defaultNameRule}
+    onDefaultNameRuleChange={app.setDefaultNameRule}
     {proresProfile}
     onProresProfileChange={(p) => { proresProfile = p; localStorage.setItem('proresProfile', p); }}
     audioOnly={app.matchedPairs.length > 0 && app.matchedPairs.every(p => !p.video)}

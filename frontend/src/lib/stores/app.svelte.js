@@ -833,7 +833,19 @@ function updatePairFilename(pairId, filename) {
 // ── Naming rules ────────────────────────────────────────────────────────────
 // Batch rule (NAME ALL BY): 'smart' (the blended default) | 'audio' | 'video'.
 // Persisted. Per-file NAME FROM can also apply 'bump' (v3 → v4) and 'smart'.
-let nameRule = $state(loadPref('nameRule', 'smart'));
+// Two layers: a persisted DEFAULT (settings cog) that seeds every new batch,
+// and the per-batch NAME ALL BY rule, which is NOT persisted — remembered, a
+// one-off "name these by audio" became a silent default next session and
+// looked like the smart name had stopped working.
+let defaultNameRule = $state(loadPref('defaultNameRule', 'smart'));
+let nameRule = $state(defaultNameRule);
+
+function setDefaultNameRule(rule) {
+  defaultNameRule = rule;
+  savePref('defaultNameRule', rule);
+  // Apply to the batch on screen too, so the change is visible immediately.
+  setNameRule(rule);
+}
 
 function extFor(p) {
   return p.video ? getOutputExtension() : p.audio.extension;
@@ -851,7 +863,6 @@ function applyBatchRule(pairs) {
 
 function setNameRule(rule) {
   nameRule = rule;
-  savePref('nameRule', rule);
   // The rule is the batch's word: it overrides earlier per-file names.
   matchedPairs = matchedPairs.map(p => ({ ...p, nameCustomized: false }));
   regenerateNames();
@@ -914,6 +925,8 @@ function clearAll() {
   batchSlate = { text: '', duration: 5 };
   slateEditor = null;
   soloSlateStatus = {};
+  // The naming rule was for the batch that was just cleared — back to the default.
+  nameRule = defaultNameRule;
 }
 
 function dismissError(index) {
@@ -965,6 +978,8 @@ export function getAppState() {
     runMainAction,
     get nameRule() { return nameRule; },
     setNameRule,
+    get defaultNameRule() { return defaultNameRule; },
+    setDefaultNameRule,
     applyNameRule,
     cancelProcessing,
     get lengthPrompt() { return lengthPrompt; },

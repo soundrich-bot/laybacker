@@ -10,8 +10,16 @@
     onProresProfileChange,
     onChooseOutputDir,
     onClearOutputDir,
+    defaultNameRule = 'smart',
+    onDefaultNameRuleChange,
     audioOnly = false,
   } = $props();
+
+  const nameRules = [
+    { value: 'smart', label: 'SMART BLEND', desc: 'A blend of both filenames with duplicate information removed' },
+    { value: 'audio', label: 'AUDIO FILENAME', desc: "Each output takes its audio file's name" },
+    { value: 'video', label: 'VIDEO FILENAME', desc: "Each output takes its video file's name" },
+  ];
 
   // Save to…: off by default (outputs land beside the audio); a chosen folder
   // shows here by its last path segment.
@@ -123,7 +131,11 @@
   <div class="settings-spacer"></div>
 
   <!-- Settings cog with dropdown -->
-  <div class="cog-wrapper">
+  <!-- Clicks inside the cog stay inside; anything outside closes the dropdown
+       (see the window listener below). -->
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="cog-wrapper" onclick={(e) => e.stopPropagation()}>
     <button
       class="cog-btn"
       class:open={showSettings}
@@ -154,6 +166,18 @@
             onclick={() => onTimestampFormatChange(fmt.value)}
           >
             {fmt.label}
+          </button>
+        {/each}
+        <div class="dropdown-divider"></div>
+        <span class="dropdown-label" title="How new batches are named by default. NAME ALL BY on a batch can still override it for that batch.">DEFAULT FILENAME</span>
+        {#each nameRules as rule}
+          <button
+            class="dropdown-item"
+            class:active={defaultNameRule === rule.value}
+            onclick={() => onDefaultNameRuleChange(rule.value)}
+            title={rule.desc}
+          >
+            {rule.label}
           </button>
         {/each}
         <div class="dropdown-divider"></div>
@@ -189,6 +213,12 @@
     {/if}
   </div>
 </div>
+
+<!-- Click anywhere outside the cog (or press Esc) to close the settings box -->
+<svelte:window
+  onclick={() => { if (showSettings) showSettings = false; }}
+  onkeydown={(e) => { if (e.key === 'Escape' && showSettings) showSettings = false; }}
+/>
 
 <style>
   .settings-bar {
