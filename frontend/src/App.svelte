@@ -2,6 +2,26 @@
   import { onMount } from 'svelte';
   import { listen } from '@tauri-apps/api/event';
   import { getCurrentWindow } from '@tauri-apps/api/window';
+  import { open as openDialog } from '@tauri-apps/plugin-dialog';
+
+  // Save to…: pick one folder for every output. Off by default (outputs land
+  // beside the audio); remembered with the other export settings.
+  async function chooseOutputDir() {
+    const dir = await openDialog({ directory: true, multiple: false, title: 'Save outputs to…' });
+    if (!dir) return;
+    handleSettingsChange({ ...app.exportSettings, outputDirectory: dir, useAudioFileLocation: false });
+  }
+  function clearOutputDir() {
+    handleSettingsChange({ ...app.exportSettings, outputDirectory: null, useAudioFileLocation: true });
+  }
+
+  // Corner grip: a visible cue that the window resizes, and it works — dragging
+  // it hands off to the OS resize (the window's own edges still work too).
+  function startResize(e) {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    getCurrentWindow().startResizeDragging('SouthEast').catch(() => { /* edge resize still available */ });
+  }
   import { getAppState } from './lib/stores/app.svelte.js';
 
   import Header from './lib/components/Header.svelte';
@@ -121,6 +141,9 @@
     onClockAll={app.clockAllNow}
     onSixFrAll={app.sixFrAllNow}
     onOpenSlate={app.openSlateEditor}
+    onApplyNameRule={app.applyNameRule}
+    nameRule={app.nameRule}
+    onNameRuleChange={app.setNameRule}
     soloSlateStatus={app.soloSlateStatus}
     isProcessing={app.isProcessing}
     clockChecks={app.clockChecks}
@@ -136,6 +159,8 @@
     onToggleTame={toggleTame}
     {timestampFormat}
     onTimestampFormatChange={(fmt) => { timestampFormat = fmt; localStorage.setItem('timestampFormat', fmt); }}
+    onChooseOutputDir={chooseOutputDir}
+    onClearOutputDir={clearOutputDir}
     {proresProfile}
     onProresProfileChange={(p) => { proresProfile = p; localStorage.setItem('proresProfile', p); }}
     audioOnly={app.matchedPairs.length > 0 && app.matchedPairs.every(p => !p.video)}
@@ -172,6 +197,14 @@
   />
 {/if}
 
+<!-- Resize grip: the classic three diagonal lines, bottom-right -->
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div class="resize-grip" onmousedown={startResize} title="Drag to resize the window" aria-hidden="true">
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+    <path d="M13 1L1 13M13 6L6 13M13 11L11 13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+  </svg>
+</div>
+
 {#if app.slateEditor}
   <SlateEditor
     editor={app.slateEditor}
@@ -188,6 +221,25 @@
 {/if}
 
 <style>
+  .resize-grip {
+    position: fixed;
+    right: 4px;
+    bottom: 4px;
+    z-index: 900;
+    color: var(--text-muted);
+    opacity: 0.55;
+    cursor: nwse-resize;
+    display: flex;
+    padding: 3px;
+    transition: opacity 0.15s, color 0.15s;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .resize-grip:hover {
+    opacity: 1;
+    color: var(--neon-cyan);
+  }
+
   .app-container {
     height: 100%;
     display: flex;

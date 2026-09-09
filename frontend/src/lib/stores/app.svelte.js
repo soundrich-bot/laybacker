@@ -1,5 +1,32 @@
 import { invoke } from '@tauri-apps/api/core';
 import { renderSlateImage } from '../slate.js';
+import { nameForRule } from '../naming.js';
+
+// Small persisted preferences (localStorage in the webview). Guarded — a
+// missing or blocked store must never break the app.
+function loadPref(key, fallback) {
+  try {
+    const raw = localStorage.getItem(`pref:${key}`);
+    return raw == null ? fallback : JSON.parse(raw);
+  } catch { return fallback; }
+}
+function savePref(key, value) {
+  try { localStorage.setItem(`pref:${key}`, JSON.stringify(value)); } catch { /* optional */ }
+}
+
+// Flags the frontend owns on a pair. The Rust namer round-trip drops unknown
+// fields, so these are merged back after every generate_names call.
+const FRONTEND_FLAGS = ['nameCustomized', 'lengthFixChosen', 'audioStart', 'startChosen'];
+function keepFrontendFlags(fresh, previous) {
+  const byId = new Map(previous.map(p => [p.id, p]));
+  return fresh.map(p => {
+    const old = byId.get(p.id);
+    if (!old) return p;
+    const flags = {};
+    for (const k of FRONTEND_FLAGS) if (old[k] !== undefined) flags[k] = old[k];
+    return { ...p, ...flags };
+  });
+}
 
 // Reactive state using Svelte 5 runes
 let files = $state([]);
@@ -138,14 +165,14 @@ function removeSlate() {
 // The batch value IS the loudness target — the one number QC checks against and
 // NORM corrects to. Loudness is the headline metric; the true-peak ceiling
 // (-1 dBTP) is a background check, deemphasised in the UI and the naming.
-let qcTargetLufs = $state(-23);
+let qcTargetLufs = $state(loadPref('qcTargetLufs', -23));
 // True-peak value for the whole batch. Its role depends on qcMode:
 //  - 'lufs' mode: a ceiling — NORM levels to LUFS but never pushes peak above it.
 //  - 'peak' mode: THE target — NORM boosts/cuts each file so its peak lands here,
 //    LUFS ignored entirely. (This maps to the engine's full-scale path, which it
 //    triggers when target_lufs >= 0, so peak mode carries target_lufs = 0.)
-let qcTruePeak = $state(-1.0);
-let qcMode = $state('lufs'); // 'lufs' | 'peak'
+let qcTruePeak = $state(loadPref('qcTruePeak', -1.0));
+let qcMode = $state(loadPref('qcMode', 'lufs')); // 'lufs' | 'peak'
 let qcCheckSilence = $state(false);
 
 // The batch normalization spec every pair carries, derived from the current mode
@@ -163,6 +190,7 @@ let qcProgress = $state({ done: 0, total: 0 });
 // existing results (they were measured against a different spec).
 function setQcTargetLufs(value) {
   qcTargetLufs = value;
+  savePref('qcTargetLufs', value);
   matchedPairs = matchedPairs.map(p => ({
     ...p,
     normalizationSettings: batchNormSettings(p.normalizationSettings),
@@ -176,6 +204,7 @@ function setQcTargetLufs(value) {
 // (the peak check and the NORM cap/target both depend on it).
 function setQcTruePeak(value) {
   qcTruePeak = value;
+  savePref('qcTruePeak', value);
   matchedPairs = matchedPairs.map(p => ({
     ...p,
     normalizationSettings: batchNormSettings(p.normalizationSettings),
@@ -188,6 +217,7 @@ function setQcTruePeak(value) {
 // Switch the whole batch between loudness (LUFS) and true-peak (dBTP) targeting.
 function setQcMode(mode) {
   qcMode = mode;
+  savePref('qcMode', mode);
   matchedPairs = matchedPairs.map(p => ({
     ...p,
     normalizationSettings: batchNormSettings(p.normalizationSettings),
@@ -366,6 +396,10 @@ let namingSettings = $state({
 });
 
 // Derived
+// Remembered between launches, like the date format already is — a peak-mode
+// user shouldn't re-set -1 dBTP and AAC every session.
+exportSettings = { ...exportSettings, ...loadPref('exportSettings', {}) };
+
 function getOutputExtension() {
   return exportSettings.audioFormat === 'original' ? 'mov' : 'mp4';
 }
@@ -440,6 +474,7 @@ async function autoMatch() {
       const key = `${p.video?.path || 'none'}|${p.audio.path}`;
       customizations[key] = {
         outputFilename: p.outputFilename,
+        nameCustomized: p.nameCustomized,
         normalizationEnabled: p.normalizationEnabled,
         normalizationSettings: p.normalizationSettings,
       };
@@ -494,7 +529,8 @@ async function autoMatch() {
       normalizationSettings: batchNormSettings(p.normalizationSettings),
     }));
 
-    matchedPairs = pairs;
+    // New drops follow the batch naming rule (user-renamed pairs are kept).
+    matchedPairs = applyBatchRule(pairs);
   } catch (e) {
     errors = [...errors, `Matching failed: ${e}`];
   }
@@ -502,13 +538,28 @@ async function autoMatch() {
 
 async function regenerateNames() {
   if (matchedPairs.length === 0) return;
+  const before = matchedPairs;
   try {
-    const pairs = await invoke('generate_names', {
+    const fresh = await invoke('generate_names', {
       pairs: matchedPairs,
       removeDuplicates: namingSettings.removeDuplicates,
       outputExtension: getOutputExtension(),
     });
-    matchedPairs = pairs;
+    // The namer round-trip drops frontend-only flags — put them back, then
+    // keep every user-edited name (stem as typed, extension from the namer)
+    // and apply the batch rule to the rest.
+    const byId = new Map(before.map(p => [p.id, p]));
+    let pairs = keepFrontendFlags(fresh, before).map(p => {
+      const old = byId.get(p.id);
+      if (!old?.nameCustomized) return p;
+      const mine = old.outputFilename;
+      const dot = mine.lastIndexOf('.');
+      const stem = dot > 0 ? mine.slice(0, dot) : mine;
+      const freshDot = p.outputFilename.lastIndexOf('.');
+      const ext = freshDot > 0 ? p.outputFilename.slice(freshDot + 1) : extFor(p);
+      return { ...p, outputFilename: `${stem}.${ext}` };
+    });
+    matchedPairs = applyBatchRule(pairs);
   } catch (e) {
     errors = [...errors, `Naming failed: ${e}`];
   }
@@ -768,12 +819,56 @@ async function runBatchClock() {
   regenerateNames();
 }
 
+// A name the user has edited is theirs: it survives every recompute (NORM,
+// Clock, QC changes, format) — only the extension follows the format.
 function updatePairFilename(pairId, filename) {
   matchedPairs = matchedPairs.map(p => {
     if (p.id === pairId) {
-      return { ...p, outputFilename: filename };
+      return { ...p, outputFilename: filename, nameCustomized: true };
     }
     return p;
+  });
+}
+
+// ── Naming rules ────────────────────────────────────────────────────────────
+// Batch rule (NAME ALL BY): 'smart' (the blended default) | 'audio' | 'video'.
+// Persisted. Per-file NAME FROM can also apply 'bump' (v3 → v4) and 'smart'.
+let nameRule = $state(loadPref('nameRule', 'smart'));
+
+function extFor(p) {
+  return p.video ? getOutputExtension() : p.audio.extension;
+}
+
+// Apply the batch rule to pairs the user hasn't renamed by hand.
+function applyBatchRule(pairs) {
+  if (nameRule === 'smart') return pairs;
+  return pairs.map(p => {
+    if (p.nameCustomized) return p;
+    const name = nameForRule(p, nameRule, extFor(p));
+    return name ? { ...p, outputFilename: name } : p;
+  });
+}
+
+function setNameRule(rule) {
+  nameRule = rule;
+  savePref('nameRule', rule);
+  // The rule is the batch's word: it overrides earlier per-file names.
+  matchedPairs = matchedPairs.map(p => ({ ...p, nameCustomized: false }));
+  regenerateNames();
+}
+
+// Per-file NAME FROM. 'smart' hands the name back to the namer; anything else
+// sets it and makes it sticky.
+function applyNameRule(pairId, rule) {
+  if (rule === 'smart') {
+    matchedPairs = matchedPairs.map(p => p.id === pairId ? { ...p, nameCustomized: false } : p);
+    regenerateNames();
+    return;
+  }
+  matchedPairs = matchedPairs.map(p => {
+    if (p.id !== pairId) return p;
+    const name = nameForRule(p, rule, extFor(p));
+    return name ? { ...p, outputFilename: name, nameCustomized: true } : p;
   });
 }
 
@@ -855,7 +950,7 @@ export function getAppState() {
     get progressMap() { return progressMap; },
     get errors() { return errors; },
     get exportSettings() { return exportSettings; },
-    set exportSettings(v) { exportSettings = v; },
+    set exportSettings(v) { exportSettings = v; savePref('exportSettings', v); },
     get namingSettings() { return namingSettings; },
     set namingSettings(v) { namingSettings = v; },
     getOutputExtension,
@@ -868,6 +963,9 @@ export function getAppState() {
     regenerateNames,
     processAll,
     runMainAction,
+    get nameRule() { return nameRule; },
+    setNameRule,
+    applyNameRule,
     cancelProcessing,
     get lengthPrompt() { return lengthPrompt; },
     resolveLengthFix,

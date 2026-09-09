@@ -8,8 +8,17 @@
     onTimestampFormatChange,
     proresProfile = 'lt',
     onProresProfileChange,
+    onChooseOutputDir,
+    onClearOutputDir,
     audioOnly = false,
   } = $props();
+
+  // Save to…: off by default (outputs land beside the audio); a chosen folder
+  // shows here by its last path segment.
+  let savingToFolder = $derived(!settings.useAudioFileLocation && !!settings.outputDirectory);
+  let folderLabel = $derived(
+    settings.outputDirectory ? settings.outputDirectory.split('/').filter(Boolean).pop() : ''
+  );
 
   // The video container follows the audio format: Original/WAV → .mov, AAC → .mp4.
   let outputFormat = $derived(settings.audioFormat === 'aac' ? 'mp4' : 'mov');
@@ -147,6 +156,24 @@
             {fmt.label}
           </button>
         {/each}
+        <div class="dropdown-divider"></div>
+        <span class="dropdown-label" title="Where finished files are written">SAVE TO</span>
+        <button
+          class="dropdown-item"
+          class:active={!savingToFolder}
+          onclick={onClearOutputDir}
+          title="Each output is saved next to its audio file (default)"
+        >
+          BESIDE THE AUDIO FILES
+        </button>
+        <button
+          class="dropdown-item"
+          class:active={savingToFolder}
+          onclick={onChooseOutputDir}
+          title={savingToFolder ? settings.outputDirectory : 'Pick one folder for every output'}
+        >
+          {savingToFolder ? `FOLDER: ${folderLabel}` : 'CHOOSE A FOLDER…'}
+        </button>
         <div class="dropdown-divider"></div>
         <span class="dropdown-label" title="Codec for the ProRes button on each video">PRORES WORKING FILE</span>
         {#each proresFlavors as fl}

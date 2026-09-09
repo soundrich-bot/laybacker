@@ -35,6 +35,9 @@
     onClockAll,
     onSixFrAll,
     onOpenSlate,
+    onApplyNameRule,
+    nameRule = 'smart',
+    onNameRuleChange,
     soloSlateStatus = {},
     isProcessing = false,
     clockChecks = {},
@@ -249,6 +252,24 @@
           <span class="col-label col-video">VIDEO</span>
         {/if}
         <span class="col-label col-audio">AUDIO</span>
+        {#if onNameRuleChange}
+          <!-- Batch naming rule: one choice, every file follows (later drops too).
+               A file renamed by hand keeps its own name. -->
+          <div class="name-rule" role="group" aria-label="Name all files by">
+            <span class="name-rule-label" title="How every output file is named. Files you rename by hand keep their name.">NAME ALL BY</span>
+            <button class="name-rule-btn" class:active={nameRule === 'smart'}
+              onclick={() => onNameRuleChange('smart')}
+              title="A blend of both filenames with duplicate information removed">SMART</button>
+            <button class="name-rule-btn" class:active={nameRule === 'audio'}
+              onclick={() => onNameRuleChange('audio')}
+              title="Each output takes its audio file's name">AUDIO</button>
+            {#if !isAudioOnlyBatch}
+              <button class="name-rule-btn" class:active={nameRule === 'video'}
+                onclick={() => onNameRuleChange('video')}
+                title="Each output takes its video file's name">VIDEO</button>
+            {/if}
+          </div>
+        {/if}
         {#if !isAudioOnlyBatch}
           <!-- Audio-only batches do batch operations in the QC bar; this
                flag-for-export toggle stays for video laybacks. -->
@@ -281,6 +302,7 @@
           {onReveal}
           {onCreateProres}
           {onOpenSlate}
+          {onApplyNameRule}
           {timestampFormat}
         />
       {/each}
@@ -399,6 +421,51 @@
     background: var(--neon-yellow);
     border-color: var(--neon-yellow);
     box-shadow: var(--cap-shadow), 0 0 6px rgba(237, 255, 33, 0.2);
+  }
+
+  /* ── NAME ALL BY (batch naming rule) ── */
+  .name-rule {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+    margin-right: var(--gap-sm);
+  }
+  .name-rule-label {
+    font-family: var(--font-display);
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    color: var(--text-muted);
+    opacity: 0.6;
+    margin-right: 4px;
+    cursor: help;
+  }
+  .name-rule-btn {
+    font-family: var(--font-display);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    background: var(--cap-face);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 2px 8px;
+    cursor: pointer;
+    transition: all 0.15s;
+    box-shadow: var(--cap-shadow);
+  }
+  .name-rule-btn:hover:not(.active) {
+    color: var(--neon-cyan);
+    border-color: rgba(8, 247, 254, 0.5);
+    box-shadow: var(--cap-shadow-hover);
+  }
+  .name-rule-btn:active {
+    transform: translateY(1px);
+    box-shadow: var(--cap-shadow-pressed);
+  }
+  .name-rule-btn.active {
+    color: var(--bg-dark);
+    background: var(--neon-cyan);
+    border-color: var(--neon-cyan);
   }
 
   /* ── Batch QC bar ── */

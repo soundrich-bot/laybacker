@@ -19,8 +19,28 @@
     onReveal,
     onCreateProres,
     onOpenSlate,
+    onApplyNameRule,
     timestampFormat = 'YYYYMMDD_HHmm',
   } = $props();
+
+  // NAME FROM menu: one-click naming from the audio/video file, the smart
+  // blend, a version bump, or a timestamp.
+  let showNameMenu = $state(false);
+  let nameMenuBtn = $state(null);
+  let menuPos = $state({ top: 0, left: 0 });
+  // The menu is position: fixed (so the card can't clip it) — anchor it to
+  // the button's on-screen rect when it opens.
+  function toggleNameMenu() {
+    if (!showNameMenu && nameMenuBtn) {
+      const r = nameMenuBtn.getBoundingClientRect();
+      menuPos = { top: r.bottom + 4, left: r.left };
+    }
+    showNameMenu = !showNameMenu;
+  }
+  function pickName(rule) {
+    showNameMenu = false;
+    onApplyNameRule?.(pair.id, rule);
+  }
 
   let showNormSettings = $state(false);
   let editingName = $state(false);
@@ -318,10 +338,13 @@
           title="Duration mismatch — click for details"
         >
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-            <path d="M7 1L13 12H1L7 1Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
-            <path d="M7 5.5V8.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
-            <circle cx="7" cy="10.5" r="0.5" fill="currentColor"/>
+            <path d="M7 1L13 12H1L7 1Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+            <path d="M7 5.5V8.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+            <circle cx="7" cy="10.5" r="0.6" fill="currentColor"/>
           </svg>
+          <span class="duration-warn-label">
+            {audioLonger ? `AUDIO +${Math.abs(durationDiff).toFixed(1)}s` : `AUDIO −${Math.abs(durationDiff).toFixed(1)}s`}
+          </span>
         </button>
       {/if}
     {/if}
@@ -504,19 +527,54 @@
             title={`This file will be a .${outputExt.toUpperCase()} — the container follows the audio format: Original/WAV → .mov (uncompressed), AAC → .mp4`}
           >.{outputExt}</span>
         {/if}
-        <span class="edit-pencil" aria-hidden="true" title="Click the name to rename">
-          <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
-            <path d="M8.2 1.3 10.7 3.8 4.3 10.2 1.5 10.5 1.8 7.7 8.2 1.3Z" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"/>
-            <path d="M7.2 2.3 9.7 4.8" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/>
-          </svg>
-        </span>
-        <button class="icon-btn" onclick={addTimestamp} title="Add date & time to filename">
-          <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
-            <circle cx="6" cy="6" r="5" stroke="currentColor" stroke-width="1.2"/>
-            <path d="M6 3V6.5L8.5 8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        </button>
       </span>
+    {/if}
+
+    {#if !editingName}
+      <!-- Name controls: permanent, labelled key-caps beside the name (not
+           hover-reveals inside it — users didn't find them). -->
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div class="name-actions" onclick={(e) => e.stopPropagation()}>
+        <button class="name-action" onclick={startEditing} title="Rename the output file">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <path d="M8.2 1.3 10.7 3.8 4.3 10.2 1.5 10.5 1.8 7.7 8.2 1.3Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
+            <path d="M7.2 2.3 9.7 4.8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+          </svg>
+          RENAME
+        </button>
+        <button class="name-action" onclick={addTimestamp} title="Add date & time to the filename">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <circle cx="6" cy="6" r="5" stroke="currentColor" stroke-width="1.3"/>
+            <path d="M6 3V6.5L8.5 8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          DATE
+        </button>
+        {#if onApplyNameRule}
+          <button
+            class="name-action"
+            class:open={showNameMenu}
+            bind:this={nameMenuBtn}
+            onclick={toggleNameMenu}
+            title="Name from…"
+            aria-haspopup="menu"
+            aria-expanded={showNameMenu}
+          >NAME ▾</button>
+          {#if showNameMenu}
+            <!-- position: fixed so no card or scroll container can clip it -->
+            <div class="name-menu" role="menu" style="top:{menuPos.top}px; left:{menuPos.left}px">
+              <button role="menuitem" onclick={() => pickName('audio')} title="Use the audio file's name">AUDIO FILENAME</button>
+              {#if !isAudioOnly}
+                <button role="menuitem" onclick={() => pickName('video')} title="Use the video file's name">VIDEO FILENAME</button>
+              {/if}
+              <button role="menuitem" onclick={() => pickName('smart')} title="Back to the blended smart name">SMART BLEND</button>
+              <div class="name-menu-divider"></div>
+              <button role="menuitem" onclick={() => pickName('bump')} title="Bump the version number: v3 → v4 (adds _v2 if there isn't one)">VERSION +1</button>
+              <button role="menuitem" onclick={() => { showNameMenu = false; addTimestamp(); }} title="Add date & time">+ TIMESTAMP</button>
+            </div>
+          {/if}
+        {/if}
+      </div>
     {/if}
 
     <!-- Status -->
@@ -722,7 +780,15 @@
   </div>
 {/if}
 
-<svelte:window onkeydown={(e) => { if (e.key === 'Escape' && showComplianceConfirm) showComplianceConfirm = false; }} />
+<svelte:window
+  onkeydown={(e) => {
+    if (e.key !== 'Escape') return;
+    if (showComplianceConfirm) showComplianceConfirm = false;
+    if (showNameMenu) showNameMenu = false;
+  }}
+  onclick={() => { if (showNameMenu) showNameMenu = false; }}
+  onscrollcapture={() => { if (showNameMenu) showNameMenu = false; }}
+/>
 
 <style>
   /* === 6 Fr confirmation modal === */
@@ -961,24 +1027,37 @@
 
   /* ProRes working-file button — subtle by default */
 
+  /* Duration mismatch — a solid orange pill with the size of the mismatch,
+     not a faint icon: this is the one thing on the row that can cost sound. */
   .duration-warn {
     flex-shrink: 0;
-    color: var(--neon-orange);
     display: flex;
     align-items: center;
-    background: none;
-    border: none;
-    padding: 2px;
-    border-radius: var(--radius-sm);
+    gap: 5px;
+    color: var(--bg-dark);
+    background: var(--neon-orange);
+    border: 1px solid var(--neon-orange);
+    padding: 3px 8px;
+    border-radius: 999px;
     cursor: pointer;
-    opacity: 0.8;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+    box-shadow: 0 0 10px rgba(255, 159, 28, 0.45);
     transition: all 0.15s;
   }
+  .duration-warn-label { line-height: 1; }
 
   .duration-warn:hover,
   .duration-warn.open {
-    opacity: 1;
-    background: rgba(255, 159, 28, 0.12);
+    filter: brightness(1.1);
+    box-shadow: 0 0 16px rgba(255, 159, 28, 0.7);
+  }
+
+  :global(:root.tame) .duration-warn {
+    box-shadow: none;
   }
 
   .norm-section {
@@ -1248,42 +1327,40 @@
     color: var(--text-primary);
   }
 
-  .icon-btn {
+  /* Name controls — RENAME / DATE / NAME ▾ — permanent labelled key-caps
+     beside the name, in cyan so they read as actions, not decoration. */
+  .name-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     flex-shrink: 0;
-    background: none;
-    border: none;
-    color: var(--text-muted);
+  }
+  .name-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-family: var(--font-display);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    color: var(--neon-cyan);
+    background: var(--cap-face);
+    border: 1px solid rgba(8, 247, 254, 0.45);
+    border-radius: var(--radius-sm);
+    padding: 4px 9px;
     cursor: pointer;
-    padding: 2px;
-    border-radius: 2px;
-    opacity: 0;
+    white-space: nowrap;
     transition: all 0.15s;
-    display: flex;
-    align-items: center;
+    box-shadow: var(--cap-shadow);
   }
-
-  .output-name-display:hover .icon-btn {
-    opacity: 0.5;
+  .name-action:hover,
+  .name-action.open {
+    border-color: var(--neon-cyan);
+    background: rgba(8, 247, 254, 0.1);
+    box-shadow: var(--cap-shadow-hover);
   }
-
-  .icon-btn:hover {
-    opacity: 1 !important;
-    color: var(--neon-cyan);
-  }
-
-  /* Permanent pencil so it's obvious the filename can be renamed. */
-  .edit-pencil {
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    color: var(--text-muted);
-    opacity: 0.55;
-    transition: all 0.15s;
-  }
-
-  .output-name-display:hover .edit-pencil {
-    opacity: 1;
-    color: var(--neon-cyan);
+  .name-action:active {
+    transform: translateY(1px);
+    box-shadow: var(--cap-shadow-pressed);
   }
 
   .name-edit-wrapper {
@@ -1515,6 +1592,43 @@
   .qc-badge.peak .qc-lufs {
     opacity: 0.5;
     font-weight: 400;
+  }
+
+  /* NAME FROM menu — fixed to the viewport so the card's overflow can't
+     clip it (it was being cut off inside the card). */
+  .name-menu {
+    position: fixed;
+    z-index: 500;
+    min-width: 170px;
+    display: flex;
+    flex-direction: column;
+    padding: 4px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+  }
+  .name-menu button {
+    text-align: left;
+    font-family: var(--font-display);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    color: var(--text-secondary);
+    background: transparent;
+    border: none;
+    border-radius: 3px;
+    padding: 7px 9px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .name-menu button:hover {
+    color: var(--bg-dark);
+    background: var(--neon-cyan);
+  }
+  .name-menu-divider {
+    height: 1px;
+    background: var(--border-color);
+    margin: 4px 2px;
   }
 
   .clock-proceed {
