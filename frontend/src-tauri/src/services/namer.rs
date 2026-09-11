@@ -51,6 +51,22 @@ fn strip_spec_suffix(name: &str) -> &str {
         Some(idx) => &name[..idx],
         None => name,
     };
+    // Trailing conversion tags, in reverse order of how they were added:
+    // "_16bit" / "_24bit" / "_32f", then "_44.1k" / "_48k" / "_96k".
+    if let Some(i) = s.rfind('_') {
+        let tail = &s[i + 1..];
+        let is_depth = tail == "32f"
+            || tail.strip_suffix("bit").map(|n| n.parse::<u32>().is_ok()).unwrap_or(false);
+        if is_depth {
+            s = &s[..i];
+        }
+    }
+    if let Some(i) = s.rfind('_') {
+        let tail = &s[i + 1..];
+        if tail.strip_suffix('k').map(|n| n.parse::<f64>().is_ok()).unwrap_or(false) {
+            s = &s[..i];
+        }
+    }
     // Trailing "_Clocked"
     if let Some(rest) = s.strip_suffix("_Clocked") {
         s = rest;
@@ -78,7 +94,57 @@ fn strip_spec_suffix(name: &str) -> &str {
     s
 }
 
+/// Source extensions that can't hold PCM: a re-encode of one of these has to
+/// land in a WAV instead (the bundled ffmpeg has no MP3 encoder either).
+pub fn is_lossy_ext(ext: &str) -> bool {
+    matches!(ext.to_lowercase().as_str(), "mp3" | "aac" | "ogg" | "oga" | "opus" | "wma" | "ac3" | "eac3")
+}
+
+/// Name tag for a conversion: "_48k", "_44.1k_16bit", "_32f"… Empty when the
+/// spec keeps the source's rate and depth.
+pub fn conversion_tag(spec: &AudioOutputSpec) -> String {
+    let mut tag = String::new();
+    if let Some(rate) = spec.sample_rate {
+        if rate % 1000 == 0 {
+            tag.push_str(&format!("_{}k", rate / 1000));
+        } else {
+            tag.push_str(&format!("_{}k", rate as f64 / 1000.0));
+        }
+    }
+    match spec.bit_depth {
+        Some(32) => tag.push_str("_32f"),
+        Some(d) => tag.push_str(&format!("_{}bit", d)),
+        None => {}
+    }
+    tag
+}
+
+/// The extension an audio-only output gets: the chosen container's, or the
+/// source's own — unless the source is lossy and the file is being re-encoded,
+/// in which case it becomes a WAV.
+pub fn audio_output_ext(source_ext: &str, spec: Option<&AudioOutputSpec>, will_encode: bool) -> String {
+    if let Some(ext) = spec.and_then(|s| s.container.extension()) {
+        return ext.to_string();
+    }
+    if will_encode && is_lossy_ext(source_ext) {
+        return "wav".to_string();
+    }
+    source_ext.to_string()
+}
+
 pub fn generate_names(pairs: &mut [MatchedPair], remove_duplicates: bool, output_ext: &str) {
+    generate_names_with_audio(pairs, remove_duplicates, output_ext, None);
+}
+
+/// As `generate_names`, with the audio-only output spec: the container decides
+/// the extension, and a sample-rate / bit-depth change is recorded in the name.
+pub fn generate_names_with_audio(
+    pairs: &mut [MatchedPair],
+    remove_duplicates: bool,
+    output_ext: &str,
+    audio: Option<&AudioOutputSpec>,
+) {
+    let conv_tag = audio.map(conversion_tag).unwrap_or_default();
     // First pass: generate names
     for pair in pairs.iter_mut() {
         if let Some(ref video) = pair.video {
@@ -91,7 +157,8 @@ pub fn generate_names(pairs: &mut [MatchedPair], remove_duplicates: bool, output
             // reads _-1dBTP instead of being flattened back to "MyMix".
             let any_spec = pair.normalization_enabled
                 || pair.silence_compliance
-                || pair.clock_enabled;
+                || pair.clock_enabled
+                || !conv_tag.is_empty();
             let base_name = if any_spec {
                 strip_spec_suffix(&pair.audio.filename_no_ext).to_string()
             } else {
@@ -116,7 +183,9 @@ pub fn generate_names(pairs: &mut [MatchedPair], remove_duplicates: bool, output
             if pair.clock_enabled {
                 name = format!("{}_Clocked", name);
             }
-            pair.output_filename = format!("{}.{}", name, pair.audio.extension);
+            name.push_str(&conv_tag);
+            let ext = audio_output_ext(&pair.audio.extension, audio, any_spec);
+            pair.output_filename = format!("{}.{}", name, ext);
         }
     }
 
@@ -192,6 +261,9 @@ mod tests {
             width: None,
             height: None,
             slate_secs: None,
+            channel_layout: None,
+            bit_depth: None,
+            bit_rate: None,
             thumbnail_data: None,
         }
     }
@@ -212,6 +284,9 @@ mod tests {
             width: None,
             height: None,
             slate_secs: None,
+            channel_layout: None,
+            bit_depth: None,
+            bit_rate: None,
             thumbnail_data: None,
         }
     }
@@ -442,5 +517,62 @@ mod tests {
         let mut pairs = vec![pair];
         generate_names(&mut pairs, true, "mov"); // output_ext shouldn't matter for audio-only
         assert!(pairs[0].output_filename.ends_with(".aiff"));
+    }
+
+    fn spec(container: AudioContainer, rate: Option<u32>, depth: Option<u32>) -> AudioOutputSpec {
+        AudioOutputSpec { container, sample_rate: rate, bit_depth: depth }
+    }
+
+    #[test]
+    fn test_conversion_tags() {
+        assert_eq!(conversion_tag(&spec(AudioContainer::Original, None, None)), "");
+        assert_eq!(conversion_tag(&spec(AudioContainer::Wav, Some(48000), None)), "_48k");
+        assert_eq!(conversion_tag(&spec(AudioContainer::Wav, Some(44100), Some(16))), "_44.1k_16bit");
+        assert_eq!(conversion_tag(&spec(AudioContainer::Wav, None, Some(32))), "_32f");
+        assert_eq!(conversion_tag(&spec(AudioContainer::Flac, Some(96000), Some(24))), "_96k_24bit");
+    }
+
+    #[test]
+    fn test_audio_only_container_sets_extension_and_conversion_tags_name() {
+        let pair = make_pair(None, "MyMix", false, -23.0, -1.0);
+        let mut pairs = vec![pair];
+        let sp = spec(AudioContainer::Flac, Some(44100), Some(16));
+        generate_names_with_audio(&mut pairs, true, "mov", Some(&sp));
+        assert_eq!(pairs[0].output_filename, "MyMix_44.1k_16bit.flac");
+
+        // Re-applying with a different spec replaces the old tags, not stacks them.
+        pairs[0].audio.filename_no_ext = "MyMix_44.1k_16bit".to_string();
+        let sp2 = spec(AudioContainer::Wav, Some(48000), None);
+        generate_names_with_audio(&mut pairs, true, "mov", Some(&sp2));
+        assert_eq!(pairs[0].output_filename, "MyMix_48k.wav");
+    }
+
+    #[test]
+    fn test_audio_only_norm_then_conversion_order() {
+        let pair = make_pair(None, "MyMix", true, -23.0, -1.0);
+        let mut pairs = vec![pair];
+        let sp = spec(AudioContainer::Original, Some(48000), Some(24));
+        generate_names_with_audio(&mut pairs, true, "mov", Some(&sp));
+        assert_eq!(pairs[0].output_filename, "MyMix_-23LUFS_48k_24bit.wav");
+        // Stripping takes the conversion tags off before the spec suffixes.
+        assert_eq!(strip_spec_suffix("MyMix_-23LUFS_6Fr_48k_24bit"), "MyMix");
+        assert_eq!(strip_spec_suffix("MyMix_32f"), "MyMix");
+    }
+
+    #[test]
+    fn test_audio_only_lossy_source_reencode_becomes_wav() {
+        // An mp3 that's just passed through keeps its name and extension…
+        let mut pair = make_pair(None, "Podcast", false, -23.0, -1.0);
+        pair.audio.extension = "mp3".to_string();
+        let mut pairs = vec![pair];
+        generate_names_with_audio(&mut pairs, true, "mov", Some(&spec(AudioContainer::Original, None, None)));
+        assert_eq!(pairs[0].output_filename, "Podcast.mp3");
+        // …but one that's normalised (re-encoded) can't go back into mp3.
+        pairs[0].normalization_enabled = true;
+        generate_names_with_audio(&mut pairs, true, "mov", Some(&spec(AudioContainer::Original, None, None)));
+        assert_eq!(pairs[0].output_filename, "Podcast_-23LUFS.wav");
+        // Explicit AAC container → m4a.
+        generate_names_with_audio(&mut pairs, true, "mov", Some(&spec(AudioContainer::Aac, None, None)));
+        assert_eq!(pairs[0].output_filename, "Podcast_-23LUFS.m4a");
     }
 }

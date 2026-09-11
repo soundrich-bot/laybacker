@@ -13,7 +13,40 @@
     defaultNameRule = 'smart',
     onDefaultNameRuleChange,
     audioOnly = false,
+    audioPage = false,
   } = $props();
+
+  // Audio Only page output: Original first, then the choices.
+  const containers = [
+    { value: 'original', label: 'ORIGINAL', desc: 'Keep each file’s own format' },
+    { value: 'wav',      label: 'WAV',      desc: 'Uncompressed PCM .wav' },
+    { value: 'aiff',     label: 'AIFF',     desc: 'Uncompressed PCM .aif' },
+    { value: 'flac',     label: 'FLAC',     desc: 'Lossless, smaller .flac' },
+    { value: 'alac',     label: 'ALAC',     desc: 'Apple Lossless in .m4a' },
+    { value: 'aac',      label: 'AAC',      desc: 'Compressed AAC in .m4a' },
+  ];
+  const sampleRates = [
+    { value: null,  label: 'ORIGINAL' },
+    { value: 44100, label: '44.1k' },
+    { value: 48000, label: '48k' },
+    { value: 96000, label: '96k' },
+  ];
+  const bitDepths = [
+    { value: null, label: 'ORIGINAL', desc: 'Keep the source depth (24-bit when re-encoding)' },
+    { value: 16,   label: '16',       desc: '16-bit' },
+    { value: 24,   label: '24',       desc: '24-bit' },
+    { value: 32,   label: '32f',      desc: '32-bit float (WAV and AIFF only)', pcmOnly: true },
+  ];
+  let container = $derived(settings.audioContainer ?? 'original');
+  let depthChoices = $derived(
+    bitDepths.filter(d => !d.pcmOnly || ['original', 'wav', 'aiff'].includes(container))
+  );
+  // A depth that no longer fits the container (32f → FLAC) falls back to Original.
+  $effect(() => {
+    if (audioPage && settings.bitDepth === 32 && !['original', 'wav', 'aiff'].includes(container)) {
+      updateSetting('bitDepth', null);
+    }
+  });
 
   const nameRules = [
     { value: 'smart', label: 'SMART BLEND', desc: 'A blend of both filenames with duplicate information removed' },
@@ -53,6 +86,53 @@
 </script>
 
 <div class="settings-bar">
+  {#if audioPage}
+  <!-- Audio Only page: what the new audio files come out as -->
+  <div class="setting-group">
+    <span class="setting-label" title="File type for every audio output">FORMAT</span>
+    <select class="spec-select" class:changed={container !== 'original'} value={container}
+      onchange={(e) => updateSetting('audioContainer', e.target.value)} title="File type for every audio output">
+      {#each containers as c}
+        <option value={c.value} title={c.desc}>{c.label}</option>
+      {/each}
+    </select>
+    {#if container === 'aac'}
+      <select
+        class="bitrate-select"
+        value={settings.aacBitrate}
+        onchange={(e) => updateSetting('aacBitrate', parseInt(e.target.value))}
+        title="AAC bitrate — higher is better quality"
+      >
+        <option value={128000}>128 kbps</option>
+        <option value={192000}>192 kbps</option>
+        <option value={256000}>256 kbps</option>
+        <option value={320000}>320 kbps</option>
+      </select>
+    {/if}
+  </div>
+  <div class="setting-group">
+    <span class="setting-label" title="Sample rate for every audio output">SAMPLE RATE</span>
+    <select class="spec-select" class:changed={!!settings.sampleRate} value={String(settings.sampleRate ?? '')}
+      onchange={(e) => updateSetting('sampleRate', e.target.value ? parseInt(e.target.value) : null)}
+      title="Sample rate for every audio output">
+      {#each sampleRates as r}
+        <option value={r.value == null ? '' : String(r.value)}>{r.label}</option>
+      {/each}
+    </select>
+  </div>
+  {#if container !== 'aac'}
+  <div class="setting-group">
+    <span class="setting-label" title="Bit depth for every audio output">BIT DEPTH</span>
+    <select class="spec-select" class:changed={!!settings.bitDepth} value={String(settings.bitDepth ?? '')}
+      onchange={(e) => updateSetting('bitDepth', e.target.value ? parseInt(e.target.value) : null)}
+      title="Bit depth for every audio output">
+      {#each depthChoices as d}
+        <option value={d.value == null ? '' : String(d.value)} title={d.desc}>{d.label}</option>
+      {/each}
+    </select>
+  </div>
+  {/if}
+  {:else}
   <!-- Video codec -->
   <div class="setting-group">
     <span class="setting-label" title="Video codec — Original copies the stream, H.264 re-encodes">VIDEO</span>
@@ -125,6 +205,7 @@
         </span>
       </span>
     </div>
+  {/if}
   {/if}
 
   <!-- Spacer -->
@@ -281,6 +362,23 @@
 
   .bitrate-select {
     margin-left: var(--gap-xs);
+  }
+
+  /* Audio output dropdowns: compact, and lit when away from Original */
+  .spec-select {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    padding: 4px 24px 4px 10px;
+    color: var(--text-secondary);
+  }
+  .spec-select.changed {
+    color: var(--neon-pink);
+    border-color: rgba(255, 46, 99, 0.45);
+  }
+  :global(:root.tame) .spec-select.changed {
+    color: var(--neon-green);
+    border-color: rgba(90, 138, 122, 0.45);
   }
 
   .output-format-wrap {

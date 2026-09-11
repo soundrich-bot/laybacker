@@ -140,6 +140,9 @@ mod tests {
             width: None,
             height: None,
             slate_secs: None,
+            channel_layout: None,
+            bit_depth: None,
+            bit_rate: None,
             thumbnail_data: None,
         }
     }
@@ -160,6 +163,9 @@ mod tests {
             width: None,
             height: None,
             slate_secs: None,
+            channel_layout: None,
+            bit_depth: None,
+            bit_rate: None,
             thumbnail_data: None,
         }
     }

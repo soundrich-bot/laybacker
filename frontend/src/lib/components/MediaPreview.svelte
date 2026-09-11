@@ -1,5 +1,6 @@
 <script>
-  import { convertFileSrc } from '@tauri-apps/api/core';
+  import { convertFileSrc, invoke } from '@tauri-apps/api/core';
+  import { onMount } from 'svelte';
 
   let {
     filePath = '',
@@ -17,6 +18,79 @@
 
   let assetUrl = $derived(filePath ? convertFileSrc(filePath) : '');
   let progressPct = $derived(duration > 0 ? (currentTime / duration) * 100 : 0);
+
+  // Waveform overview: peaks come from the backend (ffmpeg decode), drawn on
+  // a canvas with the played part lit. Video previews get a slim strip of
+  // their own soundtrack under the picture.
+  let peaks = $state(null);
+  let waveError = $state(false);
+  let canvas = $state(null);
+  const BUCKETS = 600;
+
+  onMount(async () => {
+    try {
+      peaks = await invoke('waveform_peaks', { audioPath: filePath, buckets: BUCKETS });
+    } catch {
+      waveError = true;
+    }
+  });
+
+  function cssVar(name, fallback) {
+    const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return v || fallback;
+  }
+
+  function drawWave() {
+    if (!canvas || !peaks || peaks.length === 0) return;
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    if (w === 0 || h === 0) return;
+    if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
+      canvas.width = w * dpr; canvas.height = h * dpr;
+    }
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    const lit = cssVar('--neon-cyan', '#08f7fe');
+    const dim = cssVar('--text-muted', '#8888aa');
+    const mid = h / 2;
+    const n = peaks.length;
+    const playedX = duration > 0 ? (currentTime / duration) * w : 0;
+    // Bars: one per pixel column, from the nearest bucket.
+    for (let x = 0; x < w; x++) {
+      const p = peaks[Math.min(n - 1, Math.floor((x / w) * n))];
+      const bar = Math.max(1, p * (h - 4));
+      ctx.fillStyle = x <= playedX ? lit : dim;
+      ctx.globalAlpha = x <= playedX ? 1 : 0.55;
+      ctx.fillRect(x, mid - bar / 2, 1, bar);
+    }
+    ctx.globalAlpha = 1;
+    // Centre line and playhead
+    ctx.fillStyle = dim; ctx.globalAlpha = 0.25; ctx.fillRect(0, mid, w, 1); ctx.globalAlpha = 1;
+    if (duration > 0) {
+      ctx.fillStyle = lit;
+      ctx.fillRect(Math.round(playedX), 0, 1.5, h);
+    }
+  }
+
+  // Redraw whenever the peaks arrive, the playhead moves, or the modal resizes.
+  $effect(() => {
+    peaks; currentTime; duration; canvas;
+    drawWave();
+  });
+  $effect(() => {
+    if (!canvas) return;
+    const ro = new ResizeObserver(() => drawWave());
+    ro.observe(canvas);
+    return () => ro.disconnect();
+  });
+
+  function seekWave(e) {
+    if (!mediaEl || !duration) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const pct = (e.clientX - rect.left) / rect.width;
+    mediaEl.currentTime = Math.max(0, Math.min(duration, pct * duration));
+  }
 
   function formatTime(secs) {
     const m = Math.floor(secs / 60);
@@ -94,18 +168,27 @@
           preload="auto"
         ></video>
       {:else}
-        <div class="audio-visual">
-          <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
-            <circle cx="32" cy="32" r="28" stroke="currentColor" stroke-width="1.5" opacity="0.3"/>
-            <path d="M32 12C32 12 36 12 36 18V46C36 52 32 52 32 52C32 52 28 52 28 46V18C28 12 32 12 32 12Z" stroke="currentColor" stroke-width="1.5"/>
-            <path d="M20 28V40C20 46.6 25.4 52 32 52C38.6 52 44 46.6 44 40V28" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-            <path d="M32 52V60" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-            <path d="M26 60H38" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-          </svg>
-          {#if isPlaying}
-            <div class="audio-pulse"></div>
-          {/if}
-        </div>
+        {#if peaks && peaks.length > 0}
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <!-- svelte-ignore a11y_click_events_have_key_events -->
+          <div class="wave-wrap audio" onclick={seekWave} title="Click to seek">
+            <canvas class="wave" bind:this={canvas}></canvas>
+          </div>
+        {:else}
+          <div class="audio-visual" class:loading={!waveError}>
+            <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
+              <circle cx="32" cy="32" r="28" stroke="currentColor" stroke-width="1.5" opacity="0.3"/>
+              <path d="M32 12C32 12 36 12 36 18V46C36 52 32 52 32 52C32 52 28 52 28 46V18C28 12 32 12 32 12Z" stroke="currentColor" stroke-width="1.5"/>
+              <path d="M20 28V40C20 46.6 25.4 52 32 52C38.6 52 44 46.6 44 40V28" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              <path d="M32 52V60" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              <path d="M26 60H38" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            {#if isPlaying}
+              <div class="audio-pulse"></div>
+            {/if}
+            {#if !waveError}<span class="wave-loading">DRAWING WAVEFORM…</span>{/if}
+          </div>
+        {/if}
         <audio
           bind:this={mediaEl}
           src={assetUrl}
@@ -119,6 +202,15 @@
         ></audio>
       {/if}
     </div>
+
+    {#if mediaType === 'video' && peaks && peaks.length > 0}
+      <!-- The video's own soundtrack, as a slim strip under the picture -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <div class="wave-wrap strip" onclick={seekWave} title="Click to seek">
+        <canvas class="wave" bind:this={canvas}></canvas>
+      </div>
+    {/if}
 
     <!-- Transport -->
     <div class="transport">
@@ -258,6 +350,24 @@
     justify-content: center;
     padding: 32px;
   }
+
+  .audio-visual.loading { flex-direction: column; gap: 10px; }
+  .wave-loading {
+    font-family: var(--font-display);
+    font-size: 9px;
+    letter-spacing: 0.15em;
+    color: var(--text-muted);
+  }
+
+  /* Waveform overview */
+  .wave-wrap {
+    width: 100%;
+    cursor: pointer;
+    background: var(--bg-dark);
+  }
+  .wave-wrap.audio { height: 160px; padding: 12px 16px; box-sizing: border-box; }
+  .wave-wrap.strip { height: 56px; padding: 6px 16px; box-sizing: border-box; border-top: 1px solid var(--border-color); }
+  .wave { display: block; width: 100%; height: 100%; }
 
   .audio-pulse {
     position: absolute;

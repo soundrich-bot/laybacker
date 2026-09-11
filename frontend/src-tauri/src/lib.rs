@@ -33,6 +33,11 @@ pub fn run() {
             commands::create_prores,
             commands::slate_video,
             commands::read_image_data_url,
+            commands::check_stereo,
+            commands::split_channels,
+            commands::join_channels,
+            commands::process_audio,
+            commands::waveform_peaks,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

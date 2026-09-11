@@ -4,3 +4,6 @@ pub mod namer;
 pub mod ffmpeg;
 pub mod loudness;
 pub mod processor;
+pub mod channels;
+pub mod processing;
+pub mod waveform;

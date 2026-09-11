@@ -27,6 +27,8 @@
   import Header from './lib/components/Header.svelte';
   import DropZone from './lib/components/DropZone.svelte';
   import MatchedPairsList from './lib/components/MatchedPairsList.svelte';
+  import AudioPage from './lib/components/AudioPage.svelte';
+  import AudioModePrompt from './lib/components/AudioModePrompt.svelte';
   import SettingsPanel from './lib/components/SettingsPanel.svelte';
   import ProcessButton from './lib/components/ProcessButton.svelte';
   import ErrorBar from './lib/components/ErrorBar.svelte';
@@ -107,8 +109,53 @@
 
   <ErrorBar errors={app.errors} onDismiss={app.dismissError} />
 
-  <DropZone onFilesDropped={handleFilesDropped} isScanning={app.isScanning} {isDraggingOver} />
+  <DropZone onFilesDropped={handleFilesDropped} isScanning={app.isScanning} {isDraggingOver} compact={app.appMode === 'audio'} />
 
+  {#if app.appMode === 'audio'}
+  <AudioPage
+    pairs={app.matchedPairs}
+    progressMap={app.progressMap}
+    results={app.processingResults}
+    onUpdateNormalization={app.updatePairNormalization}
+    onUpdateCompliance={app.updatePairCompliance}
+    onUpdateClock={app.updatePairClock}
+    onUpdateFilename={app.updatePairFilename}
+    onRemove={app.removePair}
+    onReveal={app.revealInFinder}
+    {timestampFormat}
+    qcTargetLufs={app.qcTargetLufs}
+    qcTruePeak={app.qcTruePeak}
+    qcMode={app.qcMode}
+    qcCheckSilence={app.qcCheckSilence}
+    qcResults={app.qcResults}
+    qcRunning={app.qcRunning}
+    qcProgress={app.qcProgress}
+    onQcTargetChange={app.setQcTargetLufs}
+    onQcTruePeakChange={app.setQcTruePeak}
+    onQcModeChange={app.setQcMode}
+    onQcSilenceChange={app.setQcCheckSilence}
+    onRunQc={app.runBatchQc}
+    onNormalizeAll={app.normalizeAllNow}
+    onClockAll={app.clockAllNow}
+    onSixFrAll={app.sixFrAllNow}
+    onApplyNameRule={app.applyNameRule}
+    nameRule={app.nameRule}
+    onNameRuleChange={app.setNameRule}
+    isProcessing={app.isProcessing}
+    clockChecks={app.clockChecks}
+    clockRunning={app.clockRunning}
+    clockProgress={app.clockProgress}
+    onRunClockCheck={app.runClockCheck}
+    onBackToLayback={() => app.setAppMode('layback')}
+    onSplitAll={app.splitAllNow}
+    onJoinAll={app.joinMonosNow}
+    joinableGroups={app.joinableGroups}
+    onConvertAll={app.convertAllNow}
+    conversionSet={app.conversionSet}
+    conversionLabel={app.conversionLabel}
+    onProcessAll={app.processAudioAllNow}
+  />
+  {:else}
   <MatchedPairsList
     pairs={app.matchedPairs}
     progressMap={app.progressMap}
@@ -151,6 +198,7 @@
     clockProgress={app.clockProgress}
     onRunClockCheck={app.runClockCheck}
   />
+  {/if}
 
   <SettingsPanel
     settings={app.exportSettings}
@@ -166,6 +214,7 @@
     {proresProfile}
     onProresProfileChange={(p) => { proresProfile = p; localStorage.setItem('proresProfile', p); }}
     audioOnly={app.matchedPairs.length > 0 && app.matchedPairs.every(p => !p.video)}
+    audioPage={app.appMode === 'audio'}
   />
 
   <ProcessButton
@@ -189,6 +238,10 @@
     onChoose={app.resolveLengthFix}
     onCancel={app.cancelLengthFix}
   />
+{/if}
+
+{#if app.audioModePrompt}
+  <AudioModePrompt count={app.getAudios().length} onChoose={app.chooseAudioMode} />
 {/if}
 
 {#if app.startPrompt}

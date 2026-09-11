@@ -46,6 +46,19 @@
   let editingName = $state(false);
   let editName = $state('');
   let previewFile = $state(null); // { path, filename, mediaType }
+
+  // "48k · 24-bit · 2ch" after the audio filename — or the bit rate for a
+  // compressed file ("48k · 320 kbps · 2ch").
+  let audioSpec = $derived.by(() => {
+    const a = pair.audio;
+    if (!a) return '';
+    const bits = [];
+    if (a.sampleRate) bits.push(`${a.sampleRate % 1000 === 0 ? a.sampleRate / 1000 : (a.sampleRate / 1000).toFixed(1)}k`);
+    if (a.bitDepth) bits.push(a.bitDepth.endsWith('f') ? `${a.bitDepth.slice(0, -1)}-bit float` : `${a.bitDepth}-bit`);
+    else if (a.bitRate) bits.push(`${Math.round(a.bitRate / 1000)} kbps`);
+    if (a.channelCount) bits.push(a.channelCount === 1 ? 'mono' : a.channelCount === 2 ? 'stereo' : `${a.channelCount}ch`);
+    return bits.join(' · ');
+  });
   let silenceCheck = $state(null); // { headHasAudio, tailHasAudio, headPeak, tailPeak }
   let checkingSilence = $state(false);
   let showSilenceDetail = $state(false); // expand the 6 Fr warning into a detail panel
@@ -89,6 +102,11 @@
       bits.push(qcResult.mode === 'peak'
         ? `true peak ${qcResult.measuredTP.toFixed(1)} dBTP is not at the ${qcResult.peakLimit} dBTP target`
         : `true peak ${qcResult.measuredTP.toFixed(1)} dBTP is over the ${qcResult.peakLimit} dBTP ceiling`);
+    }
+    if (qcResult.stereo && !qcResult.stereoPass) {
+      bits.push(qcResult.stereo.verdict === 'anti_phase'
+        ? `channels are out of phase (correlation ${qcResult.stereo.correlation?.toFixed(2)}) — cancels in mono`
+        : 'one channel is silent or far below the other');
     }
     if (!qcResult.silencePass) {
       const where = qcResult.headHasAudio && qcResult.tailHasAudio ? 'head & tail'
@@ -279,6 +297,7 @@
         </button>
         <span class="file-duration">{formatDuration(pair.audio.durationSecs)}</span>
         <span class="file-name" title="{pair.audio.channelCount ?? '?'}ch {pair.audio.sampleRate ? (pair.audio.sampleRate / 1000).toFixed(1) + 'kHz' : ''}">{pair.audio.filename}</span>
+        {#if audioSpec}<span class="file-spec" title="Sample rate · bit depth (or bit rate for compressed files) · channels">{audioSpec}</span>{/if}
       </div>
 
       <span class="audio-only-badge">AUDIO ONLY</span>
@@ -326,6 +345,7 @@
         </button>
         <span class="file-duration">{formatDuration(pair.audio.durationSecs)}</span>
         <span class="file-name" title="{pair.audio.channelCount ?? '?'}ch {pair.audio.sampleRate ? (pair.audio.sampleRate / 1000).toFixed(1) + 'kHz' : ''}">{pair.audio.filename}</span>
+        {#if audioSpec}<span class="file-spec" title="Sample rate · bit depth (or bit rate for compressed files) · channels">{audioSpec}</span>{/if}
       </div>
 
       <!-- Duration warning -->
@@ -369,6 +389,24 @@
           <span class="qc-badge sixfr-pass" title="6-frame check passed — head and tail are already silent">6Fr &#10003;</span>
         {:else}
           <span class="qc-badge sixfr-fail" title="6-frame check — sound found at the {qcResult.headHasAudio && qcResult.tailHasAudio ? 'head & tail' : qcResult.headHasAudio ? 'head' : 'tail'}; use 6 Fr to mute it">6Fr &#10007;</span>
+        {/if}
+      {/if}
+      {#if qcResult.stereo}
+        {@const st = qcResult.stereo}
+        {#if st.verdict === 'stereo'}
+          <span class="qc-badge pass" title="Genuine stereo — L {st.leftDb?.toFixed(1)} dB, R {st.rightDb?.toFixed(1)} dB. Phase correlation {st.correlation?.toFixed(2)} (+1 = mono-compatible, −1 = cancels in mono)">
+            STEREO &#10003; <span class="qc-tp">{st.correlation >= 0 ? '+' : ''}{st.correlation?.toFixed(2)}</span>
+          </span>
+        {:else if st.verdict === 'dual_mono'}
+          <span class="qc-badge stereo-warn" title="Left and right are identical — this is a mono signal delivered as a stereo file (correlation {st.correlation?.toFixed(2)})">DUAL MONO</span>
+        {:else if st.verdict === 'anti_phase'}
+          <span class="qc-badge fail" title="Channels are out of phase (correlation {st.correlation?.toFixed(2)}) — this will cancel or hollow out when summed to mono">ANTI-PHASE</span>
+        {:else if st.verdict === 'one_sided'}
+          <span class="qc-badge fail" title="One channel is silent or far below the other — L {st.leftDb?.toFixed(1)} dB, R {st.rightDb?.toFixed(1)} dB">ONE-SIDED</span>
+        {:else if st.verdict === 'multi'}
+          <span class="qc-badge stereo-info" title="{st.channels}-channel file — stereo check applies to 2-channel files">{st.channels} CH</span>
+        {:else if st.verdict === 'error'}
+          <span class="qc-badge stereo-warn" title={st.error}>STEREO ?</span>
         {/if}
       {/if}
     {/if}
@@ -1007,6 +1045,19 @@
     flex-shrink: 0;
   }
 
+  .file-spec {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    white-space: nowrap;
+    flex-shrink: 0;
+    padding: 1px 6px;
+    border: 1px solid var(--border-color);
+    border-radius: 3px;
+    background: var(--bg-dark);
+  }
+
   .file-name {
     font-family: var(--font-mono);
     font-size: 12px;
@@ -1578,6 +1629,18 @@
     background: rgba(255, 159, 28, 0.1);
     border: 1px solid rgba(255, 159, 28, 0.4);
   }
+  /* Stereo check: warn (dual mono) is orange but doesn't fail; info is neutral */
+  .qc-badge.stereo-warn {
+    color: var(--neon-orange);
+    background: rgba(255, 159, 28, 0.1);
+    border: 1px solid rgba(255, 159, 28, 0.4);
+  }
+  .qc-badge.stereo-info {
+    color: var(--text-secondary);
+    background: var(--bg-raised, rgba(255, 255, 255, 0.04));
+    border: 1px solid var(--border-color);
+  }
+
   /* True-peak reading sits alongside the loudness value, shown just as boldly.
      If the peak is over the ceiling it also gets underlined to stand out. */
   .qc-tp {

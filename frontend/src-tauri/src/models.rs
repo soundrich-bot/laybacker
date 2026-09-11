@@ -36,6 +36,18 @@ pub struct MediaFile {
     /// slated picture know where its programme audio belongs.
     #[serde(default)]
     pub slate_secs: Option<f64>,
+    /// ffmpeg's channel layout name ("stereo", "5.1", "5.1(side)"…) when the
+    /// probe reports one — used to give split stems real channel names.
+    #[serde(default)]
+    pub channel_layout: Option<String>,
+    /// Bit depth of PCM / lossless audio ("16", "24", "32f" for float), when
+    /// the probe reports one. None for lossy codecs — see `bit_rate`.
+    #[serde(default)]
+    pub bit_depth: Option<String>,
+    /// Stream bit rate in bits per second, when known (what a lossy file is
+    /// described by).
+    #[serde(default)]
+    pub bit_rate: Option<u64>,
     pub thumbnail_data: Option<String>,
 }
 
@@ -128,6 +140,15 @@ pub struct ExportSettings {
     pub aac_bitrate: u32,
     pub output_directory: Option<String>,
     pub use_audio_file_location: bool,
+    /// Audio-only outputs (the Audio Only page's FORMAT / SAMPLE RATE / BIT
+    /// DEPTH). Original = keep the source's. Ignored on video laybacks.
+    #[serde(default)]
+    pub audio_container: AudioContainer,
+    #[serde(default)]
+    pub sample_rate: Option<u32>,
+    /// 16, 24, or 32 (32 = 32-bit float — WAV/AIFF only).
+    #[serde(default)]
+    pub bit_depth: Option<u32>,
 }
 
 impl Default for ExportSettings {
@@ -138,6 +159,9 @@ impl Default for ExportSettings {
             aac_bitrate: 320000,
             output_directory: None,
             use_audio_file_location: true,
+            audio_container: AudioContainer::Original,
+            sample_rate: None,
+            bit_depth: None,
         }
     }
 }
@@ -148,6 +172,71 @@ impl ExportSettings {
             AudioFormatOption::Original => "mov",
             AudioFormatOption::Aac => "mp4",
         }
+    }
+
+    /// The audio-only output spec: container, sample rate and bit depth.
+    pub fn audio_output_spec(&self) -> AudioOutputSpec {
+        AudioOutputSpec {
+            container: self.audio_container.clone(),
+            sample_rate: self.sample_rate,
+            bit_depth: self.bit_depth,
+        }
+    }
+}
+
+/// Container for audio-only outputs. Original keeps the source's own.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum AudioContainer {
+    #[default]
+    Original,
+    Wav,
+    Aiff,
+    Flac,
+    Alac,
+    Aac,
+}
+
+impl AudioContainer {
+    /// File extension the container writes, or None for "keep the source's".
+    pub fn extension(&self) -> Option<&'static str> {
+        match self {
+            AudioContainer::Original => None,
+            AudioContainer::Wav => Some("wav"),
+            AudioContainer::Aiff => Some("aif"),
+            AudioContainer::Flac => Some("flac"),
+            AudioContainer::Alac => Some("m4a"),
+            AudioContainer::Aac => Some("m4a"),
+        }
+    }
+
+    /// Lossy containers can't hold PCM, so a re-encode has to go elsewhere.
+    pub fn is_lossy(&self) -> bool {
+        matches!(self, AudioContainer::Aac)
+    }
+}
+
+/// What an audio-only render should come out as. `None` = keep the source's.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioOutputSpec {
+    #[serde(default)]
+    pub container: AudioContainer,
+    #[serde(default)]
+    pub sample_rate: Option<u32>,
+    #[serde(default)]
+    pub bit_depth: Option<u32>,
+}
+
+impl AudioOutputSpec {
+    /// True when the spec asks for a change to sample rate or bit depth.
+    pub fn converts(&self) -> bool {
+        self.sample_rate.is_some() || self.bit_depth.is_some()
+    }
+
+    /// True when anything about the output differs from "as the source is".
+    pub fn is_set(&self) -> bool {
+        self.container != AudioContainer::Original || self.converts()
     }
 }
 

@@ -1,17 +1,28 @@
 <script>
-  let { onFilesDropped, isScanning = false, isDraggingOver = false } = $props();
+  let { onFilesDropped, isScanning = false, isDraggingOver = false, compact = false } = $props();
 </script>
 
 <div
   class="drop-zone"
   class:dragging={isDraggingOver}
   class:scanning={isScanning}
+  class:compact
   role="region"
   aria-label="File drop zone"
-  title="Drop any combination of video and audio files — Laybacker will sort them by duration and pair them automatically"
+  title={compact
+    ? 'Drop more audio files here — or a video to go back to the layback page'
+    : 'Drop any combination of video and audio files — Laybacker will sort them by duration and pair them automatically'}
 >
   <div class="drop-content">
-    {#if isScanning}
+    {#if compact}
+      <!-- Audio Only page: a slim strip, the page itself needs the room -->
+      <p class="drop-text">
+        {#if isScanning}SCANNING…{:else if isDraggingOver}LET GO!{:else}+ DROP MORE AUDIO{/if}
+      </p>
+      {#if !isScanning && !isDraggingOver}
+        <span class="drop-formats">.wav .aif .aiff .bwf .m4a .aac .mp3 .flac</span>
+      {/if}
+    {:else if isScanning}
       <div class="spinner"></div>
       <p class="drop-text">SCANNING FILES...</p>
     {:else if isDraggingOver}
@@ -131,6 +142,27 @@
   @keyframes spin {
     to { transform: rotate(360deg); }
   }
+
+  /* Compact strip for the Audio Only page */
+  .drop-zone.compact {
+    min-height: 0;
+    padding: 6px var(--gap-md);
+    margin: var(--gap-sm) var(--gap-lg) 0;
+    border-width: 1px;
+  }
+  .drop-zone.compact .drop-content {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+  .drop-zone.compact .drop-text {
+    font-size: 11px;
+    margin: 0;
+  }
+  .drop-zone.compact .drop-formats {
+    font-size: 10px;
+  }
+  .drop-zone.compact.dragging { transform: none; }
 
   :global(:root.tame) .drop-zone.dragging {
     background: rgba(90, 138, 122, 0.06);

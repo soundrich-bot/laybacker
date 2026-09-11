@@ -57,6 +57,9 @@ pub fn inspect_file(path: &str) -> Result<MediaFile, String> {
         width: probe.width,
         height: probe.height,
         slate_secs: probe.slate_secs,
+        channel_layout: probe.channel_layout,
+        bit_depth: probe.bit_depth,
+        bit_rate: probe.bit_rate,
         thumbnail_data,
     })
 }
@@ -111,6 +114,30 @@ struct ProbeResult {
     width: Option<u32>,
     height: Option<u32>,
     slate_secs: Option<f64>,
+    channel_layout: Option<String>,
+    bit_depth: Option<String>,
+    bit_rate: Option<u64>,
+}
+
+/// Bit depth as the user reads it: "16", "24", or "32f" for float PCM.
+/// PCM codecs report `bits_per_sample`; FLAC / ALAC report `bits_per_raw_sample`.
+/// Lossy codecs have no depth, so None.
+pub fn audio_bit_depth(codec: Option<&str>, sample_fmt: Option<&str>, bits_per_sample: Option<u64>, bits_per_raw: Option<&str>) -> Option<String> {
+    let codec = codec.unwrap_or("");
+    if codec.starts_with("pcm_f") {
+        let bits = if matches!(sample_fmt, Some("dbl") | Some("dblp")) { 64 } else { bits_per_sample.filter(|b| *b > 0).unwrap_or(32) };
+        return Some(format!("{}f", bits));
+    }
+    if let Some(b) = bits_per_sample.filter(|b| *b > 0) {
+        return Some(b.to_string());
+    }
+    if let Some(b) = bits_per_raw.and_then(|s| s.parse::<u64>().ok()).filter(|b| *b > 0) {
+        // Only lossless codecs carry a real depth here.
+        if matches!(codec, "flac" | "alac" | "wavpack" | "tta" | "ape" | "mlp" | "truehd") || codec.starts_with("pcm_") {
+            return Some(b.to_string());
+        }
+    }
+    None
 }
 
 /// The container tag Laybacker writes when it renders a slate onto a file.
@@ -173,6 +200,9 @@ fn probe_file(path: &str) -> Result<ProbeResult, String> {
     let mut frame_rate = None;
     let mut width = None;
     let mut height = None;
+    let mut channel_layout = None;
+    let mut bit_depth = None;
+    let mut bit_rate = None;
 
     if let Some(streams) = streams {
         // Find the video stream for video files, audio stream for audio files
@@ -209,6 +239,23 @@ fn probe_file(path: &str) -> Result<ProbeResult, String> {
                     if channels.is_none() {
                         channels = stream["channels"].as_u64().map(|c| c as u32);
                     }
+                    if channel_layout.is_none() {
+                        channel_layout = stream["channel_layout"]
+                            .as_str()
+                            .filter(|s| !s.is_empty())
+                            .map(|s| s.to_string());
+                    }
+                    if bit_depth.is_none() {
+                        bit_depth = audio_bit_depth(
+                            stream["codec_name"].as_str(),
+                            stream["sample_fmt"].as_str(),
+                            stream["bits_per_sample"].as_u64(),
+                            stream["bits_per_raw_sample"].as_str(),
+                        );
+                    }
+                    if bit_rate.is_none() {
+                        bit_rate = stream["bit_rate"].as_str().and_then(|s| s.parse::<u64>().ok());
+                    }
                     if codec_name.is_none()
                         && !streams.iter().any(|s| {
                             s["codec_type"].as_str() == Some("video")
@@ -231,6 +278,9 @@ fn probe_file(path: &str) -> Result<ProbeResult, String> {
         width,
         height,
         slate_secs,
+        channel_layout,
+        bit_depth,
+        bit_rate,
     })
 }
 
@@ -241,7 +291,18 @@ fn find_ffprobe() -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_frame_rate;
+    use super::{audio_bit_depth, parse_frame_rate};
+
+    #[test]
+    fn test_audio_bit_depth() {
+        assert_eq!(audio_bit_depth(Some("pcm_s24le"), Some("s32"), Some(24), Some("24")), Some("24".into()));
+        assert_eq!(audio_bit_depth(Some("pcm_s16le"), Some("s16"), Some(16), None), Some("16".into()));
+        assert_eq!(audio_bit_depth(Some("pcm_f32le"), Some("flt"), Some(32), None), Some("32f".into()));
+        assert_eq!(audio_bit_depth(Some("flac"), Some("s32"), Some(0), Some("24")), Some("24".into()));
+        assert_eq!(audio_bit_depth(Some("alac"), Some("s16p"), Some(0), Some("16")), Some("16".into()));
+        assert_eq!(audio_bit_depth(Some("aac"), Some("fltp"), Some(0), None), None); // lossy: no depth
+        assert_eq!(audio_bit_depth(Some("mp3"), Some("s16p"), Some(0), None), None);
+    }
 
     #[test]
     fn test_parse_frame_rate() {

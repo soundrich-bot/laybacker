@@ -1,7 +1,7 @@
 use tauri::{Emitter, Manager, Window};
 
 use crate::models::*;
-use crate::services::{ffmpeg, inspector, loudness, matcher, namer, processor};
+use crate::services::{channels, ffmpeg, inspector, loudness, matcher, namer, processing, processor, waveform};
 
 /// Cancel any in-progress processing
 #[tauri::command]
@@ -55,8 +55,12 @@ pub fn generate_names(
     mut pairs: Vec<MatchedPair>,
     remove_duplicates: bool,
     output_extension: String,
+    settings: Option<ExportSettings>,
 ) -> Vec<MatchedPair> {
-    namer::generate_names(&mut pairs, remove_duplicates, &output_extension);
+    // The audio-only output spec (container / rate / depth) shapes the names
+    // of audio-only outputs; video laybacks only need the container extension.
+    let audio = settings.map(|s| s.audio_output_spec());
+    namer::generate_names_with_audio(&mut pairs, remove_duplicates, &output_extension, audio.as_ref());
     pairs
 }
 
@@ -338,6 +342,44 @@ pub async fn read_image_data_url(path: String) -> Result<String, String> {
     .map_err(|e| format!("Task failed: {}", e))?
 }
 
+/// Stereo / phase QC for one file (see services::channels::StereoCheck).
+#[tauri::command]
+pub async fn check_stereo(audio_path: String, channels: u32) -> Result<channels::StereoCheck, String> {
+    tokio::task::spawn_blocking(move || channels::check_stereo(&audio_path, channels))
+        .await
+        .map_err(|e| format!("Task failed: {}", e))?
+}
+
+/// Split a multichannel file into mono files beside it. Returns their paths
+/// in channel order ("<stem>_L.wav", "<stem>_R.wav", …).
+#[tauri::command]
+pub async fn split_channels(
+    audio_path: String,
+    channel_layout: Option<String>,
+    channels: u32,
+) -> Result<Vec<String>, String> {
+    tokio::task::spawn_blocking(move || {
+        channels::split_channels(&audio_path, channel_layout.as_deref(), channels)
+    })
+    .await
+    .map_err(|e| format!("Task failed: {}", e))?
+}
+
+/// Join mono files (in channel order) into one multichannel file.
+#[tauri::command]
+pub async fn join_channels(
+    inputs: Vec<String>,
+    channel_layout: String,
+    output_path: String,
+) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        channels::join_channels(&inputs, &channel_layout, &output_path)?;
+        Ok(output_path)
+    })
+    .await
+    .map_err(|e| format!("Task failed: {}", e))?
+}
+
 #[cfg(test)]
 mod tests {
     /// URL validation logic (extracted for testability)
@@ -391,4 +433,30 @@ mod tests {
     fn test_url_data_uri_blocked() {
         assert!(validate_url_scheme("data:text/html,<script>alert(1)</script>").is_err());
     }
+}
+
+/// File Processing: fold to stereo / mono, fade, or trim silence. Writes a
+/// new WAV beside the source and returns its path.
+#[tauri::command]
+pub async fn process_audio(
+    op: String,
+    audio_path: String,
+    channel_layout: Option<String>,
+    channels: u32,
+    duration_secs: f64,
+    param: Option<f64>,
+) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        processing::process_audio(&op, &audio_path, channel_layout.as_deref(), channels, duration_secs, param)
+    })
+    .await
+    .map_err(|e| format!("Task failed: {}", e))?
+}
+
+/// Waveform overview for the preview player: `buckets` peak values in 0…1.
+#[tauri::command]
+pub async fn waveform_peaks(audio_path: String, buckets: u32) -> Result<Vec<f32>, String> {
+    tokio::task::spawn_blocking(move || waveform::compute_peaks(&audio_path, buckets.clamp(1, 4000) as usize))
+        .await
+        .map_err(|e| format!("Task failed: {}", e))?
 }

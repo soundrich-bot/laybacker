@@ -61,6 +61,9 @@ fn make_audio_pair(fixture_name: &str, output_filename: &str, norm_enabled: bool
             width: None,
             height: None,
             slate_secs: None,
+            channel_layout: None,
+            bit_depth: None,
+            bit_rate: None,
             thumbnail_data: None,        },
         output_filename: output_filename.to_string(),
         normalization_enabled: norm_enabled,
@@ -215,6 +218,134 @@ fn test_solo_slate_keeps_own_audio() {
 
     cleanup(&output);
     cleanup(&video_path);
+}
+
+/// Stereo QC + split/join on real files: the test tone is dual-mono (identical
+/// channels), so the check must say so; splitting it yields _L/_R monos, and
+/// joining them back gives a 2-channel file again.
+#[test]
+fn test_stereo_check_and_split_join_roundtrip() {
+    use app_lib::services::channels;
+    let dir = output_dir();
+    let src = format!("{}/chan_src.wav", dir);
+    std::fs::copy(test_fixture("test_tone.wav"), &src).unwrap();
+
+    // 1. Stereo check: identical L/R → dual_mono, correlation ≈ 1.
+    let check = channels::check_stereo(&src, 2).expect("stereo check");
+    assert_eq!(check.verdict, "dual_mono", "got {:?}", check);
+    assert!(check.correlation.unwrap() > 0.98);
+
+    // 2. Split → two mono files named by channel.
+    let outs = channels::split_channels(&src, Some("stereo"), 2).expect("split");
+    assert_eq!(outs.len(), 2);
+    assert!(outs[0].ends_with("chan_src_L.wav") && outs[1].ends_with("chan_src_R.wav"), "{outs:?}");
+    for o in &outs {
+        let f = inspector::inspect_file(o).expect("inspect stem");
+        assert_eq!(f.channel_count, Some(1), "stem should be mono");
+    }
+    // A mono stem reports as mono, not judged.
+    assert_eq!(channels::check_stereo(&outs[0], 1).unwrap().verdict, "mono");
+
+    // 3. Join them back → stereo again.
+    let joined = format!("{}/chan_src_stereo.wav", dir);
+    channels::join_channels(&outs, "stereo", &joined).expect("join");
+    let j = inspector::inspect_file(&joined).expect("inspect joined");
+    assert_eq!(j.channel_count, Some(2));
+    assert!((j.duration_secs - 2.0).abs() < 0.1);
+
+    cleanup(&src);
+    for o in &outs { cleanup(o); }
+    cleanup(&joined);
+}
+
+#[test]
+fn test_audio_only_conversion_44k1_16bit_and_flac() {
+    // WAV 48k → WAV 44.1k 16-bit, then → FLAC 24-bit: rate follows, file plays.
+    let pair = make_audio_pair("test_tone.wav", "conv_44.1k_16bit.wav", false, -23.0, -1.0);
+    let settings = ExportSettings {
+        audio_container: AudioContainer::Wav,
+        sample_rate: Some(44100),
+        bit_depth: Some(16),
+        ..Default::default()
+    };
+    let r = processor::process_pair(&pair, &settings, |_| {});
+    assert!(r.success, "conversion failed: {:?}", r.error);
+    let out = r.output_path.clone().unwrap();
+    let f = inspector::inspect_file(&out).expect("inspect converted");
+    assert_eq!(f.sample_rate, Some(44100.0));
+    assert_eq!(f.channel_count, Some(2));
+    assert!((f.duration_secs - 2.0).abs() < 0.05);
+    assert!(f.codec_info.as_deref().unwrap_or("").contains("s16"), "codec {:?}", f.codec_info);
+    cleanup(&out);
+
+    let pair = make_audio_pair("test_tone.wav", "conv_24bit.flac", false, -23.0, -1.0);
+    let settings = ExportSettings {
+        audio_container: AudioContainer::Flac,
+        bit_depth: Some(24),
+        ..Default::default()
+    };
+    let r = processor::process_pair(&pair, &settings, |_| {});
+    assert!(r.success, "flac failed: {:?}", r.error);
+    let out = r.output_path.clone().unwrap();
+    let f = inspector::inspect_file(&out).expect("inspect flac");
+    assert_eq!(f.codec_info.as_deref(), Some("flac"));
+    assert_eq!(f.sample_rate, Some(48000.0));
+    cleanup(&out);
+    cleanup(&pair.audio.path);
+}
+
+#[test]
+fn test_fold_fade_and_trim() {
+    use app_lib::services::processing;
+    let dir = output_dir();
+    let src = format!("{}/proc_src.wav", dir);
+    std::fs::copy(test_fixture("test_tone.wav"), &src).unwrap();
+
+    // Fold to mono: the dual-mono tone comes out mono at the same level.
+    let mono = processing::process_audio("fold_mono", &src, Some("stereo"), 2, 2.0, None).expect("fold mono");
+    assert!(mono.ends_with("proc_src_mono.wav"));
+    let f = inspector::inspect_file(&mono).unwrap();
+    assert_eq!(f.channel_count, Some(1));
+    let before = loudness::measure(&src).unwrap().true_peak_dbtp;
+    let after = loudness::measure(&mono).unwrap().true_peak_dbtp;
+    assert!((before - after).abs() < 0.3, "mono fold changed level: {before} → {after}");
+
+    // Fade: same length, quieter overall (the ends are faded).
+    let faded = processing::process_audio("fade", &src, Some("stereo"), 2, 2.0, Some(0.5)).expect("fade");
+    let f = inspector::inspect_file(&faded).unwrap();
+    assert!((f.duration_secs - 2.0).abs() < 0.05);
+    let l_before = loudness::measure(&src).unwrap().integrated_lufs;
+    let l_after = loudness::measure(&faded).unwrap().integrated_lufs;
+    assert!(l_after < l_before - 0.5, "fade should lower integrated loudness: {l_before} → {l_after}");
+
+    // Trim: pad the tone with a second of silence each end, then trim it off.
+    let padded = format!("{}/proc_padded.wav", dir);
+    ffmpeg::run_ffmpeg(&[
+        "-y".into(), "-i".into(), src.clone(),
+        "-af".into(), "adelay=1000:all=1,apad=pad_dur=1".into(),
+        "-c:a".into(), "pcm_s24le".into(), padded.clone(),
+    ]).expect("pad");
+    assert!((inspector::inspect_file(&padded).unwrap().duration_secs - 4.0).abs() < 0.05);
+    let trimmed = processing::process_audio("trim", &padded, Some("stereo"), 2, 4.0, None).expect("trim");
+    let f = inspector::inspect_file(&trimmed).unwrap();
+    assert!((f.duration_secs - 2.0).abs() < 0.1, "trimmed length {}", f.duration_secs);
+
+    // Fold to stereo needs more than two channels.
+    assert!(processing::process_audio("fold_stereo", &src, Some("stereo"), 2, 2.0, None).is_err());
+
+    for p in [&src, &mono, &faded, &padded, &trimmed] { cleanup(p); }
+}
+
+#[test]
+fn test_probe_reports_bit_depth_and_waveform_peaks() {
+    use app_lib::services::waveform;
+    let f = inspector::inspect_file(&test_fixture("test_tone.wav")).unwrap();
+    assert_eq!(f.sample_rate, Some(48000.0));
+    assert!(f.bit_depth.is_some(), "a PCM WAV should report its bit depth");
+    let peaks = waveform::compute_peaks(&test_fixture("test_tone.wav"), 50).expect("peaks");
+    assert_eq!(peaks.len(), 50);
+    // A steady -14 dBFS tone: every bucket ≈ 0.2, none silent, none over.
+    assert!(peaks.iter().all(|p| *p > 0.1 && *p <= 1.0), "{peaks:?}");
 }
 
 // ── Measurement tests ──
@@ -373,6 +504,9 @@ fn test_reprocessing_generated_output_does_not_fail() {
             width: None,
             height: None,
             slate_secs: None,
+            channel_layout: None,
+            bit_depth: None,
+            bit_rate: None,
             thumbnail_data: None,        },
         output_filename: src_name.into(), // namer regenerates a name identical to the source
         normalization_enabled: true,

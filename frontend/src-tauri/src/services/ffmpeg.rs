@@ -356,6 +356,13 @@ pub fn build_audio_only_command(
 
     let has_audio_filters = !audio_filters.is_empty();
 
+    // The Audio Only page's output spec: container (already in the output
+    // path's extension), sample rate and bit depth.
+    let spec = settings.audio_output_spec();
+    if let Some(rate) = spec.sample_rate {
+        args.extend(["-ar".to_string(), rate.to_string()]);
+    }
+
     // Choose codec based on output format and container compatibility
     let output_ext = std::path::Path::new(output_path)
         .extension()
@@ -368,25 +375,52 @@ pub fn build_audio_only_command(
     // produces a file that won't open, so fall back to a container-appropriate
     // codec instead.
     let aac_container = matches!(output_ext.as_str(), "m4a" | "mp4" | "aac");
+    let wants_aac = spec.container == AudioContainer::Aac
+        || (spec.container == AudioContainer::Original && settings.audio_format == AudioFormatOption::Aac);
 
-    if settings.audio_format == AudioFormatOption::Aac && aac_container {
+    if wants_aac && aac_container {
         args.extend(["-c:a".to_string(), "aac".to_string()]);
         args.extend(["-b:a".to_string(), format!("{}", settings.aac_bitrate)]);
-    } else if has_audio_filters {
-        // Can't stream copy with filters — pick a lossless codec for the container
-        let codec = match output_ext.as_str() {
-            "aif" | "aiff" => "pcm_s24be",
-            "flac" => "flac",
-            "m4a" | "mp4" => "alac",
-            _ => "pcm_s24le", // WAV, BWF, and others
-        };
-        args.extend(["-c:a".to_string(), codec.to_string()]);
+    } else if has_audio_filters || spec.is_set() {
+        // Can't stream copy with filters or a conversion — pick a lossless
+        // codec for the container at the requested depth (24-bit by default).
+        args.extend(lossless_codec_args(&output_ext, spec.bit_depth));
     } else {
         args.extend(["-c:a".to_string(), "copy".to_string()]);
     }
 
     args.push(output_path.to_string());
     args
+}
+
+/// Codec (and sample format) arguments for a lossless audio container at a
+/// bit depth: 16, 24 (default) or 32 (= 32-bit float, WAV/AIFF only — FLAC
+/// and ALAC top out at 24-bit, so 32 falls back to 24 there).
+pub fn lossless_codec_args(output_ext: &str, bit_depth: Option<u32>) -> Vec<String> {
+    let depth = bit_depth.unwrap_or(24);
+    let a = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+    match output_ext {
+        "aif" | "aiff" | "aifc" => match depth {
+            16 => a(&["-c:a", "pcm_s16be"]),
+            32 => a(&["-c:a", "pcm_f32be"]),
+            _ => a(&["-c:a", "pcm_s24be"]),
+        },
+        // FLAC: s16 → 16-bit; s32 is written as 24-bit by ffmpeg's encoder.
+        "flac" => match depth {
+            16 => a(&["-c:a", "flac", "-sample_fmt", "s16"]),
+            _ => a(&["-c:a", "flac", "-sample_fmt", "s32"]),
+        },
+        // ALAC: s16p → 16-bit; s32p is written as 24-bit.
+        "m4a" | "mp4" | "caf" => match depth {
+            16 => a(&["-c:a", "alac", "-sample_fmt", "s16p"]),
+            _ => a(&["-c:a", "alac", "-sample_fmt", "s32p"]),
+        },
+        _ => match depth {
+            16 => a(&["-c:a", "pcm_s16le"]),
+            32 => a(&["-c:a", "pcm_f32le"]),
+            _ => a(&["-c:a", "pcm_s24le"]), // WAV, BWF, and others
+        },
+    }
 }
 
 /// Build the ffmpeg command to transcode a video into an Apple ProRes 422 .mov
@@ -1034,6 +1068,57 @@ mod tests {
     }
 
     // ── build_audio_only_command ──
+
+    #[test]
+    fn test_lossless_codec_args_by_container_and_depth() {
+        let j = |v: Vec<String>| v.join(" ");
+        assert_eq!(j(lossless_codec_args("wav", None)), "-c:a pcm_s24le");
+        assert_eq!(j(lossless_codec_args("wav", Some(16))), "-c:a pcm_s16le");
+        assert_eq!(j(lossless_codec_args("wav", Some(32))), "-c:a pcm_f32le");
+        assert_eq!(j(lossless_codec_args("aif", Some(32))), "-c:a pcm_f32be");
+        assert_eq!(j(lossless_codec_args("aiff", Some(16))), "-c:a pcm_s16be");
+        assert_eq!(j(lossless_codec_args("flac", Some(16))), "-c:a flac -sample_fmt s16");
+        assert_eq!(j(lossless_codec_args("flac", Some(32))), "-c:a flac -sample_fmt s32"); // 24-bit: no float FLAC
+        assert_eq!(j(lossless_codec_args("m4a", None)), "-c:a alac -sample_fmt s32p");
+        assert_eq!(j(lossless_codec_args("m4a", Some(16))), "-c:a alac -sample_fmt s16p");
+    }
+
+    #[test]
+    fn test_audio_only_conversion_sets_rate_and_depth() {
+        let mut settings = default_settings();
+        settings.audio_container = AudioContainer::Wav;
+        settings.sample_rate = Some(44100);
+        settings.bit_depth = Some(16);
+        let args = build_audio_only_command("/audio.wav", "/out_44.1k_16bit.wav", &settings, None, None, false);
+        let ar = args.iter().position(|a| a == "-ar").expect("-ar");
+        assert_eq!(args[ar + 1], "44100");
+        assert!(args.contains(&"pcm_s16le".to_string()));
+        assert!(!args.contains(&"copy".to_string()), "a conversion can't stream-copy");
+    }
+
+    #[test]
+    fn test_audio_only_container_change_alone_reencodes() {
+        let mut settings = default_settings();
+        settings.audio_container = AudioContainer::Flac;
+        let args = build_audio_only_command("/audio.wav", "/out.flac", &settings, None, None, false);
+        assert!(args.contains(&"flac".to_string()));
+        assert!(!args.contains(&"-ar".to_string()));
+        assert!(!args.contains(&"copy".to_string()));
+    }
+
+    #[test]
+    fn test_audio_only_aac_container_uses_aac_and_bitrate() {
+        let mut settings = default_settings();
+        settings.audio_container = AudioContainer::Aac;
+        settings.aac_bitrate = 192000;
+        settings.sample_rate = Some(48000);
+        let args = build_audio_only_command("/audio.wav", "/out.m4a", &settings, None, None, false);
+        let c = args.iter().position(|a| a == "-c:a").unwrap();
+        assert_eq!(args[c + 1], "aac");
+        let b = args.iter().position(|a| a == "-b:a").unwrap();
+        assert_eq!(args[b + 1], "192000");
+        assert!(args.contains(&"48000".to_string()));
+    }
 
     #[test]
     fn test_audio_only_basic() {

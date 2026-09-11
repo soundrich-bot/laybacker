@@ -2,6 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { renderSlateImage, loadImage, DEFAULT_SLATE_STYLE } from '../slate.js';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { nameForRule } from '../naming.js';
+import { findJoinGroups } from '../channels.js';
 
 // Small persisted preferences (localStorage in the webview). Guarded — a
 // missing or blocked store must never break the app.
@@ -216,6 +217,37 @@ function removeSlate() {
 }
 
 
+// ── App mode: layback vs the Audio Only page ────────────────────────────────
+// Audio dropped on its own asks which the user wants: the Audio Only page
+// (QC, deliverables, processing) or to wait for a video to lay back onto.
+let appMode = $state('layback'); // 'layback' | 'audio'
+let audioModePrompt = $state(false);
+let audioChoiceMade = false; // don't re-ask for every extra audio file dropped
+
+function maybePromptAudioMode() {
+  const allAudio = files.length > 0 && files.every(f => f.mediaType === 'audio');
+  if (!allAudio) {
+    // A video arrived — laybacks happen on the layback page.
+    if (appMode === 'audio') appMode = 'layback';
+    return;
+  }
+  if (appMode === 'layback' && !audioChoiceMade) audioModePrompt = true;
+}
+
+// From the prompt: 'audio' opens the page, 'layback' waits for a video.
+async function chooseAudioMode(choice) {
+  audioChoiceMade = true;
+  audioModePrompt = false;
+  appMode = choice === 'audio' ? 'audio' : 'layback';
+  await autoMatch();
+}
+
+async function setAppMode(mode) {
+  appMode = mode;
+  audioChoiceMade = true;
+  await autoMatch();
+}
+
 // ── Batch QC ────────────────────────────────────────────────────────────────
 // One spec for the whole batch: a loudness value (which is ALSO every pair's
 // NORM target, so QC and the export agree) plus an optional 6-frame silence
@@ -377,6 +409,128 @@ async function sixFrAllNow() {
   await runPassAndReload(subset, []);
 }
 
+// Replace the list with `paths` and re-analyse — what the batch passes do
+// after rendering, for actions that don't go through process_pairs.
+async function reloadList(paths) {
+  files = [];
+  matchedPairs = [];
+  processingResults = [];
+  progressMap = {};
+  qcResults = {};
+  clockChecks = {};
+  const scanned = await invoke('scan_files', { paths });
+  files = scanned;
+  await autoMatch();
+  await runBatchQc();
+}
+
+/// SPLIT ALL → MONO: every multichannel file becomes one mono file per channel
+/// ("Mix_L.wav", "Mix_R.wav", …), named from the file's real channel layout.
+/// Mono files in the list are kept as they are.
+async function splitAllNow() {
+  if (isProcessing || qcRunning || clockRunning) return;
+  const targets = matchedPairs.filter(p => !p.video && (p.audio.channelCount ?? 1) >= 2);
+  if (targets.length === 0) return;
+  isProcessing = true;
+  try {
+    const outputs = [];
+    for (const p of targets) {
+      const outs = await invoke('split_channels', {
+        audioPath: p.audio.path,
+        channelLayout: p.audio.channelLayout ?? null,
+        channels: p.audio.channelCount,
+      });
+      outputs.push(...outs);
+    }
+    playCompletionSound();
+    const keep = matchedPairs.filter(p => !targets.includes(p)).map(p => p.audio.path);
+    await reloadList([...outputs, ...keep]);
+  } catch (e) {
+    errors = [...errors, `Split failed: ${e}`];
+  } finally {
+    isProcessing = false;
+  }
+}
+
+/// CONVERT ALL: render every audio file to the output settings (format /
+/// sample rate / bit depth) with whatever per-file toggles are already on.
+async function convertAllNow() {
+  if (isProcessing || qcRunning || clockRunning) return;
+  if (!conversionSet()) return;
+  const subset = matchedPairs.filter(p => !p.video);
+  if (subset.length === 0) return;
+  await regenerateNames(); // names carry the conversion tag before rendering
+  await runPassAndReload(matchedPairs.filter(p => !p.video), []);
+}
+
+/// File Processing ops that run on every file now: fold to stereo / mono,
+/// fade the ends, trim head-and-tail silence. New WAVs are written beside the
+/// originals and the list reloads with them (files an op can't apply to stay).
+async function processAudioAllNow(op, param = null) {
+  if (isProcessing || qcRunning || clockRunning) return;
+  const audios = matchedPairs.filter(p => !p.video);
+  const minCh = op === 'fold_stereo' ? 3 : op === 'fold_mono' ? 2 : 1;
+  const targets = audios.filter(p => (p.audio.channelCount ?? 1) >= minCh);
+  if (targets.length === 0) return;
+  isProcessing = true;
+  try {
+    const outputs = [];
+    for (const p of targets) {
+      const out = await invoke('process_audio', {
+        op,
+        audioPath: p.audio.path,
+        channelLayout: p.audio.channelLayout ?? null,
+        channels: p.audio.channelCount ?? 1,
+        durationSecs: p.audio.durationSecs,
+        param,
+      });
+      outputs.push(out);
+    }
+    playCompletionSound();
+    const keep = audios.filter(p => !targets.includes(p)).map(p => p.audio.path);
+    await reloadList([...outputs, ...keep]);
+  } catch (e) {
+    const label = { fold_stereo: 'Fold to stereo', fold_mono: 'Fold to mono', fade: 'Fade', trim: 'Trim' }[op] ?? 'Processing';
+    errors = [...errors, `${label} failed: ${e}`];
+  } finally {
+    isProcessing = false;
+  }
+}
+
+// The mono sets in the list that can be joined (matched by _L/_R/_C… suffix).
+function joinGroups() {
+  return findJoinGroups(matchedPairs.filter(p => !p.video).map(p => p.audio));
+}
+
+/// JOIN MONOS → POLY: matched mono sets become one stereo / 5.1 / 7.1 file
+/// ("Mix_stereo.wav", "Mix_5.1.wav"). Files not part of a full set are kept.
+async function joinMonosNow() {
+  if (isProcessing || qcRunning || clockRunning) return;
+  const groups = joinGroups();
+  if (groups.length === 0) return;
+  isProcessing = true;
+  try {
+    const outputs = [];
+    const used = new Set();
+    for (const g of groups) {
+      const out = await invoke('join_channels', {
+        inputs: g.inputs,
+        channelLayout: g.layout,
+        outputPath: g.output,
+      });
+      outputs.push(out);
+      g.inputs.forEach(i => used.add(i));
+    }
+    playCompletionSound();
+    const keep = matchedPairs.filter(p => !p.video && !used.has(p.audio.path)).map(p => p.audio.path);
+    await reloadList([...outputs, ...keep]);
+  } catch (e) {
+    errors = [...errors, `Join failed: ${e}`];
+  } finally {
+    isProcessing = false;
+  }
+}
+
 function setQcCheckSilence(value) {
   qcCheckSilence = value;
   qcResults = {};
@@ -402,6 +556,18 @@ async function runBatchQc() {
           silenceMs: p.silenceMs ?? 240.0,
         });
       }
+      // Stereo / phase check: is a 2-channel file really stereo, and does it
+      // sum to mono? Mono and multichannel files are reported, not judged.
+      let stereo = null;
+      const ch = p.audio.channelCount ?? 0;
+      if (ch >= 2) {
+        try {
+          stereo = await invoke('check_stereo', { audioPath: p.audio.path, channels: ch });
+        } catch (e) {
+          stereo = { channels: ch, verdict: 'error', error: String(e) };
+        }
+      }
+      const stereoPass = !stereo || !['anti_phase', 'one_sided'].includes(stereo.verdict);
       const peakLimit = p.normalizationSettings?.truePeakLimit ?? -1.0;
       let lufsPass, peakPass;
       if (qcMode === 'peak') {
@@ -415,8 +581,9 @@ async function runBatchQc() {
       }
       const silencePass = qcCheckSilence ? (!headHasAudio && !tailHasAudio) : true;
       results[p.id] = {
-        pass: lufsPass && peakPass && silencePass,
+        pass: lufsPass && peakPass && silencePass && stereoPass,
         lufsPass, peakPass, silencePass, silenceChecked: qcCheckSilence,
+        stereo, stereoPass,
         measuredLufs, measuredTP, headHasAudio, tailHasAudio, peakLimit, mode: qcMode,
       };
     } catch (e) {
@@ -447,6 +614,10 @@ let exportSettings = $state({
   aacBitrate: 320000,
   outputDirectory: null,
   useAudioFileLocation: true,
+  // Audio Only page outputs: container / sample rate / bit depth. null = as the source.
+  audioContainer: 'original',
+  sampleRate: null,
+  bitDepth: null,
 });
 
 let namingSettings = $state({
@@ -462,6 +633,34 @@ function getOutputExtension() {
   return exportSettings.audioFormat === 'original' ? 'mov' : 'mp4';
 }
 
+// Audio-only outputs: extension by container (mirrors the Rust namer).
+const CONTAINER_EXT = { wav: 'wav', aiff: 'aif', flac: 'flac', alac: 'm4a', aac: 'm4a' };
+const LOSSY_EXTS = ['mp3', 'aac', 'ogg', 'oga', 'opus', 'wma', 'ac3', 'eac3'];
+function audioExtFor(p) {
+  const chosen = CONTAINER_EXT[exportSettings.audioContainer];
+  if (chosen) return chosen;
+  const willEncode = p.normalizationEnabled || p.silenceCompliance || p.clockEnabled || conversionSet();
+  if (willEncode && LOSSY_EXTS.includes((p.audio.extension || '').toLowerCase())) return 'wav';
+  return p.audio.extension;
+}
+
+// Is any audio output option away from "as the source"?
+function conversionSet() {
+  return (exportSettings.audioContainer && exportSettings.audioContainer !== 'original')
+    || !!exportSettings.sampleRate || !!exportSettings.bitDepth;
+}
+
+// Human label for the audio output spec: "WAV · 48k · 24-bit", or "" when nothing is set.
+function conversionLabel() {
+  const bits = [];
+  const c = exportSettings.audioContainer;
+  if (c && c !== 'original') bits.push(c === 'aiff' ? 'AIFF' : c.toUpperCase());
+  if (exportSettings.sampleRate) bits.push(`${exportSettings.sampleRate / 1000}k`);
+  if (exportSettings.bitDepth) bits.push(exportSettings.bitDepth === 32 ? '32-bit float' : `${exportSettings.bitDepth}-bit`);
+  if (c === 'aac') bits.push(`${Math.round(exportSettings.aacBitrate / 1000)} kbps`);
+  return bits.join(' · ');
+}
+
 // Format toggled (Original/H.264, Original/AAC): the container extension must
 // follow, but the NAME is the user's — they may have edited it already, so
 // don't regenerate it, just swap the extension on video outputs.
@@ -473,6 +672,10 @@ function updateOutputExtensions() {
     const stem = dot > 0 ? p.outputFilename.slice(0, dot) : p.outputFilename;
     return { ...p, outputFilename: `${stem}.${ext}` };
   });
+  // Audio-only outputs: the container sets the extension and a rate / depth
+  // change is recorded in the name — the namer does both, keeping any name
+  // the user typed (regenerateNames swaps only the extension on those).
+  if (matchedPairs.some(p => !p.video)) regenerateNames();
 }
 
 function getVideos() {
@@ -515,7 +718,9 @@ async function scanFiles(paths) {
     const newFiles = scanned.filter(f => !existingPaths.has(f.path));
     files = [...files, ...newFiles];
 
-    await autoMatch();
+    // Audio on its own? Ask which page the user wants before pairing up.
+    maybePromptAudioMode();
+    if (!audioModePrompt) await autoMatch();
   } catch (e) {
     console.error('[store] SCAN ERROR:', e);
     errors = [...errors, `Scan failed: ${e}`];
@@ -542,7 +747,9 @@ async function autoMatch() {
     const audios = files.filter(f => f.mediaType === 'audio');
 
     let pairs;
-    if (videos.length === 0 && audios.length > 0) {
+    // Audio-only entries only exist on the Audio Only page; on the layback
+    // page lone audio just waits for a video (match_files returns nothing).
+    if (videos.length === 0 && audios.length > 0 && appMode === 'audio') {
       // Audio-only mode: create entries for each audio file
       pairs = audios.map(audio => ({
         id: crypto.randomUUID(),
@@ -568,6 +775,7 @@ async function autoMatch() {
       pairs,
       removeDuplicates: namingSettings.removeDuplicates,
       outputExtension: getOutputExtension(),
+      settings: exportSettings,
     });
 
     // Restore user customizations for pairs that still exist
@@ -602,6 +810,7 @@ async function regenerateNames() {
       pairs: matchedPairs,
       removeDuplicates: namingSettings.removeDuplicates,
       outputExtension: getOutputExtension(),
+      settings: exportSettings,
     });
     // The namer round-trip drops frontend-only flags — put them back, then
     // keep every user-edited name (stem as typed, extension from the namer)
@@ -906,7 +1115,7 @@ function setDefaultNameRule(rule) {
 }
 
 function extFor(p) {
-  return p.video ? getOutputExtension() : p.audio.extension;
+  return p.video ? getOutputExtension() : audioExtFor(p);
 }
 
 // Apply the batch rule to pairs the user hasn't renamed by hand.
@@ -985,6 +1194,10 @@ function clearAll() {
   soloSlateStatus = {};
   // The naming rule was for the batch that was just cleared — back to the default.
   nameRule = defaultNameRule;
+  // Back to the layback page; the next lone-audio drop asks again.
+  appMode = 'layback';
+  audioModePrompt = false;
+  audioChoiceMade = false;
 }
 
 function dismissError(index) {
@@ -1034,6 +1247,10 @@ export function getAppState() {
     regenerateNames,
     processAll,
     runMainAction,
+    get appMode() { return appMode; },
+    get audioModePrompt() { return audioModePrompt; },
+    chooseAudioMode,
+    setAppMode,
     get nameRule() { return nameRule; },
     setNameRule,
     get defaultNameRule() { return defaultNameRule; },
@@ -1074,6 +1291,13 @@ export function getAppState() {
     normalizeAllNow,
     clockAllNow,
     sixFrAllNow,
+    splitAllNow,
+    joinMonosNow,
+    get joinableGroups() { return joinGroups(); },
+    convertAllNow,
+    processAudioAllNow,
+    get conversionSet() { return conversionSet(); },
+    get conversionLabel() { return conversionLabel(); },
     get clockChecks() { return clockChecks; },
     get clockRunning() { return clockRunning; },
     get clockProgress() { return clockProgress; },
