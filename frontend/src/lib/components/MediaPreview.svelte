@@ -7,6 +7,7 @@
     filename = '',
     mediaType = 'video', // 'video' or 'audio'
     onClose,
+    startAt = 0,         // seconds — open the player here (listen back to a click)
   } = $props();
 
   let mediaEl = $state(null);
@@ -117,6 +118,10 @@
     if (mediaEl) {
       duration = mediaEl.duration;
       loaded = true;
+      if (startAt > 0 && isFinite(duration)) {
+        mediaEl.currentTime = Math.min(startAt, Math.max(0, duration - 0.1));
+        currentTime = mediaEl.currentTime;
+      }
       mediaEl.play();
     }
   }

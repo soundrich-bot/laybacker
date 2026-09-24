@@ -1,7 +1,7 @@
 use tauri::{Emitter, Manager, Window};
 
 use crate::models::*;
-use crate::services::{channels, ffmpeg, inspector, loudness, matcher, namer, processing, processor, waveform};
+use crate::services::{audioscan, channels, clicks, ffmpeg, inspector, loudness, matcher, namer, processing, processor, waveform};
 
 /// Cancel any in-progress processing
 #[tauri::command]
@@ -288,14 +288,36 @@ pub async fn slate_video(
         let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("video");
         let output = format!("{}/{}_Slated.mov", dir, stem);
 
-        let spec = ffmpeg::SlateSpec {
+        let mut spec = ffmpeg::SlateSpec {
             image_path: img_path.clone(),
             duration_secs: slate_duration_secs.max(0.5),
             black_secs,
             matte_path: matte_path.clone(),
+            prebaked: false,
         };
-        let args =
-            ffmpeg::build_solo_slate_command(&video_path, &output, &spec, frame_rate, has_audio);
+        // Fast path first: splice into an H.264 picture, copy the programme.
+        let _ = window.emit(
+            "slate-progress",
+            serde_json::json!({ "videoPath": video_for_event, "progress": 0.05 }),
+        );
+        let fast = match processor::try_fast_slate(&video_path, &spec, &uuid::Uuid::new_v4().to_string()) {
+            Ok(x) => Some(x),
+            Err(reason) => {
+                eprintln!("[laybacker] fast slate not used for {}: {}", video_path, reason);
+                None
+            }
+        };
+        if fast.is_some() {
+            spec.prebaked = true;
+        }
+        let args = ffmpeg::build_solo_slate_command_from(
+            &video_path,
+            fast.as_ref().map(|(p, _)| p.as_str()),
+            &output,
+            &spec,
+            frame_rate,
+            has_audio,
+        );
         let total = video_duration_secs + spec.preroll_secs();
         let result = ffmpeg::run_ffmpeg_with_progress(&args, total, |pct| {
             let _ = window.emit(
@@ -306,6 +328,9 @@ pub async fn slate_video(
         let _ = std::fs::remove_file(&img_path);
         if let Some(ref m) = matte_path {
             let _ = std::fs::remove_file(m);
+        }
+        if let Some((_, work)) = fast {
+            let _ = std::fs::remove_dir_all(work);
         }
         result?;
         Ok(output)
@@ -501,4 +526,38 @@ pub async fn video_frame(video_path: String, secs: f64, width: u32) -> Result<St
     tokio::task::spawn_blocking(move || ffmpeg::extract_frame(&video_path, secs, width))
         .await
         .map_err(|e| format!("Task failed: {}", e))?
+}
+
+/// QC: scan a file for digital clicks. `sensitivity`: "low" | "normal" | "high".
+#[tauri::command]
+pub async fn detect_clicks(
+    audio_path: String,
+    sample_rate: Option<u32>,
+    channels: Option<u32>,
+    sensitivity: Option<String>,
+) -> Result<clicks::ClickReport, String> {
+    tokio::task::spawn_blocking(move || {
+        clicks::detect_clicks(
+            &audio_path,
+            sample_rate.unwrap_or(48000),
+            channels.unwrap_or(2),
+            sensitivity.as_deref().unwrap_or("normal"),
+        )
+    })
+    .await
+    .map_err(|e| format!("Task failed: {}", e))?
+}
+
+/// QC: scan a file for clipping and dropouts (mid-programme digital silence).
+#[tauri::command]
+pub async fn scan_audio_issues(
+    audio_path: String,
+    sample_rate: Option<u32>,
+    channels: Option<u32>,
+) -> Result<audioscan::ScanReport, String> {
+    tokio::task::spawn_blocking(move || {
+        audioscan::scan(&audio_path, sample_rate.unwrap_or(48000), channels.unwrap_or(2))
+    })
+    .await
+    .map_err(|e| format!("Task failed: {}", e))?
 }

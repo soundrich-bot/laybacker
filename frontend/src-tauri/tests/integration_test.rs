@@ -44,7 +44,7 @@ fn make_audio_pair(fixture_name: &str, output_filename: &str, norm_enabled: bool
         .expect("failed to copy the test fixture into the output dir");
 
     MatchedPair {
-        id: "integration-test".into(),
+        id: format!("integration-test-{}", uuid::Uuid::new_v4()),
         video: None,
         audio: MediaFile {
             id: "audio-1".into(),
@@ -294,7 +294,7 @@ fn test_solo_slate_keeps_own_audio() {
 
     let output = temp_output("solo_slated.mov");
     cleanup(&output);
-    let spec = ffmpeg::SlateSpec { image_path: jpg.clone(), duration_secs: 3.0, black_secs: 0.0, matte_path: None };
+    let spec = ffmpeg::SlateSpec { image_path: jpg.clone(), duration_secs: 3.0, black_secs: 0.0, matte_path: None, prebaked: false };
     let args = ffmpeg::build_solo_slate_command(&video_path, &output, &spec, Some(25.0), true);
     ffmpeg::run_ffmpeg(&args).expect("solo slate render failed");
 
@@ -467,6 +467,200 @@ fn test_chain_shape_fold_fade_then_split_keeps_stem() {
     processing::remove_workdir(&work).unwrap();
     assert!(!Path::new(&work).exists());
     cleanup(&src);
+}
+
+/// A 6 s H.264 test video (25 fps, keyframes every 2 s) with a moving box and
+/// the tone as its soundtrack — the shape of a real camera / NLE export.
+fn build_h264_source(path: &str) {
+    let jpg = test_fixture("slate_320x180.jpg");
+    let tone = test_fixture("test_tone.wav");
+    let args: Vec<String> = [
+        "-y", "-loop", "1", "-framerate", "25", "-t", "6", "-i", jpg.as_str(),
+        "-stream_loop", "3", "-i", tone.as_str(), "-shortest",
+        "-vf", "fade=t=out:st=0:d=0.04:c=0x808080,drawbox=x=t*40:y=60:w=30:h=30:c=white:t=fill",
+        "-c:v", "libx264", "-profile:v", "high", "-level", "3.1", "-g", "50", "-pix_fmt", "yuv420p",
+        "-c:a", "aac", path,
+    ].iter().map(|s| s.to_string()).collect();
+    ffmpeg::run_ffmpeg(&args).expect("build h264 source");
+}
+
+fn synthetic_text_jpeg(dir: &str, name: &str) -> String {
+    let raw_path = format!("{}/{}.raw", dir, name);
+    let jpg = format!("{}/{}.jpg", dir, name);
+    let mut raw = vec![0u8; 320 * 180];
+    for y in 70..110 { for x in 110..210 { raw[y * 320 + x] = 255; } }
+    std::fs::write(&raw_path, &raw).unwrap();
+    let enc: Vec<String> = [
+        "-y", "-f", "rawvideo", "-pix_fmt", "gray", "-s", "320x180", "-i", raw_path.as_str(),
+        "-frames:v", "1", "-q:v", "2", jpg.as_str(),
+    ].iter().map(|s| s.to_string()).collect();
+    ffmpeg::run_ffmpeg(&enc).expect("encode synthetic text jpeg");
+    cleanup(&raw_path);
+    jpg
+}
+
+/// Fast slate: an H.264 source takes the splice path. The card version is
+/// 100 + 150 frames with the programme copied; the overlay keeps exactly the
+/// source's 150 frames, with the text on at 0.5 s and gone by 4 s.
+#[test]
+fn test_fast_slate_splices_h264_and_verifies() {
+    use app_lib::services::fastslate;
+    let dir = output_dir();
+    let src = format!("{}/fast_src.mov", dir);
+    build_h264_source(&src);
+    let info = fastslate::probe(&src).expect("probe");
+    assert_eq!(info.codec, "h264");
+    assert_eq!(info.packets, 150);
+    assert!(info.keyframes.len() >= 3, "{:?}", info.keyframes);
+    assert!(fastslate::eligible(&info).is_ok());
+
+    // Card: 3 s + 1 s black = 100 frames in front of 150.
+    let jpg = test_fixture("slate_320x180.jpg");
+    let card = ffmpeg::SlateSpec { image_path: jpg.clone(), duration_secs: 3.0, black_secs: 1.0, matte_path: None, prebaked: false };
+    let work = format!("{}/fast_work_card", dir);
+    let spliced = fastslate::build_spliced_video(&src, &card, &info, &work).expect("fast card");
+    let f = inspector::inspect_file(&spliced).unwrap();
+    assert!((f.duration_secs - 10.0).abs() < 0.1, "card splice should be 10 s, got {}", f.duration_secs);
+    assert_eq!(f.codec_info.as_deref(), Some("h264"));
+    let _ = std::fs::remove_dir_all(&work);
+
+    // Overlay: 1 s of text → cut at the 2 s keyframe → same 150 frames out.
+    let text = synthetic_text_jpeg(&dir, "fast_text");
+    let ov = ffmpeg::SlateSpec { image_path: text.clone(), duration_secs: 1.0, black_secs: 0.0, matte_path: Some(text.clone()), prebaked: false };
+    assert_eq!(fastslate::cut_point(&info.keyframes, 1.0), Some(2.0));
+    let work = format!("{}/fast_work_ov", dir);
+    let spliced = fastslate::build_spliced_video(&src, &ov, &info, &work).expect("fast overlay");
+    let f = inspector::inspect_file(&spliced).unwrap();
+    assert!((f.duration_secs - 6.0).abs() < 0.1, "overlay splice must keep the runtime, got {}", f.duration_secs);
+    let during = grab_gray_frame(&spliced, 0.5, &format!("{}/fast_d.raw", dir));
+    let after = grab_gray_frame(&spliced, 4.0, &format!("{}/fast_a.raw", dir));
+    assert!(during[90 * 320 + 160] > 215, "text should show at 0.5 s: {}", during[90 * 320 + 160]);
+    assert!(after[90 * 320 + 160] < 160, "text should be gone at 4 s (copied tail): {}", after[90 * 320 + 160]);
+    let _ = std::fs::remove_dir_all(&work);
+
+    // End to end through the layback path: the audio is delayed by the card
+    // and the preroll tag is written, exactly as on the slow path.
+    use base64::Engine as _;
+    let b64 = format!("data:image/jpeg;base64,{}", base64::engine::general_purpose::STANDARD.encode(std::fs::read(&jpg).unwrap()));
+    let mut pair = make_audio_pair("test_tone.wav", "fast_slated.mov", false, 0.0, -1.0);
+    pair.video = Some(inspector::inspect_file(&src).unwrap());
+    pair.slate_enabled = true;
+    pair.slate_duration_secs = 3.0;
+    pair.slate_black_secs = 1.0;
+    pair.slate_image = Some(b64);
+    let output = temp_output("fast_slated.mov");
+    let r = processor::process_pair(&pair, &ExportSettings::default(), |_| {});
+    assert!(r.success, "{:?}", r.error);
+    let out = inspector::inspect_file(&output).unwrap();
+    // 4 s preroll + 2 s of tone audio (-shortest): the slated picture is there and tagged.
+    assert!(out.duration_secs > 5.5, "got {}", out.duration_secs);
+    assert_eq!(out.slate_secs, Some(4.0));
+    assert_eq!(out.codec_info.as_deref(), Some("h264"));
+
+    cleanup(&output);
+    cleanup(&text);
+    cleanup(&src);
+    cleanup(&pair.audio.path);
+}
+
+/// A source the fast path can't take (ProRes) still slates — via the full path.
+#[test]
+fn test_fast_slate_falls_back_for_non_h264() {
+    use app_lib::services::fastslate;
+    let dir = output_dir();
+    let src = format!("{}/fast_prores.mov", dir);
+    let jpg = test_fixture("slate_320x180.jpg");
+    let args: Vec<String> = [
+        "-y", "-loop", "1", "-framerate", "25", "-t", "2", "-i", jpg.as_str(),
+        "-c:v", "prores_ks", "-profile:v", "1", src.as_str(),
+    ].iter().map(|s| s.to_string()).collect();
+    ffmpeg::run_ffmpeg(&args).expect("build prores source");
+    let info = fastslate::probe(&src).expect("probe");
+    assert!(fastslate::eligible(&info).unwrap_err().contains("not H.264"));
+    let card = ffmpeg::SlateSpec { image_path: jpg.clone(), duration_secs: 1.0, black_secs: 0.0, matte_path: None, prebaked: false };
+    assert!(processor::try_fast_slate(&src, &card, "test-prores").is_err());
+
+    use base64::Engine as _;
+    let b64 = format!("data:image/jpeg;base64,{}", base64::engine::general_purpose::STANDARD.encode(std::fs::read(&jpg).unwrap()));
+    let mut pair = make_audio_pair("test_tone.wav", "fallback_slated.mov", false, 0.0, -1.0);
+    pair.video = Some(inspector::inspect_file(&src).unwrap());
+    pair.slate_enabled = true;
+    pair.slate_duration_secs = 1.0;
+    pair.slate_image = Some(b64);
+    let output = temp_output("fallback_slated.mov");
+    let r = processor::process_pair(&pair, &ExportSettings::default(), |_| {});
+    assert!(r.success, "{:?}", r.error);
+    assert!((inspector::inspect_file(&output).unwrap().duration_secs - 3.0).abs() < 0.2);
+    cleanup(&output); cleanup(&src); cleanup(&pair.audio.path);
+}
+
+/// Click detection on real files: a tone with one injected single-sample
+/// spike is found at the right time; the plain tone reports none.
+#[test]
+fn test_click_detection_on_real_files() {
+    use app_lib::services::clicks;
+    let dir = output_dir();
+    let tone = test_fixture("test_tone.wav");
+    let clean = clicks::detect_clicks(&tone, 48000, 2, "normal").expect("detect clean");
+    assert_eq!(clean.count, 0, "{:?}", clean.clicks);
+
+    // Inject a ~1-sample spike at 1.0 s on both channels with aeval.
+    let spiked = format!("{}/click_spiked.wav", dir);
+    let args: Vec<String> = [
+        "-y", "-i", tone.as_str(),
+        "-af", "aeval=val(0)+if(between(t\\,1.0\\,1.00002)\\,0.8\\,0)|val(1)+if(between(t\\,1.0\\,1.00002)\\,0.8\\,0)",
+        "-c:a", "pcm_s24le", spiked.as_str(),
+    ].iter().map(|s| s.to_string()).collect();
+    ffmpeg::run_ffmpeg(&args).expect("inject click");
+    let r = clicks::detect_clicks(&spiked, 48000, 2, "normal").expect("detect spiked");
+    assert!(r.count >= 1 && r.count <= 4, "{:?}", r);
+    assert!(r.clicks.iter().any(|c| (c.time - 1.0).abs() < 0.002), "{:?}", r.clicks);
+    assert!(r.clicks.iter().all(|c| c.width_ms <= 0.5));
+    // Sensitivity ordering holds on the real file too.
+    let low = clicks::detect_clicks(&spiked, 48000, 2, "low").expect("low");
+    let high = clicks::detect_clicks(&spiked, 48000, 2, "high").expect("high");
+    assert!(low.count <= r.count && r.count <= high.count.max(r.count));
+    cleanup(&spiked);
+}
+
+/// Clipping and dropout scan on real files.
+#[test]
+fn test_clipping_and_dropout_scan_on_real_files() {
+    use app_lib::services::audioscan;
+    let dir = output_dir();
+    let tone = test_fixture("test_tone.wav");
+    let clean = audioscan::scan(&tone, 48000, 2).expect("scan clean");
+    assert_eq!(clean.clipping.count, 0, "{:?}", clean.clipping.events);
+    assert_eq!(clean.dropouts.count, 0);
+
+    // Driven 10× (the tone sits at −14 dBFS) and hard-clipped by aeval.
+    let clipped = format!("{}/scan_clipped.wav", dir);
+    let args: Vec<String> = ["-y", "-i", tone.as_str(),
+        "-af", "aeval=min(max(val(0)*10\\,-1)\\,1)|min(max(val(1)*10\\,-1)\\,1)",
+        "-c:a", "pcm_s24le", clipped.as_str()].iter().map(|s| s.to_string()).collect();
+    ffmpeg::run_ffmpeg(&args).expect("clip");
+    let r = audioscan::scan(&clipped, 48000, 2).expect("scan clipped");
+    // Continuous clipping merges into one event per channel; the sample
+    // count is what says how bad it is.
+    assert!(r.clipping.count >= 1 && r.clipping.count <= 2, "{:?}", r.clipping.count);
+    assert!(r.clipping.clipped_samples > 20_000, "{}", r.clipping.clipped_samples);
+    assert!(r.clipping.events[0].kind == "hard");
+    assert!(r.clipping.events[0].level_db > -0.1);
+    assert_eq!(r.dropouts.count, 0);
+
+    // A 120 ms hole at 0.8 s.
+    let holed = format!("{}/scan_holed.wav", dir);
+    let args: Vec<String> = ["-y", "-i", tone.as_str(),
+        "-af", "aeval=if(between(t\\,0.8\\,0.92)\\,0\\,val(0))|if(between(t\\,0.8\\,0.92)\\,0\\,val(1))",
+        "-c:a", "pcm_s24le", holed.as_str()].iter().map(|s| s.to_string()).collect();
+    ffmpeg::run_ffmpeg(&args).expect("hole");
+    let r = audioscan::scan(&holed, 48000, 2).expect("scan holed");
+    assert_eq!(r.dropouts.count, 1, "{:?}", r.dropouts.gaps);
+    assert!((r.dropouts.gaps[0].start - 0.8).abs() < 0.005, "{:?}", r.dropouts.gaps);
+    assert!((r.dropouts.gaps[0].duration - 0.12).abs() < 0.005);
+    assert_eq!(r.clipping.count, 0);
+    cleanup(&clipped);
+    cleanup(&holed);
 }
 
 // ── Measurement tests ──

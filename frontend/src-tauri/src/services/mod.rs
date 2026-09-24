@@ -7,3 +7,6 @@ pub mod processor;
 pub mod channels;
 pub mod processing;
 pub mod waveform;
+pub mod clicks;
+pub mod audioscan;
+pub mod fastslate;

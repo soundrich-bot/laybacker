@@ -108,6 +108,20 @@
         ? `channels are out of phase (correlation ${qcResult.stereo.correlation?.toFixed(2)}) — cancels in mono`
         : 'one channel is silent or far below the other');
     }
+    if (qcResult.clicks && !qcResult.clicksPass) {
+      const c = qcResult.clicks;
+      const b = [];
+      if (c.count > 0) b.push(`${c.count} possible click${c.count === 1 ? '' : 's'}`);
+      if (c.headPop) b.push('a pop at the head');
+      if (c.tailPop) b.push('a pop at the tail');
+      bits.push(b.join(', '));
+    }
+    if (qcResult.clipping && !qcResult.clippingPass) {
+      bits.push(qcResult.clipping.error ? 'clipping scan failed' : `clipping in ${qcResult.clipping.count} place${qcResult.clipping.count === 1 ? '' : 's'}`);
+    }
+    if (qcResult.dropouts && !qcResult.dropoutsPass) {
+      bits.push(qcResult.dropouts.error ? 'dropout scan failed' : `${qcResult.dropouts.count} dropout${qcResult.dropouts.count === 1 ? '' : 's'} (silence inside the programme)`);
+    }
     if (!qcResult.silencePass) {
       const where = qcResult.headHasAudio && qcResult.tailHasAudio ? 'head & tail'
         : qcResult.headHasAudio ? 'head' : 'tail';
@@ -389,6 +403,27 @@
           <span class="qc-badge sixfr-pass" title="6-frame check passed — head and tail are already silent">6Fr &#10003;</span>
         {:else}
           <span class="qc-badge sixfr-fail" title="6-frame check — sound found at the {qcResult.headHasAudio && qcResult.tailHasAudio ? 'head & tail' : qcResult.headHasAudio ? 'head' : 'tail'}; use 6 Fr to mute it">6Fr &#10007;</span>
+        {/if}
+      {/if}
+      {#if qcResult.clicks}
+        {#if qcResult.clicksPass}
+          <span class="qc-badge pass" title="No digital clicks or edge pops found">CLICKS &#10003;</span>
+        {:else}
+          <span class="qc-badge fail" title="{qcResult.clicks.count} possible click{qcResult.clicks.count === 1 ? '' : 's'}{qcResult.clicks.headPop ? ', head pop' : ''}{qcResult.clicks.tailPop ? ', tail pop' : ''} — see the QC table to listen back">CLICKS &#10007; {qcResult.clicks.count > 0 ? qcResult.clicks.count : ''}</span>
+        {/if}
+      {/if}
+      {#if qcResult.clipping}
+        {#if qcResult.clippingPass}
+          <span class="qc-badge pass" title="No clipping found">CLIP &#10003;</span>
+        {:else}
+          <span class="qc-badge fail" title="{qcResult.clipping.error ?? `Clipping in ${qcResult.clipping.count} places, ${qcResult.clipping.clippedSamples} samples — see the QC table to listen back`}">CLIP &#10007; {qcResult.clipping.count || ''}</span>
+        {/if}
+      {/if}
+      {#if qcResult.dropouts}
+        {#if qcResult.dropoutsPass}
+          <span class="qc-badge pass" title="No dropouts — no digital silence inside the programme">DROP &#10003;</span>
+        {:else}
+          <span class="qc-badge fail" title="{qcResult.dropouts.error ?? `${qcResult.dropouts.count} dropouts, ${qcResult.dropouts.totalSecs?.toFixed(2)} s of silence inside the programme — see the QC table to listen back`}">DROP &#10007; {qcResult.dropouts.count || ''}</span>
         {/if}
       {/if}
       {#if qcResult.stereo}
@@ -960,7 +995,11 @@
     align-items: center;
     gap: 10px;
     padding: 10px var(--gap-md) 6px;
+    /* Seven QC badges can outgrow a narrow window — let them wrap under the
+       name rather than crush it to nothing. */
+    flex-wrap: wrap;
   }
+  .source-row .file-block { flex: 1 1 260px; min-width: 260px; }
 
   /* Thumbnail */
   .thumbnail {
@@ -1014,7 +1053,9 @@
     gap: 6px;
     min-width: 0;
     flex: 1;
+    flex-wrap: wrap;
   }
+  .file-block .file-name { flex: 1 1 200px; min-width: 0; overflow-wrap: anywhere; word-break: normal; }
 
   .play-btn {
     flex-shrink: 0;
@@ -1049,7 +1090,7 @@
 
   .file-spec {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: 11.5px;
     letter-spacing: 0.04em;
     color: var(--text-muted);
     white-space: nowrap;
@@ -1603,7 +1644,7 @@
   .qc-badge {
     flex-shrink: 0;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: 11.5px;
     font-weight: 700;
     letter-spacing: 0.03em;
     border-radius: var(--radius-sm);

@@ -252,7 +252,7 @@ export function csvReport(rows, header = {}) {
   if (header.when) lines.push(`Run,${csvCell(header.when)}`);
   if (lines.length) lines.push('');
   lines.push(['File', 'Status', 'Output', 'LUFS before', 'dBTP before', 'Stereo', '6 Fr before',
-    'QC loudness', 'QC 6 Fr', 'QC stereo',
+    'QC loudness', 'QC 6 Fr', 'QC stereo', 'QC clicks', 'QC clipping', 'QC dropouts',
     'Steps applied', 'LUFS after', 'dBTP after', 'Warnings passed', 'Notes'].join(','));
   const qc = (v) => v == null ? '' : v ? 'PASS' : 'FAIL';
   for (const r of rows) {
@@ -260,7 +260,7 @@ export function csvReport(rows, header = {}) {
       r.file, r.status, r.output,
       fmtNum(r.before?.lufs), fmtNum(r.before?.tp), r.before?.stereo ?? '',
       r.before?.sixFr ?? '',
-      qc(r.qc?.loudness), qc(r.qc?.sixFr), qc(r.qc?.stereo),
+      qc(r.qc?.loudness), qc(r.qc?.sixFr), qc(r.qc?.stereo), qc(r.qc?.clicks), qc(r.qc?.clipping), qc(r.qc?.dropouts),
       (r.steps || []).join('; '),
       fmtNum(r.after?.lufs), fmtNum(r.after?.tp),
       (r.warnings || []).join('; '),

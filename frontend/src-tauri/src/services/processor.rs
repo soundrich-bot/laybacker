@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use crate::models::*;
-use crate::services::{ffmpeg, loudness};
+use crate::services::{fastslate, ffmpeg, loudness};
 
 /// Global cancellation flag
 static CANCEL_FLAG: AtomicBool = AtomicBool::new(false);
@@ -143,9 +143,38 @@ pub fn process_pair(
         }
     };
 
+    // Fast path: splice the slate into an H.264 picture and copy the rest.
+    // Only when the picture isn't being re-encoded anyway (no freeze, no H.264
+    // re-encode setting). Any failure falls back to the full render.
+    let mut slate_spec = slate_spec;
+    let mut fast_work: Option<String> = None;
+    let mut video_input: Option<String> = None;
+    if let (Some(spec), Some(video)) = (slate_spec.as_mut(), pair.video.as_ref()) {
+        let freezing = pair.length_fix == LengthFix::Freeze
+            && pair.audio.duration_secs > video.duration_secs + 0.04;
+        if !freezing && settings.video_codec == VideoCodecOption::Original {
+            progress_callback(ProcessingProgress {
+                pair_id: pair_id.clone(),
+                state: "muxing".to_string(),
+                progress: 0.5,
+                message: "Rendering slate (fast path — programme copied, not re-encoded)…".to_string(),
+            });
+            match try_fast_slate(&video.path, spec, &pair.id) {
+                Ok((spliced, work)) => {
+                    spec.prebaked = true;
+                    video_input = Some(spliced);
+                    fast_work = Some(work);
+                }
+                Err(reason) => {
+                    eprintln!("[laybacker] fast slate not used for {}: {}", video.path, reason);
+                }
+            }
+        }
+    }
+
     let args = if let Some(ref video) = pair.video {
         ffmpeg::build_mux_command(
-            &video.path,
+            video_input.as_deref().unwrap_or(&video.path),
             &pair.audio.path,
             &output_path,
             settings,
@@ -177,7 +206,7 @@ pub fn process_pair(
             && pair.audio.duration_secs > v.duration_secs + 0.04
     });
     let slate_secs = slate_spec.as_ref().map(|s| s.preroll_secs()).unwrap_or(0.0);
-    let reencode = freeze_reencode || slate_spec.is_some();
+    let reencode = freeze_reencode || slate_spec.as_ref().is_some_and(|s| !s.prebaked);
 
     let run_result = if reencode {
         let base = if freeze_reencode {
@@ -209,6 +238,9 @@ pub fn process_pair(
         if let Some(ref matte) = spec.matte_path {
             let _ = std::fs::remove_file(matte);
         }
+    }
+    if let Some(work) = fast_work {
+        let _ = std::fs::remove_dir_all(work);
     }
 
     match run_result {
@@ -297,7 +329,24 @@ fn write_slate_image(pair: &MatchedPair) -> Result<Option<ffmpeg::SlateSpec>, St
         duration_secs: pair.slate_duration_secs.max(0.5),
         black_secs: pair.slate_black_secs.max(0.0),
         matte_path,
+        prebaked: false,
     }))
+}
+
+/// Try the fast slate path: an H.264 source gets its slate spliced in with
+/// the programme copied, not re-encoded. Returns the pre-slated video-only
+/// file and its work folder, or the reason the full path is needed.
+pub fn try_fast_slate(video_path: &str, slate: &ffmpeg::SlateSpec, work_tag: &str) -> Result<(String, String), String> {
+    let info = fastslate::probe(video_path)?;
+    fastslate::eligible(&info)?;
+    let work = std::env::temp_dir().join(format!("laybacker-fastslate-{}", work_tag)).to_string_lossy().to_string();
+    match fastslate::build_spliced_video(video_path, slate, &info, &work) {
+        Ok(spliced) => Ok((spliced, work)),
+        Err(e) => {
+            let _ = std::fs::remove_dir_all(&work);
+            Err(e)
+        }
+    }
 }
 
 /// Decode a base64 JPEG (raw payload or a "data:image/jpeg;base64,…" URL) into

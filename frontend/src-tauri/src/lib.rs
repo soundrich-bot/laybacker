@@ -43,6 +43,8 @@ pub fn run() {
             commands::chain_shape,
             commands::write_text_file,
             commands::video_frame,
+            commands::detect_clicks,
+            commands::scan_audio_issues,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

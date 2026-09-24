@@ -21,7 +21,7 @@
   /* Text */
   --text-primary: #f4f4f8;
   --text-secondary: #b0b0cc;
-  --text-muted: #8080a0;
+  --text-muted: #9a9ab8;
 
   /* Functional */
   --success: #39ff14;
@@ -151,7 +151,7 @@ select {
   /* Dark text on light */
   --text-primary: #3a2e1e;
   --text-secondary: #6b5d4a;
-  --text-muted: #a0937e;
+  --text-muted: #857761;
 
   /* Functional */
   --success: #6a9a5a;

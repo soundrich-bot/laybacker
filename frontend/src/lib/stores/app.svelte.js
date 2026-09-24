@@ -267,7 +267,40 @@ let qcTargetLufs = $state(loadPref('qcTargetLufs', -23));
 //    triggers when target_lufs >= 0, so peak mode carries target_lufs = 0.)
 let qcTruePeak = $state(loadPref('qcTruePeak', -1.0));
 let qcMode = $state(loadPref('qcMode', 'lufs')); // 'lufs' | 'peak'
-let qcCheckSilence = $state(false);
+// QC checks everything, every time — the user reads the list and disregards
+// what doesn't apply. These stay as constants so the result shape is unchanged.
+let qcCheckSilence = $state(true);
+// Click detection (digital clicks, edge pops). Remembered between launches.
+let qcCheckClicks = $state(true);
+let qcClickSensitivity = $state(loadPref('qcClickSensitivity', 'normal'));
+function setQcCheckClicks() { qcCheckClicks = true; }
+function setQcClickSensitivity(v) { qcClickSensitivity = v; savePref('qcClickSensitivity', v); }
+// Clipping and dropout scan (one pass covers both). Remembered between launches.
+let qcCheckClipping = $state(true);
+let qcCheckDropouts = $state(true);
+function setQcCheckClipping() { qcCheckClipping = true; }
+function setQcCheckDropouts() { qcCheckDropouts = true; }
+
+// Run the clipping / dropout scan when either check is on. Returns
+// { clipping, dropouts, clippingPass, dropoutsPass } or nulls when off.
+async function scanIssues(path, sampleRate, channelCount) {
+  if (!qcCheckClipping && !qcCheckDropouts) return { clipping: null, dropouts: null, clippingPass: true, dropoutsPass: true };
+  try {
+    const r = await invoke('scan_audio_issues', {
+      audioPath: path, sampleRate: sampleRate ? Math.round(sampleRate) : null, channels: channelCount ?? null,
+    });
+    const clipping = qcCheckClipping ? r.clipping : null;
+    const dropouts = qcCheckDropouts ? r.dropouts : null;
+    return {
+      clipping, dropouts,
+      clippingPass: !clipping || clipping.count === 0,
+      dropoutsPass: !dropouts || dropouts.count === 0,
+    };
+  } catch (e) {
+    const err = { error: String(e), count: 0 };
+    return { clipping: qcCheckClipping ? err : null, dropouts: qcCheckDropouts ? { ...err, gaps: [] } : null, clippingPass: false, dropoutsPass: false };
+  }
+}
 
 // The batch normalization spec every pair carries, derived from the current mode
 // and targets. Peak mode uses target_lufs = 0 to select the engine's peak path.
@@ -620,7 +653,28 @@ async function runChain() {
             ? Math.abs(tp - spec.truePeak) <= 0.1
             : Math.abs(lufs - spec.targetLufs) <= 1.0 && tp <= spec.truePeak + 0.05;
           const stereoPass = !stereo || !['anti_phase', 'one_sided', 'dual_mono'].includes(stereo.verdict);
-          sub.qc = { loudness: pass, sixFr: sixFrPass, stereo: stereo ? stereoPass : null };
+          let clicksPass = null;
+          if (qcCheckClicks) {
+            try {
+              const cr = await invoke('detect_clicks', {
+                audioPath: s, sampleRate: media.sampleRate ? Math.round(media.sampleRate) : null,
+                channels: media.channelCount ?? null, sensitivity: qcClickSensitivity,
+              });
+              clicksPass = cr.count === 0 && !cr.headPop && !cr.tailPop;
+              if (!clicksPass) {
+                const b = [];
+                if (cr.count > 0) b.push(`${cr.count} possible click${cr.count === 1 ? '' : 's'} (first at ${cr.clicks[0]?.time.toFixed(3)} s)`);
+                if (cr.headPop) b.push('pop at the head');
+                if (cr.tailPop) b.push('pop at the tail');
+                sub.warnings = [...(sub.warnings || []), b.join(', ')];
+              }
+            } catch { /* reported as unchecked */ }
+          }
+          const scan = await scanIssues(s, media.sampleRate, media.channelCount);
+          if (scan.clipping && !scan.clippingPass) sub.warnings = [...(sub.warnings || []), scan.clipping.error ? 'clipping scan failed' : `clipping: ${scan.clipping.count} run${scan.clipping.count === 1 ? '' : 's'} (first at ${scan.clipping.events[0]?.time.toFixed(3)} s)`];
+          if (scan.dropouts && !scan.dropoutsPass) sub.warnings = [...(sub.warnings || []), scan.dropouts.error ? 'dropout scan failed' : `dropouts: ${scan.dropouts.count} (first at ${scan.dropouts.gaps[0]?.start.toFixed(3)} s)`];
+          sub.qc = { loudness: pass, sixFr: sixFrPass, stereo: stereo ? stereoPass : null, clicks: clicksPass,
+            clipping: scan.clipping ? scan.clippingPass : null, dropouts: scan.dropouts ? scan.dropoutsPass : null };
 
           // 6 Fr — only when the check fails
           let sixFr = false;
@@ -822,9 +876,8 @@ async function joinMonosNow() {
   }
 }
 
-function setQcCheckSilence(value) {
-  qcCheckSilence = value;
-  qcResults = {};
+function setQcCheckSilence() {
+  qcCheckSilence = true; // always on};
 }
 
 async function runBatchQc() {
@@ -859,6 +912,20 @@ async function runBatchQc() {
         }
       }
       const stereoPass = !stereo || !['anti_phase', 'one_sided'].includes(stereo.verdict);
+      // Clicks: a report of possible digital clicks and edge pops, or null when off.
+      let clicks = null;
+      if (qcCheckClicks) {
+        try {
+          clicks = await invoke('detect_clicks', {
+            audioPath: p.audio.path, sampleRate: p.audio.sampleRate ? Math.round(p.audio.sampleRate) : null,
+            channels: p.audio.channelCount ?? null, sensitivity: qcClickSensitivity,
+          });
+        } catch (e) {
+          clicks = { error: String(e), count: 0, clicks: [], headPop: false, tailPop: false };
+        }
+      }
+      const clicksPass = !clicks || (!clicks.error && clicks.count === 0 && !clicks.headPop && !clicks.tailPop);
+      const scan = await scanIssues(p.audio.path, p.audio.sampleRate, p.audio.channelCount);
       const peakLimit = p.normalizationSettings?.truePeakLimit ?? -1.0;
       let lufsPass, peakPass;
       if (qcMode === 'peak') {
@@ -872,9 +939,12 @@ async function runBatchQc() {
       }
       const silencePass = qcCheckSilence ? (!headHasAudio && !tailHasAudio) : true;
       results[p.id] = {
-        pass: lufsPass && peakPass && silencePass && stereoPass,
+        pass: lufsPass && peakPass && silencePass && stereoPass && clicksPass && scan.clippingPass && scan.dropoutsPass,
         lufsPass, peakPass, silencePass, silenceChecked: qcCheckSilence,
         stereo, stereoPass,
+        clicks, clicksPass,
+        clipping: scan.clipping, clippingPass: scan.clippingPass,
+        dropouts: scan.dropouts, dropoutsPass: scan.dropoutsPass,
         measuredLufs, measuredTP, headHasAudio, tailHasAudio, peakLimit, mode: qcMode,
       };
     } catch (e) {
@@ -1574,6 +1644,14 @@ export function getAppState() {
     get qcTruePeak() { return qcTruePeak; },
     get qcMode() { return qcMode; },
     get qcCheckSilence() { return qcCheckSilence; },
+    get qcCheckClicks() { return qcCheckClicks; },
+    setQcCheckClicks,
+    get qcClickSensitivity() { return qcClickSensitivity; },
+    setQcClickSensitivity,
+    get qcCheckClipping() { return qcCheckClipping; },
+    setQcCheckClipping,
+    get qcCheckDropouts() { return qcCheckDropouts; },
+    setQcCheckDropouts,
     get qcResults() { return qcResults; },
     get qcRunning() { return qcRunning; },
     get qcProgress() { return qcProgress; },

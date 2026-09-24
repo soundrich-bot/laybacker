@@ -190,15 +190,6 @@
             />
             <span class="qc-unit">dBTP</span>
           </span>
-          <button
-            class="qc-toggle"
-            class:active={qcCheckSilence}
-            disabled={busy}
-            onclick={() => onQcSilenceChange(!qcCheckSilence)}
-            title="Also check 6 frames of silence at head and tail"
-          >
-            6 Fr
-          </button>
           <button class="qc-run" onclick={onRunQc} disabled={busy || pairs.length === 0}>
             {qcRunning ? `CHECKING ${qcProgress.done}/${qcProgress.total}…` : 'RUN QC'}
           </button>

@@ -1,5 +1,6 @@
 <script>
   import MatchedPairRow from './MatchedPairRow.svelte';
+  import QcPlayer from './QcPlayer.svelte';
 
   // The Audio Only page: everything you can do to audio files on their own,
   // in three sections — QC (measure), File Deliverables (render to a spec),
@@ -19,6 +20,14 @@
     qcTruePeak = -1.0,
     qcMode = 'lufs',
     qcCheckSilence = false,
+    qcCheckClicks = false,
+    qcClickSensitivity = 'normal',
+    onQcClicksChange,
+    onQcClickSensitivityChange,
+    qcCheckClipping = false,
+    onQcClippingChange,
+    qcCheckDropouts = false,
+    onQcDropoutsChange,
     qcResults = {},
     qcRunning = false,
     qcProgress = { done: 0, total: 0 },
@@ -112,6 +121,29 @@
     return typeof n === 'number' && isFinite(n) ? n.toFixed(digits) : '—';
   }
 
+  // Click results: a summary word, and the list to jump the player to.
+  function clickSummary(c) {
+    if (!c) return '—';
+    if (c.error) return '?';
+    const bits = [];
+    if (c.count > 0) bits.push(`${c.count} CLICK${c.count === 1 ? '' : 'S'}`);
+    if (c.headPop) bits.push('HEAD POP');
+    if (c.tailPop) bits.push('TAIL POP');
+    return bits.length ? bits.join(' · ') : 'NONE';
+  }
+  function fmtTime(t) {
+    const m = Math.floor(t / 60), s = t - m * 60;
+    return `${m}:${s.toFixed(3).padStart(6, '0')}`;
+  }
+  // Listen back: cue the QC player (under the table) a moment before the fault.
+  let playerCue = $state(null); // { pairId, time, nonce }
+  function listen(pair, time) {
+    playerCue = { pairId: pair.id, time, nonce: Date.now() };
+  }
+  let openClickList = $state(null); // pair id whose click list is expanded
+  let openList = $state(null); // `${pairId}:clip` | `${pairId}:drop` — expanded event list
+  const CH = ['L', 'R', 'C', 'LFE', 'Ls', 'Rs', 'Lss', 'Rss'];
+
   // 6 Fr ALL mutes heads and tails — confirm before doing it to every file.
   let showSixFrConfirm = $state(false);
   function confirmSixFrAll() {
@@ -134,9 +166,9 @@
   <!-- ── QC ── -->
   <section class="panel" class:closed={!open.qc}>
     <button class="panel-head" onclick={() => toggle('qc')} aria-expanded={open.qc}>
-      <span class="chevron" class:down={open.qc}>▸</span>
+      <span class="chevron" class:down={open.qc}><svg width="14" height="14" viewBox="0 0 16 16"><path d="M4 2L14 8L4 14V2Z" fill="currentColor"/></svg></span>
       <span class="panel-title">QC</span>
-      <span class="panel-desc">Measure every file against one spec. Nothing is changed.</span>
+      <span class="panel-desc">Every check runs on every file: level, true peak, stereo & phase, 6 frames of silence, clicks, clipping, dropouts. Nothing is changed — read the list and disregard what doesn't apply.</span>
       {#if !open.qc && qcSummary}<span class="head-summary" class:allpass={qcPassCount === qcChecked.length}>{qcSummary}</span>{/if}
     </button>
     {#if open.qc}
@@ -164,9 +196,15 @@
         <span class="unit">dBTP</span>
       </span>
 
-      <button class="cap" class:active={qcCheckSilence} disabled={busy}
-        onclick={() => onQcSilenceChange(!qcCheckSilence)}
-        title="Also check for 6 frames of silence at head and tail">6 Fr</button>
+      <label class="ctl" title="How readily a sharp jump counts as a click. Higher finds more, and more false alarms — always listen back.">
+        <span class="ctl-label">CLICK SENSITIVITY</span>
+        <select class="sens" value={qcClickSensitivity} disabled={busy}
+          onchange={(e) => onQcClickSensitivityChange(e.target.value)}>
+          <option value="low">LOW</option>
+          <option value="normal">NORMAL</option>
+          <option value="high">HIGH</option>
+        </select>
+      </label>
 
       <button class="cap run" onclick={onRunQc} disabled={busy || pairs.length === 0}>
         {qcRunning ? `CHECKING ${qcProgress.done}/${qcProgress.total}…` : 'RUN QC'}
@@ -186,7 +224,10 @@
               <th class="t-num">LUFS</th>
               <th class="t-num">dBTP</th>
               <th class="t-tag">STEREO</th>
-              {#if qcCheckSilence}<th class="t-tag">6 Fr</th>{/if}
+              <th class="t-tag">6 Fr</th>
+              <th class="t-tag">CLICKS</th>
+              <th class="t-tag">CLIPPING</th>
+              <th class="t-tag">DROPOUTS</th>
               <th class="t-tag">RESULT</th>
             </tr>
           </thead>
@@ -195,7 +236,7 @@
               {#if r.error}
                 <tr class="row-fail">
                   <td class="t-file" title={pair.audio.path}>{pair.audio.filename}</td>
-                  <td class="t-num" colspan={qcCheckSilence ? 4 : 3}>{r.error}</td>
+                  <td class="t-num" colspan="7">{r.error}</td>
                   <td class="t-tag"><span class="verdict fail">ERROR</span></td>
                 </tr>
               {:else}
@@ -211,9 +252,79 @@
                   </td>
                   <td class="t-tag"><span class="tag {stereoClass(r)}"
                     title={r.stereo?.correlation != null ? `Phase correlation ${r.stereo.correlation.toFixed(2)}` : ''}>{stereoLabel(r.stereo)}</span></td>
-                  {#if qcCheckSilence}
-                    <td class="t-tag"><span class="tag" class:good={r.silencePass} class:bad={!r.silencePass}>{r.silencePass ? 'SILENT' : (r.headHasAudio && r.tailHasAudio ? 'HEAD & TAIL' : r.headHasAudio ? 'HEAD' : 'TAIL')}</span></td>
-                  {/if}
+                  <td class="t-tag"><span class="tag" class:good={r.silencePass} class:bad={!r.silencePass}>{r.silencePass ? 'SILENT' : (r.headHasAudio && r.tailHasAudio ? 'HEAD & TAIL' : r.headHasAudio ? 'HEAD' : 'TAIL')}</span></td>
+                  <td class="t-tag clicks-cell">
+                    {#if r.clicks?.error}
+                      <span class="tag warn" title={r.clicks.error}>?</span>
+                    {:else if r.clicksPass}
+                      <span class="tag good">NONE</span>
+                    {:else if r.clicks}
+                      <button class="tag bad linkish" onclick={() => openClickList = openClickList === pair.id ? null : pair.id}
+                        title="Show where — click a time to listen back">{clickSummary(r.clicks)} ▾</button>
+                      {#if openClickList === pair.id}
+                        <div class="click-list">
+                          {#if r.clicks.headPop}<button class="click-time" onclick={() => listen(pair, 0)}>head pop · 0:00.000</button>{/if}
+                          {#each r.clicks.clicks as c}
+                            <button class="click-time" onclick={() => listen(pair, c.time)}
+                              title="{c.prominenceDb.toFixed(0)} dB above the surrounding audio, {c.widthMs.toFixed(2)} ms wide">
+                              {fmtTime(c.time)}{r.clicks.channels > 1 ? ` ${c.allChannels ? (r.clicks.channels === 2 ? 'L+R' : 'ALL') : (CH[c.channel] ?? 'ch' + (c.channel + 1))}` : ''}
+                            </button>
+                          {/each}
+                          {#if r.clicks.count > r.clicks.clicks.length}<span class="click-more">…and {r.clicks.count - r.clicks.clicks.length} more</span>{/if}
+                          {#if r.clicks.tailPop}<button class="click-time" onclick={() => listen(pair, Math.max(0, pair.audio.durationSecs - 2))}>tail pop · end</button>{/if}
+                        </div>
+                      {/if}
+                    {:else}
+                      <span class="tag">—</span>
+                    {/if}
+                  </td>
+                  <td class="t-tag clicks-cell">
+                    {#if r.clipping?.error}
+                      <span class="tag warn" title={r.clipping.error}>?</span>
+                    {:else if r.clippingPass}
+                      <span class="tag good">NONE</span>
+                    {:else if r.clipping}
+                      <button class="tag bad linkish" onclick={() => openList = openList === `${pair.id}:clip` ? null : `${pair.id}:clip`}
+                        title="{r.clipping.clippedSamples} clipped samples, longest run {r.clipping.longestRun} — click a time to listen back">
+                        {r.clipping.count} RUN{r.clipping.count === 1 ? '' : 'S'} ▾</button>
+                      {#if openList === `${pair.id}:clip`}
+                        <div class="click-list">
+                          {#each r.clipping.events as e}
+                            <button class="click-time" onclick={() => listen(pair, e.time)}
+                              title="{e.kind === 'flat' ? 'Flat top' : 'At full scale'} at {e.levelDb.toFixed(1)} dBFS, {e.samples} samples">
+                              {fmtTime(e.time)}{(pair.audio.channelCount ?? 1) > 1 ? ` ${CH[e.channel] ?? 'ch' + (e.channel + 1)}` : ''}{e.kind === 'flat' ? ' ▭' : ''}
+                            </button>
+                          {/each}
+                          {#if r.clipping.count > r.clipping.events.length}<span class="click-more">…and {r.clipping.count - r.clipping.events.length} more</span>{/if}
+                        </div>
+                      {/if}
+                    {:else}
+                      <span class="tag">—</span>
+                    {/if}
+                  </td>
+                  <td class="t-tag clicks-cell">
+                    {#if r.dropouts?.error}
+                      <span class="tag warn" title={r.dropouts.error}>?</span>
+                    {:else if r.dropoutsPass}
+                      <span class="tag good">NONE</span>
+                    {:else if r.dropouts}
+                      <button class="tag bad linkish" onclick={() => openList = openList === `${pair.id}:drop` ? null : `${pair.id}:drop`}
+                        title="{r.dropouts.totalSecs.toFixed(2)} s of silence inside the programme — click a time to listen back">
+                        {r.dropouts.count} GAP{r.dropouts.count === 1 ? '' : 'S'} ▾</button>
+                      {#if openList === `${pair.id}:drop`}
+                        <div class="click-list">
+                          {#each r.dropouts.gaps as g}
+                            <button class="click-time" onclick={() => listen(pair, g.start)} title="{(g.duration * 1000).toFixed(0)} ms of silence">
+                              {fmtTime(g.start)} · {g.duration >= 1 ? g.duration.toFixed(2) + ' s' : (g.duration * 1000).toFixed(0) + ' ms'}
+                            </button>
+                          {/each}
+                          {#if r.dropouts.count > r.dropouts.gaps.length}<span class="click-more">…and {r.dropouts.count - r.dropouts.gaps.length} more</span>{/if}
+                        </div>
+                      {/if}
+                    {:else}
+                      <span class="tag">—</span>
+                    {/if}
+                  </td>
                   <td class="t-tag"><span class="verdict" class:pass={r.pass} class:fail={!r.pass}>{r.pass ? 'PASS' : 'FAIL'}</span></td>
                 </tr>
               {/if}
@@ -222,13 +333,16 @@
         </table>
       </div>
     {/if}
+    {#if pairs.length > 0}
+      <QcPlayer {pairs} {qcResults} cue={playerCue} />
+    {/if}
     {/if}
   </section>
 
   <!-- ── FILE DELIVERABLES ── -->
   <section class="panel" class:closed={!open.deliver}>
     <button class="panel-head" onclick={() => toggle('deliver')} aria-expanded={open.deliver}>
-      <span class="chevron" class:down={open.deliver}>▸</span>
+      <span class="chevron" class:down={open.deliver}><svg width="14" height="14" viewBox="0 0 16 16"><path d="M4 2L14 8L4 14V2Z" fill="currentColor"/></svg></span>
       <span class="panel-title">FILE DELIVERABLES</span>
       <span class="panel-desc">Render new files to a spec. Each runs now, on every file, then re-measures. Originals are never touched.</span>
     </button>
@@ -264,7 +378,7 @@
   <!-- ── FILE PROCESSING ── -->
   <section class="panel" class:closed={!open.process}>
     <button class="panel-head" onclick={() => toggle('process')} aria-expanded={open.process}>
-      <span class="chevron" class:down={open.process}>▸</span>
+      <span class="chevron" class:down={open.process}><svg width="14" height="14" viewBox="0 0 16 16"><path d="M4 2L14 8L4 14V2Z" fill="currentColor"/></svg></span>
       <span class="panel-title">FILE PROCESSING</span>
       <span class="panel-desc">Change the file’s shape. New files are written beside the originals; the list reloads with the results.</span>
     </button>
@@ -325,7 +439,7 @@
   {#if chainSection}
   <section class="panel chain-panel" class:closed={!open.chain}>
     <button class="panel-head" onclick={() => toggle('chain')} aria-expanded={open.chain}>
-      <span class="chevron" class:down={open.chain}>▸</span>
+      <span class="chevron" class:down={open.chain}><svg width="14" height="14" viewBox="0 0 16 16"><path d="M4 2L14 8L4 14V2Z" fill="currentColor"/></svg></span>
       <span class="panel-title">MULTIFUNCTION CHAIN</span>
       <span class="panel-desc">One ordered run of steps on every file: shape → QC → fixes (with prompts) → clock → export type → rename. Save it as a preset.</span>
     </button>
@@ -410,7 +524,10 @@
     display: flex;
     flex-direction: column;
     gap: var(--gap-sm);
-    padding: 0 var(--gap-lg);
+    padding: 0 var(--gap-lg) var(--gap-lg);
+    /* The page itself scrolls, inside the space above the output bar — so
+       nothing ever slides behind it. */
+    overflow-y: auto;
   }
 
   .page-head {
@@ -430,7 +547,7 @@
   }
   .page-count {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: 12.5px;
     letter-spacing: 0.08em;
     color: var(--text-muted);
   }
@@ -463,7 +580,7 @@
   .panel.chain-panel { border-color: rgba(8, 247, 254, 0.35); }
   .panel-head {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     gap: 12px;
     flex-wrap: wrap;
     margin-bottom: 8px;
@@ -477,26 +594,32 @@
   }
   .panel.closed .panel-head { margin-bottom: 0; }
   .panel-head:hover .panel-title { text-shadow: 0 0 8px rgba(8, 247, 254, 0.5); }
+  /* Fold indicator: just a big triangle, in the title colour. */
   .chevron {
-    display: inline-block;
-    font-size: 11px;
-    color: var(--text-muted);
-    transition: transform 0.15s;
-    width: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    color: var(--neon-cyan);
+    flex-shrink: 0;
   }
-  .chevron.down { transform: rotate(90deg); }
-  .head-summary { margin-left: auto; font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: var(--neon-orange); }
+  .chevron svg { width: 18px; height: 18px; transition: transform 0.15s; }
+  .chevron.down svg { transform: rotate(90deg); }
+  .panel-head:hover .chevron { filter: brightness(1.15); }
+  .head-summary { margin-left: auto; font-family: var(--font-mono); font-size: 13px; font-weight: 700; color: var(--neon-orange); }
   .head-summary.allpass { color: var(--neon-green); }
   .panel-title {
     font-family: var(--font-display);
-    font-size: 11px;
+    font-size: 13px;
     letter-spacing: 0.15em;
     color: var(--neon-cyan);
   }
   .panel-desc {
     font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--text-muted);
+    font-size: 12.5px;
+    line-height: 1.45;
+    color: var(--text-secondary);
   }
   .panel-row {
     display: flex;
@@ -509,7 +632,7 @@
   .seg { display: inline-flex; border: 1px solid var(--border-color); border-radius: var(--radius-sm); overflow: hidden; box-shadow: var(--cap-shadow); }
   .seg-btn {
     font-family: var(--font-display);
-    font-size: 10px;
+    font-size: 11.5px;
     letter-spacing: 0.1em;
     color: var(--text-muted);
     background: var(--cap-face);
@@ -527,9 +650,9 @@
   .target.dimmed { opacity: 0.4; }
   .target.primary .unit { color: var(--neon-cyan); }
   .num {
-    width: 62px;
+    width: 68px;
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 700;
     color: var(--text-primary);
     background: var(--bg-dark);
@@ -538,11 +661,11 @@
     padding: 3px 6px;
   }
   .num:focus { outline: none; border-color: var(--neon-cyan); }
-  .unit { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); }
+  .unit { font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary); }
 
   .cap {
     font-family: var(--font-display);
-    font-size: 10px;
+    font-size: 11.5px;
     letter-spacing: 0.1em;
     color: var(--text-muted);
     background: var(--cap-face);
@@ -562,7 +685,7 @@
   .cap.active { color: var(--bg-dark); background: var(--neon-cyan); border-color: var(--neon-cyan); }
   .cap:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
 
-  .summary { font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: var(--neon-orange); margin-left: auto; }
+  .summary { font-family: var(--font-mono); font-size: 13px; font-weight: 700; color: var(--neon-orange); margin-left: auto; }
   .summary.allpass { color: var(--neon-green); }
 
   /* ── QC results table: the numbers, big and in one place ── */
@@ -579,30 +702,44 @@
     position: sticky; top: 0;
     background: var(--bg-panel);
     font-family: var(--font-display);
-    font-size: 9px;
+    font-size: 11px;
     letter-spacing: 0.15em;
     color: var(--text-muted);
     text-align: left;
     padding: 5px 10px;
     border-bottom: 1px solid var(--border-color);
   }
-  .qc-table td { padding: 5px 10px; border-bottom: 1px solid var(--border-color); font-size: 12px; color: var(--text-secondary); }
+  .qc-table td { padding: 6px 10px; border-bottom: 1px solid var(--border-color); font-size: 13px; color: var(--text-primary); }
   .qc-table tr:last-child td { border-bottom: none; }
   .qc-table .t-file { max-width: 0; width: 46%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .qc-table th.t-num, .qc-table td.t-num { text-align: right; }
-  .qc-table td.t-num { font-size: 15px; font-weight: 700; color: var(--neon-cyan); white-space: nowrap; }
+  .qc-table td.t-num { font-size: 17px; font-weight: 700; color: var(--neon-cyan); white-space: nowrap; }
   .qc-table td.t-num.dim { color: var(--text-muted); font-weight: 400; }
   .qc-table td.t-num.bad { color: var(--neon-orange); }
   .qc-table .t-tag { white-space: nowrap; }
   .qc-table .row-fail td { background: rgba(255, 149, 0, 0.05); }
-  .tag { font-family: var(--font-display); font-size: 9px; letter-spacing: 0.1em; color: var(--text-muted); }
+  .tag { font-family: var(--font-display); font-size: 11px; letter-spacing: 0.08em; color: var(--text-secondary); }
   .tag.good { color: var(--neon-green); }
   .tag.warn { color: var(--neon-yellow); }
   .tag.bad { color: var(--neon-orange); }
+  .sens { font-size: 12px; font-weight: 700; letter-spacing: 0.06em; padding: 4px 24px 4px 10px; color: var(--text-primary); }
+  .ctl { display: inline-flex; align-items: center; gap: 6px; }
+  .ctl-label { font-family: var(--font-display); font-size: 11px; letter-spacing: 0.1em; color: var(--text-secondary); }
+  .linkish { background: none; border: none; padding: 0; cursor: pointer; }
+  .linkish:hover { text-decoration: underline; }
+  .clicks-cell { position: relative; }
+  .click-list { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; max-width: 360px; }
+  .click-time {
+    font-family: var(--font-mono); font-size: 12px; color: var(--neon-cyan);
+    background: rgba(8, 247, 254, 0.06); border: 1px solid rgba(8, 247, 254, 0.3); border-radius: 3px;
+    padding: 1px 6px; cursor: pointer;
+  }
+  .click-time:hover { background: rgba(8, 247, 254, 0.16); }
+  .click-more { font-family: var(--font-mono); font-size: 12px; color: var(--text-muted); align-self: center; }
   .verdict {
     display: inline-block;
     font-family: var(--font-display);
-    font-size: 9px;
+    font-size: 11px;
     letter-spacing: 0.12em;
     padding: 2px 8px;
     border-radius: 3px;
@@ -631,8 +768,8 @@
     transition: all 0.15s;
     box-shadow: var(--cap-shadow);
   }
-  .action-title { font-family: var(--font-display); font-size: 11px; letter-spacing: 0.1em; }
-  .action-desc { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-muted); line-height: 1.4; }
+  .action-title { font-family: var(--font-display); font-size: 13px; letter-spacing: 0.08em; }
+  .action-desc { font-family: var(--font-mono); font-size: 12.5px; color: var(--text-secondary); line-height: 1.45; }
   .action.normalise .action-title { color: var(--neon-yellow); }
   .action.sixfr .action-title { color: var(--neon-orange); }
   .action.clock .action-title { color: var(--neon-cyan); }
@@ -654,7 +791,7 @@
   .action-with-opt .action { flex: 1; }
   .opt-select {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: 12.5px;
     font-weight: 700;
     color: var(--text-secondary);
     background: var(--bg-dark);
@@ -676,13 +813,12 @@
     padding: 4px var(--gap-md) 0;
     gap: var(--gap-sm);
   }
-  .col-label { flex: 1; font-family: var(--font-display); font-size: 10px; letter-spacing: 0.15em; color: var(--text-muted); opacity: 0.6; }
+  .col-label { flex: 1; font-family: var(--font-display); font-size: 11.5px; letter-spacing: 0.12em; color: var(--text-secondary); }
   .name-rule { display: inline-flex; align-items: center; gap: 4px; }
-  .name-rule-label { font-family: var(--font-display); font-size: 10px; letter-spacing: 0.15em; color: var(--text-muted); opacity: 0.6; margin-right: 4px; cursor: help; }
+  .name-rule-label { font-family: var(--font-display); font-size: 11.5px; letter-spacing: 0.12em; color: var(--text-secondary); margin-right: 4px; cursor: help; }
 
   .pairs-list {
-    flex: 1;
-    overflow-y: auto;
+    flex: none;
     display: flex;
     flex-direction: column;
     gap: var(--gap-sm);
@@ -691,7 +827,7 @@
 
   .empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0.5; }
   .empty-text { font-family: var(--font-display); font-size: 15px; letter-spacing: 0.15em; color: var(--text-muted); margin-bottom: var(--gap-xs); }
-  .empty-hint { font-family: var(--font-mono); font-size: 12px; color: var(--text-muted); }
+  .empty-hint { font-family: var(--font-mono); font-size: 13px; color: var(--text-muted); }
 
   /* ── 6 Fr ALL confirm ── */
   .confirm-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.55); display: flex; align-items: center; justify-content: center; z-index: 100; }

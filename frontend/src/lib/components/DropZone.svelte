@@ -156,11 +156,11 @@
     gap: 12px;
   }
   .drop-zone.compact .drop-text {
-    font-size: 11px;
+    font-size: 12.5px;
     margin: 0;
   }
   .drop-zone.compact .drop-formats {
-    font-size: 10px;
+    font-size: 11.5px;
   }
   .drop-zone.compact.dragging { transform: none; }
 

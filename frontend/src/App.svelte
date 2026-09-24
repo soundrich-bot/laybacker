@@ -148,6 +148,14 @@
     qcTruePeak={app.qcTruePeak}
     qcMode={app.qcMode}
     qcCheckSilence={app.qcCheckSilence}
+    qcCheckClicks={app.qcCheckClicks}
+    qcClickSensitivity={app.qcClickSensitivity}
+    onQcClicksChange={app.setQcCheckClicks}
+    onQcClickSensitivityChange={app.setQcClickSensitivity}
+    qcCheckClipping={app.qcCheckClipping}
+    onQcClippingChange={app.setQcCheckClipping}
+    qcCheckDropouts={app.qcCheckDropouts}
+    onQcDropoutsChange={app.setQcCheckDropouts}
     qcResults={app.qcResults}
     qcRunning={app.qcRunning}
     qcProgress={app.qcProgress}

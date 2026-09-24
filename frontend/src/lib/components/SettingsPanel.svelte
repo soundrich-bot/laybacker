@@ -321,7 +321,7 @@
 
   .setting-label {
     font-family: var(--font-display);
-    font-size: 11px;
+    font-size: 12.5px;
     letter-spacing: 0.15em;
     color: var(--text-muted);
     min-width: 50px;
@@ -366,7 +366,7 @@
 
   /* Audio output dropdowns: compact, and lit when away from Original */
   .spec-select {
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 700;
     letter-spacing: 0.05em;
     padding: 4px 24px 4px 10px;
@@ -503,11 +503,10 @@
   .dropdown-label {
     display: block;
     font-family: var(--font-display);
-    font-size: 9px;
-    letter-spacing: 0.15em;
-    color: var(--text-muted);
-    padding: 4px 12px 2px;
-    opacity: 0.6;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    color: var(--text-secondary);
+    padding: 6px 12px 3px;
   }
 
   .dropdown-divider {
@@ -521,14 +520,14 @@
     width: 100%;
     text-align: left;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: 13px;
     font-weight: 700;
     letter-spacing: 0.05em;
     padding: 5px 12px;
     border-radius: 3px;
     border: none;
     background: transparent;
-    color: var(--text-muted);
+    color: var(--text-secondary);
     cursor: pointer;
     transition: all 0.15s;
   }

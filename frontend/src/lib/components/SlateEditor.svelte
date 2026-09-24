@@ -339,17 +339,19 @@
       {#if overlay}
         The text is laid over the first {parseFloat(duration) || 5} seconds of the picture. Nothing is
         added to the front, so <strong>the runtime stays the same and the sound isn't moved</strong> —
-        versions still line up for A/B. The picture is re-encoded, so the export takes longer
-        (a progress bar will show).{#if isSolo} A new file "…_Slated.mov" is rendered next to the original.{/if}
+        versions still line up for A/B. On an H.264 file only the opening seconds are re-encoded and
+        the rest of the picture is copied, so it's quick; other formats re-encode in full (a progress
+        bar will show).{#if isSolo} A new file "…_Slated.mov" is rendered next to the original.{/if}
       {:else if isSolo}
         The slate is silent — the video's own soundtrack is kept and starts with
         the first frame of programme. A new file "…_Slated.mov" is rendered next
-        to the original (re-encoded, so it takes a moment — the button shows
-        progress).
+        to the original. On an H.264 file only the card is encoded and the
+        picture is copied, so it's quick; other formats re-encode in full (the
+        button shows progress).
       {:else}
         The slate is silent — the soundtrack starts with the first frame of programme.
-        Adding a slate re-encodes the video, so the export takes longer (a progress
-        bar will show).
+        On an H.264 file only the card is encoded and the picture is copied, so it's
+        quick; other formats re-encode in full (a progress bar will show).
       {/if}
     </p>
 
