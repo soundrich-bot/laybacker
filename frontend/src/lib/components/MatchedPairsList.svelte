@@ -10,6 +10,7 @@
     videos = [],
     videoCount = 0,
     audioCount = 0,
+    onAudioOnly = null,
     onUpdateNormalization,
     onUpdateCompliance,
     onUpdateClock,
@@ -119,6 +120,15 @@
         </div>
         <p class="waiting-text">{audioCount} AUDIO FILE{audioCount !== 1 ? 'S' : ''} LOADED</p>
         <p class="waiting-hint">Now drop a video file to pair up</p>
+        {#if onAudioOnly}
+          <div class="or-row">
+            <span class="or-text">no video? work on the sound itself</span>
+            <button class="audio-only-btn" onclick={onAudioOnly}
+              title="Open the Audio Only page — QC, deliverables, processing and the Multifunction Chain for these files">
+              AUDIO ONLY →
+            </button>
+          </div>
+        {/if}
       {:else}
         <p class="empty-text">READY TO GO</p>
         <p class="empty-hint">Drop some files above to get started</p>
@@ -718,6 +728,34 @@
     color: var(--text-secondary);
     letter-spacing: 0.03em;
   }
+
+  /* The non-blocking Audio Only offer under "waiting for video" */
+  .or-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: var(--gap-md);
+  }
+  .or-text {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+  .audio-only-btn {
+    font-family: var(--font-display);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    color: var(--neon-cyan);
+    background: var(--cap-face);
+    border: 1px solid rgba(8, 247, 254, 0.45);
+    border-radius: var(--radius-sm);
+    padding: 5px 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+    box-shadow: var(--cap-shadow);
+  }
+  .audio-only-btn:hover { border-color: var(--neon-cyan); box-shadow: var(--cap-shadow-hover); }
+  .audio-only-btn:active { transform: translateY(1px); box-shadow: var(--cap-shadow-pressed); }
 
   .video-prores-list {
     display: flex;

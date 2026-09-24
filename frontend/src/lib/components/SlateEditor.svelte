@@ -1,5 +1,6 @@
 <script>
-  import { drawSlate, SLATE_FONTS, SLATE_SIZES, SLATE_ANCHORS } from '../slate.js';
+  import { invoke } from '@tauri-apps/api/core';
+  import { drawSlate, hitSlateLine, loadImage, slateLines, SLATE_FONTS, SLATE_SIZES, SLATE_ANCHORS } from '../slate.js';
 
   let {
     editor, isBatch, isSolo = false, videoCount = 0,
@@ -30,14 +31,116 @@
   let picking = $state(false);
   let previewCanvas = $state(null);
 
-  let bgAsset = $derived(bgId ? (assets[bgId] ?? null) : null);
+  // PREPEND puts a card in front of the picture. OVERLAY lays the text over
+  // the picture's first seconds — the runtime and the sound don't move.
+  let mode = $state(editor.mode === 'overlay' ? 'overlay' : 'prepend');
+  let overlay = $derived(mode === 'overlay');
 
-  // Live preview: redraw whenever the text or style changes.
+  // Lines the user has dragged: { [lineIndex]: { x, y } } as frame fractions.
+  let linePos = $state({ ...(editor.linePos ?? {}) });
+  let movedCount = $derived(Object.keys(linePos).length);
+  let lineCount = $derived(slateLines(text).length);
+  // A line that no longer exists (text deleted) takes its position with it.
   $effect(() => {
-    if (previewCanvas) {
-      drawSlate(previewCanvas, text, { font, size, bgImage: bgAsset?.img ?? null, fit, scale, anchor, textPos });
+    const stale = Object.keys(linePos).filter(k => Number(k) >= lineCount);
+    if (stale.length) {
+      const next = { ...linePos };
+      for (const k of stale) delete next[k];
+      linePos = next;
     }
   });
+
+  // Overlay preview backdrop: a real frame of the video, scrubbable across
+  // the seconds the text will cover, so it can be placed clear of whatever
+  // the picture already carries (its own slate, a clock, burnt-in timecode).
+  let backdropImg = $state(null);
+  let frameAt = $state(0.5);
+  let frameLoading = $state(false);
+  let frameMax = $derived(Math.max(0.5, Math.min(parseFloat(duration) || 5, (editor.frameDuration || 5) - 0.1)));
+  let frameTimer = null;
+  let frameSeq = 0;
+  $effect(() => {
+    const path = editor.framePath;
+    const secs = Math.min(frameAt, frameMax);
+    if (!overlay || !path) return;
+    clearTimeout(frameTimer);
+    frameTimer = setTimeout(async () => {
+      const seq = ++frameSeq;
+      frameLoading = true;
+      try {
+        const url = await invoke('video_frame', { videoPath: path, secs, width: 960 });
+        const img = await loadImage(url);
+        if (seq === frameSeq) backdropImg = img;
+      } catch { /* keep the last good frame */ }
+      finally { if (seq === frameSeq) frameLoading = false; }
+    }, 120);
+    return () => clearTimeout(frameTimer);
+  });
+
+  let bgAsset = $derived(bgId ? (assets[bgId] ?? null) : null);
+
+  // Dragging
+  let layout = null;          // last drawn layout, for hit-testing
+  let dragging = $state(null); // line index being dragged
+  let hover = $state(null);
+  let grabOffset = { x: 0, y: 0 };
+  let snapX = $state(false);
+
+  // Live preview: redraw whenever the text, style or a drag changes.
+  $effect(() => {
+    if (!previewCanvas) return;
+    layout = drawSlate(previewCanvas, text,
+      { font, size, bgImage: overlay ? null : (bgAsset?.img ?? null), fit, scale, anchor, textPos, linePos },
+      { backdrop: overlay ? backdropImg : null, highlight: dragging ?? hover });
+    if (snapX && dragging != null) {
+      const ctx = previewCanvas.getContext('2d');
+      ctx.fillStyle = 'rgba(8, 247, 254, 0.7)';
+      ctx.fillRect(previewCanvas.width / 2, 0, 1, previewCanvas.height);
+    }
+  });
+
+  function canvasPoint(e) {
+    const r = previewCanvas.getBoundingClientRect();
+    return {
+      x: (e.clientX - r.left) * (previewCanvas.width / r.width),
+      y: (e.clientY - r.top) * (previewCanvas.height / r.height),
+    };
+  }
+  function onPointerDown(e) {
+    const p = canvasPoint(e);
+    const i = hitSlateLine(layout, p.x, p.y);
+    if (i == null) return;
+    const l = layout.lines[i];
+    grabOffset = { x: p.x - l.x, y: p.y - l.y };
+    dragging = i;
+    previewCanvas.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  }
+  function onPointerMove(e) {
+    const p = canvasPoint(e);
+    if (dragging == null) {
+      hover = hitSlateLine(layout, p.x, p.y);
+      return;
+    }
+    let x = (p.x - grabOffset.x) / previewCanvas.width;
+    let y = (p.y - grabOffset.y) / previewCanvas.height;
+    // Snap to the centre line — most slate text wants to be centred.
+    snapX = Math.abs(x - 0.5) < 0.015;
+    if (snapX) x = 0.5;
+    // Keep the whole line inside the frame, not just its centre.
+    const l = layout?.lines?.[dragging];
+    const halfW = l ? (l.width / 2) / previewCanvas.width : 0.02;
+    const halfH = l ? (l.height / 2) / previewCanvas.height : 0.03;
+    x = halfW >= 0.5 ? 0.5 : Math.min(1 - halfW - 0.01, Math.max(halfW + 0.01, x));
+    y = Math.min(1 - halfH - 0.01, Math.max(halfH + 0.01, y));
+    linePos = { ...linePos, [dragging]: { x, y } };
+  }
+  function onPointerUp(e) {
+    if (dragging != null) previewCanvas.releasePointerCapture?.(e.pointerId);
+    dragging = null;
+    snapX = false;
+  }
+  function resetPositions() { linePos = {}; }
 
   async function chooseImage() {
     if (picking || !onPickImage) return;
@@ -52,13 +155,14 @@
 
   function apply() {
     onApply(text, parseFloat(duration) || 5, {
-      font, size, bgId, fit, scale: parseFloat(scale) || 0.7, anchor, textPos,
-      black: Math.max(0, parseFloat(black) || 0),
+      font, size, bgId: overlay ? null : bgId, fit, scale: parseFloat(scale) || 0.7, anchor, textPos,
+      black: overlay ? 0 : Math.max(0, parseFloat(black) || 0),
+      mode, linePos: { ...linePos },
     });
   }
 
-  // A card can be image-only; otherwise it needs some text.
-  let canApply = $derived(text.trim().length > 0 || !!bgId);
+  // A card can be image-only; an overlay is text-only, so it needs some.
+  let canApply = $derived(text.trim().length > 0 || (!overlay && !!bgId));
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -67,18 +171,52 @@
   <div class="box" onclick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
     <div class="title">{isBatch ? 'SLATE — ALL VIDEOS' : isSolo ? `SLATE — ${editor.video?.filename ?? 'THIS VIDEO'}` : 'SLATE — THIS FILE'}</div>
 
+    <div class="mode-row" role="group" aria-label="Slate type">
+      <button class="mode-btn" class:active={!overlay} onclick={() => mode = 'prepend'}
+        title="A card in front of the picture. The file gets longer by the slate's length.">
+        <span class="mode-name">CARD BEFORE PICTURE</span>
+        <span class="mode-desc">Adds to the front · runtime grows</span>
+      </button>
+      <button class="mode-btn" class:active={overlay} onclick={() => mode = 'overlay'}
+        title="Text over the first seconds of the picture — for videos that already carry a slate. Runtime and sound stay exactly as they are.">
+        <span class="mode-name">TEXT OVER PICTURE</span>
+        <span class="mode-desc">Over the opening seconds · runtime unchanged</span>
+      </button>
+    </div>
+
     <canvas
       bind:this={previewCanvas}
       class="preview"
-      width="480"
-      height="270"
-      aria-label="Slate preview"
+      class:grab={hover != null && dragging == null}
+      class:grabbing={dragging != null}
+      width="960"
+      height="540"
+      aria-label="Slate preview — drag a line of text to move it"
+      onpointerdown={onPointerDown}
+      onpointermove={onPointerMove}
+      onpointerup={onPointerUp}
+      onpointercancel={onPointerUp}
+      onpointerleave={() => { if (dragging == null) hover = null; }}
     ></canvas>
+    {#if overlay && editor.framePath}
+      <div class="scrub">
+        <span class="scrub-label">PREVIEW FRAME</span>
+        <input class="scrub-range" type="range" min="0" max={frameMax} step="0.1" bind:value={frameAt}
+          title="Scrub through the seconds the text will cover, to check it clears what's already on the picture" />
+        <span class="scrub-readout">{Math.min(frameAt, frameMax).toFixed(1)}s{frameLoading ? ' …' : ''}</span>
+      </div>
+    {/if}
+    <div class="drag-hint">
+      <span>{lineCount > 0 ? 'Drag any line of text to place it — it snaps to centre.' : 'Type some text, then drag each line into place.'}{overlay && !backdropImg ? ' (No preview frame for this video — positions still apply.)' : ''}</span>
+      {#if movedCount > 0}
+        <button class="link-btn" onclick={resetPositions} title="Put every line back in the automatic layout">RESET POSITIONS</button>
+      {/if}
+    </div>
 
     <textarea
       class="slate-text"
       rows="3"
-      placeholder={bgId ? 'Text over the image (optional) — each line is centred' : 'Type the slate text — each line is centred on the card'}
+      placeholder={overlay ? 'Type the text to lay over the picture — one line per row, drag each into place' : bgId ? 'Text over the image (optional) — drag each line into place' : 'Type the slate text — one line per row, drag each into place'}
       bind:value={text}
     ></textarea>
 
@@ -101,6 +239,7 @@
           {/each}
         </div>
       </div>
+      {#if !overlay}
       <div class="control">
         <span class="control-label">IMAGE</span>
         <div class="seg">
@@ -144,6 +283,7 @@
           </div>
         </div>
       {/if}
+      {/if}
       <div class="control">
         <span class="control-label">TEXT</span>
         <div class="seg">
@@ -153,6 +293,18 @@
           {/each}
         </div>
       </div>
+      {#if overlay}
+      <div class="control">
+        <label class="control-label" for="slate-show">SHOW</label>
+        <div class="seg duration-row">
+          <span class="duration-part">
+            <input id="slate-show" class="duration-input" type="number" min="0.5" step="0.5" bind:value={duration}
+              title="How long the text stays over the picture, from the first frame" />
+            <span class="duration-unit">seconds from the first frame, with a short fade out</span>
+          </span>
+        </div>
+      </div>
+      {:else}
       <div class="control">
         <span class="control-label">PREROLL</span>
         <div class="seg">
@@ -180,10 +332,16 @@
           <span class="duration-total" title="Total preroll before programme starts">= {preroll.toFixed(1)}s</span>
         </div>
       </div>
+      {/if}
     </div>
 
     <p class="note">
-      {#if isSolo}
+      {#if overlay}
+        The text is laid over the first {parseFloat(duration) || 5} seconds of the picture. Nothing is
+        added to the front, so <strong>the runtime stays the same and the sound isn't moved</strong> —
+        versions still line up for A/B. The picture is re-encoded, so the export takes longer
+        (a progress bar will show).{#if isSolo} A new file "…_Slated.mov" is rendered next to the original.{/if}
+      {:else if isSolo}
         The slate is silent — the video's own soundtrack is kept and starts with
         the first frame of programme. A new file "…_Slated.mov" is rendered next
         to the original (re-encoded, so it takes a moment — the button shows
@@ -248,8 +406,65 @@
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
     background: #000;
-    margin-bottom: var(--gap-md);
+    margin-bottom: 4px;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
   }
+  .preview.grab { cursor: grab; }
+  .preview.grabbing { cursor: grabbing; border-color: var(--neon-cyan); }
+
+  .scrub { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+  .scrub-label { font-family: var(--font-display); font-size: 9px; letter-spacing: 0.12em; color: var(--text-muted); flex-shrink: 0; }
+  .scrub-range { flex: 1; accent-color: var(--neon-cyan); cursor: pointer; }
+  .scrub-readout { font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: var(--text-secondary); min-width: 48px; text-align: right; }
+
+  .drag-hint {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--text-muted);
+    margin-bottom: var(--gap-md);
+    min-height: 18px;
+  }
+  .link-btn {
+    font-family: var(--font-display);
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    color: var(--neon-cyan);
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .link-btn:hover { text-decoration: underline; }
+
+  /* PREPEND / OVERLAY switch */
+  .mode-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: var(--gap-md); }
+  .mode-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    text-align: left;
+    padding: 7px 10px;
+    background: var(--cap-face);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all 0.15s;
+    box-shadow: var(--cap-shadow);
+  }
+  .mode-name { font-family: var(--font-display); font-size: 10px; letter-spacing: 0.1em; color: var(--text-muted); }
+  .mode-desc { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); opacity: 0.8; }
+  .mode-btn:hover:not(.active) { border-color: rgba(8, 247, 254, 0.5); }
+  .mode-btn.active { border-color: var(--neon-cyan); background: rgba(8, 247, 254, 0.08); }
+  .mode-btn.active .mode-name { color: var(--neon-cyan); }
+  .note strong { color: var(--text-secondary); }
 
   .slate-text {
     width: 100%;

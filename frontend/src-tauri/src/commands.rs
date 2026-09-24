@@ -265,21 +265,20 @@ pub async fn slate_video(
     frame_rate: Option<f64>,
     has_audio: bool,
     slate_black_secs: Option<f64>,
+    slate_matte: Option<String>,
 ) -> Result<String, String> {
     let black_secs = slate_black_secs.unwrap_or(0.0).max(0.0);
     let video_for_event = video_path.clone();
     tokio::task::spawn_blocking(move || {
         // The card arrives as a base64 JPEG from the frontend canvas (the
         // bundled ffmpeg decodes mjpeg but not PNG, and can't draw text).
-        let payload = slate_image.rsplit(',').next().unwrap_or(&slate_image);
-        use base64::Engine as _;
-        let bytes = base64::engine::general_purpose::STANDARD
-            .decode(payload.trim())
-            .map_err(|e| format!("Slate image decode failed: {}", e))?;
-        let img_path = std::env::temp_dir()
-            .join(format!("laybacker_slate_solo_{}.jpg", uuid::Uuid::new_v4()));
-        let img_path = img_path.to_string_lossy().to_string();
-        std::fs::write(&img_path, bytes).map_err(|e| format!("Slate image write failed: {}", e))?;
+        // Overlay mode sends a second JPEG: the text's greyscale matte.
+        let id = uuid::Uuid::new_v4();
+        let img_path = processor::write_b64_jpeg(&slate_image, &format!("laybacker_slate_solo_{}.jpg", id))?;
+        let matte_path = match slate_matte {
+            Some(ref m) => Some(processor::write_b64_jpeg(m, &format!("laybacker_slate_solo_{}_matte.jpg", id))?),
+            None => None,
+        };
 
         let path = std::path::Path::new(&video_path);
         let dir = path
@@ -293,6 +292,7 @@ pub async fn slate_video(
             image_path: img_path.clone(),
             duration_secs: slate_duration_secs.max(0.5),
             black_secs,
+            matte_path: matte_path.clone(),
         };
         let args =
             ffmpeg::build_solo_slate_command(&video_path, &output, &spec, frame_rate, has_audio);
@@ -304,6 +304,9 @@ pub async fn slate_video(
             );
         });
         let _ = std::fs::remove_file(&img_path);
+        if let Some(ref m) = matte_path {
+            let _ = std::fs::remove_file(m);
+        }
         result?;
         Ok(output)
     })
@@ -457,6 +460,45 @@ pub async fn process_audio(
 #[tauri::command]
 pub async fn waveform_peaks(audio_path: String, buckets: u32) -> Result<Vec<f32>, String> {
     tokio::task::spawn_blocking(move || waveform::compute_peaks(&audio_path, buckets.clamp(1, 4000) as usize))
+        .await
+        .map_err(|e| format!("Task failed: {}", e))?
+}
+
+/// Multifunction Chain: a work folder for one run's intermediates.
+#[tauri::command]
+pub fn chain_workdir() -> Result<String, String> {
+    processing::chain_workdir()
+}
+
+/// Multifunction Chain: throw a run's work folder away.
+#[tauri::command]
+pub fn remove_workdir(path: String) -> Result<(), String> {
+    processing::remove_workdir(&path)
+}
+
+/// Multifunction Chain: the shaping steps (fold / trim / fade / split) on one
+/// file, into the work folder. Returns the file(s) to carry on with.
+#[tauri::command]
+pub async fn chain_shape(
+    audio_path: String,
+    ops: Vec<processing::ShapeOp>,
+    work_dir: String,
+) -> Result<processing::ShapeResult, String> {
+    tokio::task::spawn_blocking(move || processing::shape_file(&audio_path, &ops, &work_dir))
+        .await
+        .map_err(|e| format!("Task failed: {}", e))?
+}
+
+/// Write a text file (the chain's CSV report) where the user chose.
+#[tauri::command]
+pub fn write_text_file(path: String, contents: String) -> Result<(), String> {
+    processing::write_text_file(&path, &contents)
+}
+
+/// One frame of a video as a JPEG data URL — the slate editor's backdrop.
+#[tauri::command]
+pub async fn video_frame(video_path: String, secs: f64, width: u32) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || ffmpeg::extract_frame(&video_path, secs, width))
         .await
         .map_err(|e| format!("Task failed: {}", e))?
 }

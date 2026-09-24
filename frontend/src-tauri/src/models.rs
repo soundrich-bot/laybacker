@@ -96,6 +96,13 @@ pub struct MatchedPair {
     /// programme — e.g. a 5s preroll of 4s slate + 1s black.
     #[serde(default)]
     pub slate_black_secs: f64,
+    /// OVERLAY mode: the text is laid over the first `slate_duration_secs` of
+    /// the picture instead of being prepended (runtime and audio unchanged).
+    #[serde(default)]
+    pub slate_overlay: bool,
+    /// Base64 JPEG greyscale matte for `slate_image` — overlay mode only.
+    #[serde(default)]
+    pub slate_matte: Option<String>,
 }
 
 fn default_slate_duration() -> f64 {

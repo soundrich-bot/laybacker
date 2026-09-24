@@ -38,6 +38,11 @@ pub fn run() {
             commands::join_channels,
             commands::process_audio,
             commands::waveform_peaks,
+            commands::chain_workdir,
+            commands::remove_workdir,
+            commands::chain_shape,
+            commands::write_text_file,
+            commands::video_frame,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

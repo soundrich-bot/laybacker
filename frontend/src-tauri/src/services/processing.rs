@@ -2,10 +2,12 @@
 //! trims. Each writes a new 24-bit WAV beside the source (originals are never
 //! touched) and returns its path.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-use crate::services::channels::layout_for_count;
-use crate::services::ffmpeg;
+use serde::{Deserialize, Serialize};
+
+use crate::services::channels::{layout_for_count, split_channels_to};
+use crate::services::{ffmpeg, inspector};
 
 /// ffmpeg's channel names for a layout, in its channel order. Unknown layouts
 /// fall back to the standard layout for the channel count.
@@ -158,6 +160,21 @@ pub fn process_audio(
     duration_secs: f64,
     param: Option<f64>,
 ) -> Result<String, String> {
+    process_audio_to(op, path, layout, channels, duration_secs, param, None)
+}
+
+/// As `process_audio`, but with an explicit output path when given (the
+/// chain writes its intermediates into a work directory, keeping the stem).
+#[allow(clippy::too_many_arguments)]
+pub fn process_audio_to(
+    op: &str,
+    path: &str,
+    layout: Option<&str>,
+    channels: u32,
+    duration_secs: f64,
+    param: Option<f64>,
+    output: Option<&str>,
+) -> Result<String, String> {
     let layout = layout
         .filter(|l| !l.is_empty())
         .unwrap_or_else(|| layout_for_count(channels))
@@ -172,9 +189,119 @@ pub fn process_audio(
         "trim" => (trim_expr(param.unwrap_or(-60.0)), "trimmed"),
         other => return Err(format!("Unknown processing op: {}", other)),
     };
-    let output = output_beside(path, suffix);
+    let output = output.map(|o| o.to_string()).unwrap_or_else(|| output_beside(path, suffix));
     ffmpeg::run_ffmpeg(&build_process_command(path, &output, &filter))?;
     Ok(output)
+}
+
+// ── Multifunction Chain: shaping stage ──────────────────────────────────────
+
+/// One shaping step of the chain. `kind` is a `process_audio` op
+/// ("fold_stereo", "fold_mono", "trim", "fade") or "split".
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ShapeOp {
+    pub kind: String,
+    #[serde(default)]
+    pub param: Option<f64>,
+}
+
+/// A fresh work directory for one chain run, under the system temp dir.
+pub fn chain_workdir() -> Result<String, String> {
+    let dir = std::env::temp_dir().join(format!("laybacker-chain-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&dir).map_err(|e| format!("Could not create work folder: {}", e))?;
+    Ok(dir.to_string_lossy().to_string())
+}
+
+/// Remove a chain work directory. Refuses anything that isn't one of ours.
+pub fn remove_workdir(path: &str) -> Result<(), String> {
+    let p = PathBuf::from(path);
+    let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    if !name.starts_with("laybacker-chain-") || !p.starts_with(std::env::temp_dir()) {
+        return Err("Not a Laybacker work folder".to_string());
+    }
+    if p.exists() {
+        std::fs::remove_dir_all(&p).map_err(|e| format!("Could not remove work folder: {}", e))?;
+    }
+    Ok(())
+}
+
+/// What the shaping stage did: the file(s) to carry on with, and which steps
+/// actually ran — a fold-to-stereo on a stereo file, or a split on a mono
+/// file, is skipped quietly rather than failing the run.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ShapeResult {
+    pub files: Vec<String>,
+    pub applied: Vec<String>,
+    pub skipped: Vec<String>,
+}
+
+/// Does this op make sense on a file with `channels` channels?
+fn op_applies(kind: &str, channels: u32) -> bool {
+    match kind {
+        "fold_stereo" => channels >= 3,
+        "fold_mono" | "split" => channels >= 2,
+        _ => true,
+    }
+}
+
+/// Run the chain's shaping steps on one file, in order, each into its own
+/// numbered folder under `work_dir` with the source's stem kept ("Mix.wav"),
+/// so the final name never picks up "_faded" or the like. Split, when present,
+/// runs last and fans out. With no steps the source itself is returned, untouched.
+pub fn shape_file(path: &str, ops: &[ShapeOp], work_dir: &str) -> Result<ShapeResult, String> {
+    let mut result = ShapeResult { files: vec![path.to_string()], ..Default::default() };
+    if ops.is_empty() {
+        return Ok(result);
+    }
+    let stem = Path::new(path).file_stem().and_then(|s| s.to_str()).unwrap_or("audio").to_string();
+    let mut current = path.to_string();
+    let mut info = inspector::inspect_file(&current)?;
+    let mut split_pending = false;
+    for (i, op) in ops.iter().enumerate() {
+        if !op_applies(&op.kind, info.channel_count.unwrap_or(1)) {
+            result.skipped.push(op.kind.clone());
+            continue;
+        }
+        if op.kind == "split" {
+            split_pending = true;
+            continue;
+        }
+        let step_dir = Path::new(work_dir).join(format!("step{}", i + 1));
+        std::fs::create_dir_all(&step_dir).map_err(|e| format!("Could not create work folder: {}", e))?;
+        let out = step_dir.join(format!("{}.wav", stem)).to_string_lossy().to_string();
+        process_audio_to(
+            &op.kind,
+            &current,
+            info.channel_layout.as_deref(),
+            info.channel_count.unwrap_or(1),
+            info.duration_secs,
+            op.param,
+            Some(&out),
+        )?;
+        current = out;
+        info = inspector::inspect_file(&current)?;
+        result.applied.push(op.kind.clone());
+    }
+    result.files = vec![current.clone()];
+    if split_pending {
+        let ch = info.channel_count.unwrap_or(1);
+        if ch < 2 {
+            result.skipped.push("split".to_string());
+            return Ok(result);
+        }
+        let split_dir = Path::new(work_dir).join("split");
+        std::fs::create_dir_all(&split_dir).map_err(|e| format!("Could not create work folder: {}", e))?;
+        result.files = split_channels_to(&current, info.channel_layout.as_deref(), ch, Some(&split_dir.to_string_lossy()))?;
+        result.applied.push("split".to_string());
+    }
+    Ok(result)
+}
+
+/// Write a text file (the chain's CSV report).
+pub fn write_text_file(path: &str, contents: &str) -> Result<(), String> {
+    std::fs::write(path, contents).map_err(|e| format!("Could not write {}: {}", path, e))
 }
 
 #[cfg(test)]
@@ -235,6 +362,35 @@ mod tests {
         assert_eq!(args[args.len() - 1], "/a/out.wav");
         assert!(args.contains(&"pcm_s24le".to_string()));
         assert!(args.contains(&"-vn".to_string()));
+    }
+
+    #[test]
+    fn test_workdir_guard_refuses_foreign_paths() {
+        assert!(remove_workdir("/Users/someone/Music").is_err());
+        assert!(remove_workdir("/tmp/not-ours").is_err());
+        // A real one round-trips.
+        let d = chain_workdir().unwrap();
+        assert!(Path::new(&d).exists());
+        remove_workdir(&d).unwrap();
+        assert!(!Path::new(&d).exists());
+    }
+
+    #[test]
+    fn test_shape_file_with_no_ops_returns_source() {
+        let r = shape_file("/x/Mix.wav", &[], "/tmp").unwrap();
+        assert_eq!(r.files, vec!["/x/Mix.wav".to_string()]);
+        assert!(r.applied.is_empty() && r.skipped.is_empty());
+    }
+
+    #[test]
+    fn test_op_applies_by_channel_count() {
+        assert!(!op_applies("fold_stereo", 2));
+        assert!(op_applies("fold_stereo", 6));
+        assert!(!op_applies("fold_mono", 1));
+        assert!(op_applies("fold_mono", 2));
+        assert!(!op_applies("split", 1));
+        assert!(op_applies("fade", 1));
+        assert!(op_applies("trim", 1));
     }
 
     #[test]

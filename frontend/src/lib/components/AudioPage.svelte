@@ -46,6 +46,8 @@
     conversionSet = false,
     conversionLabel = '',
     onProcessAll,
+    chainSection,       // snippet: the Multifunction Chain panel body
+    chainRunning = false,
   } = $props();
 
   // Fade length per end, chosen next to the FADE ALL button.
@@ -69,10 +71,10 @@
     joinableGroups.map(g => `${g.stem} → ${g.layout}`).join(', ')
   );
 
-  let busy = $derived(qcRunning || clockRunning || isProcessing);
+  let busy = $derived(qcRunning || clockRunning || isProcessing || chainRunning);
 
-  // Each section folds away; all three start open every launch.
-  let open = $state({ qc: true, deliver: true, process: true });
+  // Each section folds away; all of them start open every launch.
+  let open = $state({ qc: true, deliver: true, process: true, chain: true });
   function toggle(key) { open[key] = !open[key]; }
 
   let qcChecked = $derived(Object.values(qcResults).filter(r => !r.error));
@@ -319,6 +321,20 @@
     {/if}
   </section>
 
+  <!-- ── MULTIFUNCTION CHAIN ── -->
+  {#if chainSection}
+  <section class="panel chain-panel" class:closed={!open.chain}>
+    <button class="panel-head" onclick={() => toggle('chain')} aria-expanded={open.chain}>
+      <span class="chevron" class:down={open.chain}>▸</span>
+      <span class="panel-title">MULTIFUNCTION CHAIN</span>
+      <span class="panel-desc">One ordered run of steps on every file: shape → QC → fixes (with prompts) → clock → export type → rename. Save it as a preset.</span>
+    </button>
+    {#if open.chain}
+      {@render chainSection()}
+    {/if}
+  </section>
+  {/if}
+
   <!-- ── Files ── -->
   <div class="list-head">
     <span class="col-label">AUDIO</span>
@@ -444,6 +460,7 @@
   }
   .panel.coming { opacity: 0.6; }
   .panel.closed { padding-bottom: 8px; }
+  .panel.chain-panel { border-color: rgba(8, 247, 254, 0.35); }
   .panel-head {
     display: flex;
     align-items: baseline;

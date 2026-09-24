@@ -109,12 +109,51 @@ pub struct SlateSpec {
     pub duration_secs: f64,
     /// Black (silent) run after the card, before programme — 0 for none.
     pub black_secs: f64,
+    /// OVERLAY mode: a greyscale matte for `image_path` (white = text). When
+    /// set, the text is composited over the first `duration_secs` of the
+    /// picture instead of being prepended — the runtime doesn't change and
+    /// the audio isn't moved. (Two JPEGs because JPEG has no alpha and the
+    /// lean ffmpeg has no PNG decoder.)
+    pub matte_path: Option<String>,
 }
 
 impl SlateSpec {
+    pub fn is_overlay(&self) -> bool {
+        self.matte_path.is_some()
+    }
+
     /// Total preroll: card + black. This is where programme audio starts.
+    /// An overlay adds nothing to the front, so its preroll is zero.
     pub fn preroll_secs(&self) -> f64 {
-        self.duration_secs + self.black_secs.max(0.0)
+        if self.is_overlay() {
+            0.0
+        } else {
+            self.duration_secs + self.black_secs.max(0.0)
+        }
+    }
+
+    /// OVERLAY graph: text + matte → an alpha layer (with a short fade-out so
+    /// it doesn't snap off), laid over the main picture. `eof_action=pass`
+    /// lets the picture carry on untouched once the overlay runs out.
+    /// `text_in` / `matte_in` are the input labels, `main_chain` the filters
+    /// the programme picture needs anyway.
+    fn overlay_graph(&self, text_in: &str, matte_in: &str, main_chain: &str) -> String {
+        let fade = (self.duration_secs * 0.25).min(0.4);
+        let fade_start = (self.duration_secs - fade).max(0.0);
+        format!(
+            "[{m}]format=gray,fade=t=out:st={fs:.4}:d={fd:.4}[mt];[{t}]format=rgba[tx];[tx][mt]alphamerge[ov];[0:v]{main}[mv];[mv][ov]overlay=0:0:eof_action=pass:format=auto,format=yuv420p[v]",
+            m = matte_in, t = text_in, fs = fade_start, fd = fade, main = main_chain,
+        )
+    }
+
+    /// The looped-still input arguments for one slate image.
+    fn still_input(&self, path: &str, fps: f64) -> Vec<String> {
+        vec![
+            "-loop".to_string(), "1".to_string(),
+            "-framerate".to_string(), format!("{:.5}", fps),
+            "-t".to_string(), format!("{:.4}", self.duration_secs),
+            "-i".to_string(), path.to_string(),
+        ]
     }
 
     /// The slate stream's filter chain: pixel format, SAR, and black padding
@@ -136,6 +175,10 @@ impl SlateSpec {
 /// file knows where its programme audio belongs (the inspector reads it back).
 /// mov/mp4 only write custom tags with `use_metadata_tags`.
 fn slate_metadata_args(slate: &SlateSpec) -> Vec<String> {
+    // An overlay leaves the programme where it was — nothing to record.
+    if slate.is_overlay() {
+        return Vec::new();
+    }
     vec![
         "-movflags".to_string(), "use_metadata_tags".to_string(),
         "-metadata".to_string(),
@@ -175,12 +218,11 @@ pub fn build_mux_command(
     if let Some(s) = slate {
         // Input 2: the slate image looped at the video's frame rate for the
         // slate duration. These are input options, so they precede its -i.
-        args.extend([
-            "-loop".to_string(), "1".to_string(),
-            "-framerate".to_string(), format!("{:.5}", fps),
-            "-t".to_string(), format!("{:.4}", s.duration_secs),
-            "-i".to_string(), s.image_path.clone(),
-        ]);
+        args.extend(s.still_input(&s.image_path, fps));
+        // Input 3 (overlay only): its matte.
+        if let Some(ref matte) = s.matte_path {
+            args.extend(s.still_input(matte, fps));
+        }
     }
 
     // Video path. A slate needs filter_complex (concat), and freeze needs a
@@ -196,14 +238,16 @@ pub fn build_mux_command(
         } else {
             "format=yuv420p,setsar=1".to_string()
         };
-        args.extend([
-            "-filter_complex".to_string(),
+        let graph = if s.is_overlay() {
+            s.overlay_graph("2:v", "3:v", &main_chain)
+        } else {
             format!(
                 "[2:v]{}[sl];[0:v]{}[mv];[sl][mv]concat=n=2:v=1:a=0[v]",
                 s.stream_chain(),
                 main_chain
-            ),
-        ]);
+            )
+        };
+        args.extend(["-filter_complex".to_string(), graph]);
         args.extend(["-map".to_string(), "[v]".to_string()]);
         args.extend(slate_metadata_args(s));
     } else {
@@ -257,7 +301,8 @@ pub fn build_mux_command(
     // Slate: push the programme audio back by the slate duration so it still
     // starts with the original first frame of picture. Applied LAST — the
     // compliance/fade filters above time against the original audio timeline.
-    if let Some(s) = slate {
+    // An overlay has no preroll, so the sound stays exactly where it was.
+    if let Some(s) = slate.filter(|s| s.preroll_secs() > 0.0) {
         let delay_ms = (s.preroll_secs() * 1000.0).round() as i64;
         audio_filters.push(format!("adelay={}|{}", delay_ms, delay_ms));
     }
@@ -437,24 +482,29 @@ pub fn build_solo_slate_command(
     has_audio: bool,
 ) -> Vec<String> {
     let fps = video_fps.filter(|f| *f > 0.0).unwrap_or(FALLBACK_FPS);
-    let mut args: Vec<String> = vec![
-        "-y".to_string(),
-        "-i".to_string(), video_path.to_string(),
-        "-loop".to_string(), "1".to_string(),
-        "-framerate".to_string(), format!("{:.5}", fps),
-        "-t".to_string(), format!("{:.4}", slate.duration_secs),
-        "-i".to_string(), slate.image_path.clone(),
-        "-filter_complex".to_string(),
-        format!("[1:v]{}[sl];[0:v]format=yuv420p,setsar=1[mv];[sl][mv]concat=n=2:v=1:a=0[v]", slate.stream_chain()),
-        "-map".to_string(), "[v]".to_string(),
-    ];
+    let mut args: Vec<String> = vec!["-y".to_string(), "-i".to_string(), video_path.to_string()];
+    args.extend(slate.still_input(&slate.image_path, fps));
+    if let Some(ref matte) = slate.matte_path {
+        args.extend(slate.still_input(matte, fps));
+    }
+    let graph = if slate.is_overlay() {
+        slate.overlay_graph("1:v", "2:v", "format=yuv420p,setsar=1")
+    } else {
+        format!("[1:v]{}[sl];[0:v]format=yuv420p,setsar=1[mv];[sl][mv]concat=n=2:v=1:a=0[v]", slate.stream_chain())
+    };
+    args.extend(["-filter_complex".to_string(), graph, "-map".to_string(), "[v]".to_string()]);
     if has_audio {
-        let delay_ms = (slate.preroll_secs() * 1000.0).round() as i64;
-        args.extend([
-            "-map".to_string(), "0:a:0".to_string(),
-            "-af".to_string(), format!("adelay={}|{}", delay_ms, delay_ms),
-            "-c:a".to_string(), "pcm_s24le".to_string(),
-        ]);
+        args.extend(["-map".to_string(), "0:a:0".to_string()]);
+        if slate.is_overlay() {
+            // Nothing is added to the front, so the soundtrack is untouched.
+            args.extend(["-c:a".to_string(), "copy".to_string()]);
+        } else {
+            let delay_ms = (slate.preroll_secs() * 1000.0).round() as i64;
+            args.extend([
+                "-af".to_string(), format!("adelay={}|{}", delay_ms, delay_ms),
+                "-c:a".to_string(), "pcm_s24le".to_string(),
+            ]);
+        }
     }
     args.extend([
         "-c:v".to_string(), "libx264".to_string(),
@@ -514,6 +564,32 @@ pub fn extract_thumbnail(video_path: &str, duration_secs: f64) -> Option<String>
 
     let b64 = STANDARD.encode(&output.stdout);
     Some(format!("data:image/jpeg;base64,{}", b64))
+}
+
+/// One frame of a video at `secs`, scaled to `width` pixels wide, as a JPEG
+/// data URL — the slate editor's backdrop, so text can be placed against the
+/// picture's real opening frames.
+pub fn extract_frame(video_path: &str, secs: f64, width: u32) -> Result<String, String> {
+    use base64::{Engine as _, engine::general_purpose::STANDARD};
+    let width = width.clamp(160, 1920);
+    let output = silent_command(&find_ffmpeg())
+        .args([
+            "-v", "error",
+            "-ss", &format!("{:.3}", secs.max(0.0)),
+            "-i", video_path,
+            "-frames:v", "1",
+            "-vf", &format!("scale={}:-2", width),
+            "-f", "image2pipe",
+            "-vcodec", "mjpeg",
+            "-q:v", "4",
+            "pipe:1",
+        ])
+        .output()
+        .map_err(|e| format!("Failed to run ffmpeg: {}", e))?;
+    if !output.status.success() || output.stdout.is_empty() {
+        return Err(format!("No frame at {:.2}s: {}", secs, String::from_utf8_lossy(&output.stderr).trim()));
+    }
+    Ok(format!("data:image/jpeg;base64,{}", STANDARD.encode(&output.stdout)))
 }
 
 /// Check if the first/last N ms of audio contain non-silence.
@@ -967,8 +1043,37 @@ mod tests {
     // ── slate ──
 
     #[test]
+    fn test_slate_overlay_keeps_runtime_and_audio() {
+        let slate = SlateSpec {
+            image_path: "/tmp/text.jpg".into(), duration_secs: 4.0, black_secs: 1.0,
+            matte_path: Some("/tmp/matte.jpg".into()),
+        };
+        assert_eq!(slate.preroll_secs(), 0.0, "an overlay adds nothing to the front");
+        let args = build_mux_command(
+            "/video.mov", "/audio.wav", "/out.mov", &default_settings(), None, 0.0, None,
+            LengthFix::Cut, 30.0, 30.0, Some(25.0), Some(&slate),
+        );
+        let fc = &args[args.iter().position(|a| a == "-filter_complex").unwrap() + 1];
+        assert!(fc.contains("alphamerge") && fc.contains("overlay=0:0:eof_action=pass"), "{fc}");
+        assert!(!fc.contains("concat"), "overlay must not prepend anything: {fc}");
+        assert!(args.contains(&"/tmp/matte.jpg".to_string()));
+        // No audio delay, no slate tag — and the picture is re-encoded.
+        assert!(!args.iter().any(|a| a.contains("adelay")));
+        assert!(!args.iter().any(|a| a.contains("laybacker_slate_secs")));
+        assert!(args.contains(&"libx264".to_string()));
+        // With no audio filters the sound is still a straight copy.
+        let c = args.iter().position(|a| a == "-c:a").unwrap();
+        assert_eq!(args[c + 1], "copy");
+
+        let solo = build_solo_slate_command("/video.mov", "/out.mov", &slate, Some(25.0), true);
+        assert!(solo.iter().any(|a| a.contains("alphamerge")));
+        assert!(!solo.iter().any(|a| a.contains("adelay")));
+    }
+
+
+    #[test]
     fn test_slate_concats_delays_audio_and_reencodes() {
-        let slate = SlateSpec { image_path: "/tmp/slate.png".into(), duration_secs: 5.0, black_secs: 0.0 };
+        let slate = SlateSpec { image_path: "/tmp/slate.png".into(), duration_secs: 5.0, black_secs: 0.0, matte_path: None };
         let args = build_mux_command(
             "/video.mov", "/audio.wav", "/out.mov",
             &default_settings(), None, 0.0, None,
@@ -992,7 +1097,7 @@ mod tests {
     fn test_slate_with_freeze_folds_tpad_into_graph() {
         // Slate + freeze together: tpad must live inside filter_complex (ffmpeg
         // forbids mixing -vf and -filter_complex), and -shortest is dropped.
-        let slate = SlateSpec { image_path: "/tmp/slate.png".into(), duration_secs: 3.0, black_secs: 0.0 };
+        let slate = SlateSpec { image_path: "/tmp/slate.png".into(), duration_secs: 3.0, black_secs: 0.0, matte_path: None };
         let args = build_mux_command(
             "/video.mov", "/audio.wav", "/out.mov",
             &default_settings(), None, 0.0, None,
@@ -1008,7 +1113,7 @@ mod tests {
     fn test_slate_renders_stamp_the_duration_tag() {
         // Both slate paths must write the container tag the inspector reads
         // back, so a re-dropped slated file knows its programme offset.
-        let slate = SlateSpec { image_path: "/tmp/slate.png".into(), duration_secs: 4.5, black_secs: 0.0 };
+        let slate = SlateSpec { image_path: "/tmp/slate.png".into(), duration_secs: 4.5, black_secs: 0.0, matte_path: None };
         let mux = build_mux_command(
             "/video.mov", "/audio.wav", "/out.mov",
             &default_settings(), None, 0.0, None,
@@ -1050,7 +1155,7 @@ mod tests {
         // 4s card + 1s black = 5s preroll: the slate stream is padded with
         // black frames, the audio is pushed back by the full 5s, and the
         // container tag records 5s (where programme starts).
-        let slate = SlateSpec { image_path: "/tmp/slate.png".into(), duration_secs: 4.0, black_secs: 1.0 };
+        let slate = SlateSpec { image_path: "/tmp/slate.png".into(), duration_secs: 4.0, black_secs: 1.0, matte_path: None };
         let args = build_mux_command(
             "/video.mov", "/audio.wav", "/out.mov",
             &default_settings(), None, 0.0, None,

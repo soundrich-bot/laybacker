@@ -79,7 +79,9 @@ fn make_audio_pair(fixture_name: &str, output_filename: &str, norm_enabled: bool
         slate_duration_secs: 5.0,
         slate_text: String::new(),
         slate_image: None,
-        slate_black_secs: 0.0,    }
+        slate_black_secs: 0.0,
+            slate_overlay: false,
+            slate_matte: None,    }
 }
 
 /// End-to-end peak-mode naming: the store sets target_lufs = 0 (full-scale) with
@@ -183,6 +185,96 @@ fn test_slate_prepends_card_and_delays_audio() {
     cleanup(&video_path);
 }
 
+/// One greyscale frame of a video at `secs`, as raw bytes (w*h).
+fn grab_gray_frame(video: &str, secs: f64, out: &str) -> Vec<u8> {
+    let args: Vec<String> = [
+        "-y", "-ss", &format!("{:.3}", secs), "-i", video,
+        "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "gray", out,
+    ].iter().map(|s| s.to_string()).collect();
+    ffmpeg::run_ffmpeg(&args).expect("grab frame");
+    let bytes = std::fs::read(out).expect("read frame");
+    let _ = std::fs::remove_file(out);
+    bytes
+}
+
+/// Slate OVERLAY: text is laid over the first second of the picture. The
+/// runtime must not change, the picture outside the text must not be hazed by
+/// the matte, and the text must be gone once the overlay runs out.
+#[test]
+fn test_slate_overlay_keeps_runtime_and_leaves_picture_clean() {
+    let dir = output_dir();
+    // A flat mid-grey 2s video (the card faded to grey within one frame), so
+    // any haze from the overlay shows up as a level shift.
+    let video_path = format!("{}/overlay_test_video.mov", dir);
+    let jpg = test_fixture("slate_320x180.jpg");
+    let build_args: Vec<String> = [
+        "-y", "-loop", "1", "-framerate", "25", "-t", "2", "-i", jpg.as_str(),
+        "-vf", "fade=t=out:st=0:d=0.04:c=0x808080",
+        "-c:v", "libx264", "-pix_fmt", "yuv420p", video_path.as_str(),
+    ].iter().map(|s| s.to_string()).collect();
+    ffmpeg::run_ffmpeg(&build_args).expect("failed to build grey test video");
+    let video = inspector::inspect_file(&video_path).expect("inspect test video");
+    // The editor's backdrop: a real frame comes back as a JPEG data URL.
+    let frame = ffmpeg::extract_frame(&video_path, 0.5, 320).expect("frame grab");
+    assert!(frame.starts_with("data:image/jpeg;base64,") && frame.len() > 200);
+    assert!(ffmpeg::extract_frame(&video_path, 99.0, 320).is_err(), "past the end there is no frame");
+    let source = grab_gray_frame(&video_path, 0.5, &format!("{}/ov_src.raw", dir));
+    assert_eq!(source.len(), 320 * 180);
+
+    // A synthetic "text" image: a white box in the middle of a black frame.
+    // White-on-black is its own matte, exactly like rendered slate text.
+    let raw_path = format!("{}/ov_text.raw", dir);
+    let text_jpg = format!("{}/ov_text.jpg", dir);
+    let mut raw = vec![0u8; 320 * 180];
+    for y in 70..110 { for x in 110..210 { raw[y * 320 + x] = 255; } }
+    std::fs::write(&raw_path, &raw).unwrap();
+    let enc: Vec<String> = [
+        "-y", "-f", "rawvideo", "-pix_fmt", "gray", "-s", "320x180", "-i", raw_path.as_str(),
+        "-frames:v", "1", "-q:v", "2", text_jpg.as_str(),
+    ].iter().map(|s| s.to_string()).collect();
+    ffmpeg::run_ffmpeg(&enc).expect("encode synthetic text jpeg");
+
+    use base64::Engine as _;
+    let b64 = format!("data:image/jpeg;base64,{}",
+        base64::engine::general_purpose::STANDARD.encode(std::fs::read(&text_jpg).unwrap()));
+    cleanup(&raw_path);
+    cleanup(&text_jpg);
+
+    let mut pair = make_audio_pair("test_tone.wav", "overlay_out.mov", false, 0.0, -1.0);
+    pair.video = Some(video);
+    pair.slate_enabled = true;
+    pair.slate_overlay = true;
+    pair.slate_duration_secs = 1.0;
+    pair.slate_black_secs = 1.0; // ignored in overlay mode
+    // White text on black is its own matte.
+    pair.slate_image = Some(b64.clone());
+    pair.slate_matte = Some(b64);
+
+    let output = temp_output("overlay_out.mov");
+    cleanup(&output);
+    let result = processor::process_pair(&pair, &ExportSettings::default(), |_| {});
+    assert!(result.success, "overlay process failed: {:?}", result.error);
+
+    let out = inspector::inspect_file(&output).expect("inspect overlay output");
+    assert!((out.duration_secs - 2.0).abs() < 0.15, "runtime must not change, got {:.2}s", out.duration_secs);
+    assert_eq!(out.slate_secs, None, "an overlay moves nothing, so no preroll tag");
+
+    // During the overlay: text is there (bright pixels), corner is untouched.
+    let during = grab_gray_frame(&output, 0.4, &format!("{}/ov_during.raw", dir));
+    let corner = |f: &[u8]| f[5 * 320 + 5] as i32;
+    let centre = |f: &[u8]| f[90 * 320 + 160] as i32;
+    assert!(centre(&during) > 215, "slate text should be solid white during the overlay, got {}", centre(&during));
+    assert!((corner(&during) - corner(&source)).abs() <= 6,
+        "picture outside the text must not be hazed: source {} vs overlaid {}", corner(&source), corner(&during));
+    // After it: the text is gone.
+    let after = grab_gray_frame(&output, 1.7, &format!("{}/ov_after.raw", dir));
+    assert!((centre(&after) - corner(&source)).abs() <= 6, "text should be gone after the overlay, centre {}", centre(&after));
+
+    cleanup(&output);
+    cleanup(&video_path);
+    cleanup(&pair.audio.path);
+}
+
 /// Solo slate: a video with its OWN soundtrack gets the card prepended and its
 /// audio kept, delayed by the slate duration.
 #[test]
@@ -202,7 +294,7 @@ fn test_solo_slate_keeps_own_audio() {
 
     let output = temp_output("solo_slated.mov");
     cleanup(&output);
-    let spec = ffmpeg::SlateSpec { image_path: jpg.clone(), duration_secs: 3.0, black_secs: 0.0 };
+    let spec = ffmpeg::SlateSpec { image_path: jpg.clone(), duration_secs: 3.0, black_secs: 0.0, matte_path: None };
     let args = ffmpeg::build_solo_slate_command(&video_path, &output, &spec, Some(25.0), true);
     ffmpeg::run_ffmpeg(&args).expect("solo slate render failed");
 
@@ -346,6 +438,35 @@ fn test_probe_reports_bit_depth_and_waveform_peaks() {
     assert_eq!(peaks.len(), 50);
     // A steady -14 dBFS tone: every bucket ≈ 0.2, none silent, none over.
     assert!(peaks.iter().all(|p| *p > 0.1 && *p <= 1.0), "{peaks:?}");
+}
+
+#[test]
+fn test_chain_shape_fold_fade_then_split_keeps_stem() {
+    use app_lib::services::processing::{self, ShapeOp};
+    let work = processing::chain_workdir().unwrap();
+    let src = format!("{}/chain_src.wav", output_dir());
+    std::fs::copy(test_fixture("test_tone.wav"), &src).unwrap();
+    // Fade then split: the stems come from the FADED file, named by channel,
+    // and the intermediate keeps the source stem ("chain_src.wav").
+    // Fold-to-stereo on a stereo file is skipped quietly, not an error.
+    let ops = vec![
+        ShapeOp { kind: "fold_stereo".into(), param: None },
+        ShapeOp { kind: "fade".into(), param: Some(0.25) },
+        ShapeOp { kind: "split".into(), param: None },
+    ];
+    let r = processing::shape_file(&src, &ops, &work).expect("shape");
+    assert_eq!(r.skipped, vec!["fold_stereo".to_string()]);
+    assert_eq!(r.applied, vec!["fade".to_string(), "split".to_string()]);
+    let outs = r.files;
+    assert_eq!(outs.len(), 2, "{outs:?}");
+    assert!(outs[0].ends_with("split/chain_src_L.wav"), "{outs:?}");
+    assert!(Path::new(&format!("{}/step2/chain_src.wav", work)).exists(), "fade is op 2, so its intermediate is step2");
+    let l = loudness::measure(&outs[0]).unwrap().integrated_lufs;
+    let orig = loudness::measure(&src).unwrap().integrated_lufs;
+    assert!(l < orig - 0.3, "stem should carry the fade: {orig} → {l}");
+    processing::remove_workdir(&work).unwrap();
+    assert!(!Path::new(&work).exists());
+    cleanup(&src);
 }
 
 // ── Measurement tests ──
@@ -522,7 +643,9 @@ fn test_reprocessing_generated_output_does_not_fail() {
         slate_duration_secs: 5.0,
         slate_text: String::new(),
         slate_image: None,
-        slate_black_secs: 0.0,    };
+        slate_black_secs: 0.0,
+            slate_overlay: false,
+            slate_matte: None,    };
     let settings = ExportSettings::default();
     let result = processor::process_pair(&pair, &settings, |_| {});
 

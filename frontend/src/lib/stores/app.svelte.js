@@ -1,6 +1,8 @@
 import { invoke } from '@tauri-apps/api/core';
-import { renderSlateImage, loadImage, DEFAULT_SLATE_STYLE } from '../slate.js';
+import { renderSlateImage, renderSlateMatte, loadImage, DEFAULT_SLATE_STYLE } from '../slate.js';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
+import { save as saveDialog } from '@tauri-apps/plugin-dialog';
+import { DEFAULT_CHAIN, normaliseChain, shapeOps, outputExt as chainOutputExt, stampFor, specTags, renamedStem, unfixableIssues, channelWord, csvReport, describeChain } from '../chain.js';
 import { nameForRule } from '../naming.js';
 import { findJoinGroups } from '../channels.js';
 
@@ -21,6 +23,7 @@ function savePref(key, value) {
 const FRONTEND_FLAGS = [
   'nameCustomized', 'lengthFixChosen', 'audioStart', 'startChosen',
   'slateFont', 'slateSize', 'slateBgId', 'slateFit', 'slateScale', 'slateAnchor', 'slateTextPos',
+  'slateMode', 'slateLinePos',
 ];
 function keepFrontendFlags(fresh, previous) {
   const byId = new Map(previous.map(p => [p.id, p]));
@@ -77,6 +80,8 @@ function slateStyleFor(p) {
     anchor: p.slateAnchor ?? batchSlate.anchor,
     textPos: p.slateTextPos ?? batchSlate.textPos,
     black: p.slateEnabled ? (p.slateBlackSecs ?? 0) : batchSlate.black,
+    mode: p.slateMode ?? batchSlate.mode,
+    linePos: p.slateLinePos ?? batchSlate.linePos ?? {},
   };
 }
 
@@ -107,14 +112,19 @@ function openSlateEditor(scope) {
     font: batchSlate.font, size: batchSlate.size, bgId: batchSlate.bgId,
     fit: batchSlate.fit, scale: batchSlate.scale, anchor: batchSlate.anchor, textPos: batchSlate.textPos,
     black: batchSlate.black,
+    mode: batchSlate.mode ?? 'prepend', linePos: { ...(batchSlate.linePos ?? {}) },
   };
   if (scope === 'batch') {
-    slateEditor = { scope, text: batchSlate.text, duration: batchSlate.duration, ...base };
+    // The first video's opening frame stands in for the whole batch in the preview.
+    const first = matchedPairs.find(p => p.video);
+    slateEditor = { scope, text: batchSlate.text, duration: batchSlate.duration, ...base,
+      framePath: first?.video?.path ?? null, frameDuration: first?.video?.durationSecs ?? 0 };
     return;
   }
   // A solo video (no pair) — the object form carries the MediaFile itself.
   if (typeof scope === 'object' && scope?.path) {
-    slateEditor = { scope: 'solo', video: scope, text: batchSlate.text, duration: batchSlate.duration, ...base };
+    slateEditor = { scope: 'solo', video: scope, text: batchSlate.text, duration: batchSlate.duration, ...base,
+      framePath: scope.path, frameDuration: scope.durationSecs ?? 0 };
     return;
   }
   const p = matchedPairs.find(p => p.id === scope);
@@ -128,6 +138,8 @@ function openSlateEditor(scope) {
     font: own.font, size: own.size, bgId: own.bgId,
     fit: own.fit, scale: own.scale, anchor: own.anchor, textPos: own.textPos,
     black: own.black,
+    mode: own.mode ?? 'prepend', linePos: { ...(own.linePos ?? {}) },
+    framePath: p.video?.path ?? null, frameDuration: p.video?.durationSecs ?? 0,
   };
 }
 
@@ -141,14 +153,17 @@ async function applySoloSlate(video, text, dur, style = {}) {
   const path = video.path;
   soloSlateStatus = { ...soloSlateStatus, [path]: { state: 'working', pct: 0 } };
   try {
-    const image = renderSlateImage(text, video.width, video.height, {
+    const full = {
       ...style,
       bgImage: style.bgId ? (slateAssets[style.bgId]?.img ?? null) : null,
-    });
+    };
+    const image = renderSlateImage(text, video.width, video.height, full);
     const output = await invoke('slate_video', {
       videoPath: path,
       videoDurationSecs: video.durationSecs,
       slateImage: image,
+      // Overlay mode: the text's matte rides along (null = a prepended card).
+      slateMatte: renderSlateMatte(text, video.width, video.height, full),
       slateDurationSecs: dur,
       slateBlackSecs: Math.max(0, style.black ?? 0),
       frameRate: video.frameRate ?? null,
@@ -184,10 +199,13 @@ function applySlate(text, duration, style = {}) {
     font: style.font ?? 'helvetica', size: style.size ?? 'm', bgId: style.bgId ?? null,
     fit: style.fit ?? 'fit', scale: style.scale ?? 0.7, anchor: style.anchor ?? 'c', textPos: style.textPos ?? 'middle',
     black: Math.max(0, style.black ?? 0),
+    mode: style.mode === 'overlay' ? 'overlay' : 'prepend',
+    linePos: { ...(style.linePos ?? {}) },
   };
   const stamp = { slateEnabled: true, slateText: text, slateDurationSecs: dur, slateBlackSecs: st.black,
                   slateFont: st.font, slateSize: st.size, slateBgId: st.bgId,
-                  slateFit: st.fit, slateScale: st.scale, slateAnchor: st.anchor, slateTextPos: st.textPos };
+                  slateFit: st.fit, slateScale: st.scale, slateAnchor: st.anchor, slateTextPos: st.textPos,
+                  slateMode: st.mode, slateLinePos: st.linePos, slateOverlay: st.mode === 'overlay' };
   if (scope === 'solo') {
     const video = slateEditor.video;
     batchSlate = { text, duration: dur, ...st }; // remember for the next slate
@@ -210,7 +228,7 @@ function removeSlate() {
   const scope = slateEditor.scope;
   matchedPairs = matchedPairs.map(p =>
     (scope === 'batch' ? !!p.video : p.id === scope)
-      ? { ...p, slateEnabled: false, slateImage: null }
+      ? { ...p, slateEnabled: false, slateImage: null, slateMatte: null, slateOverlay: false }
       : p
   );
   slateEditor = null;
@@ -221,30 +239,16 @@ function removeSlate() {
 // Audio dropped on its own asks which the user wants: the Audio Only page
 // (QC, deliverables, processing) or to wait for a video to lay back onto.
 let appMode = $state('layback'); // 'layback' | 'audio'
-let audioModePrompt = $state(false);
-let audioChoiceMade = false; // don't re-ask for every extra audio file dropped
-
+// Audio dropped on its own no longer asks — it waits on the layback page for
+// a video (the common two-folder drop: WAVs, then MOVs), with an AUDIO ONLY
+// button on offer. A video arriving always brings the layback page back.
 function maybePromptAudioMode() {
   const allAudio = files.length > 0 && files.every(f => f.mediaType === 'audio');
-  if (!allAudio) {
-    // A video arrived — laybacks happen on the layback page.
-    if (appMode === 'audio') appMode = 'layback';
-    return;
-  }
-  if (appMode === 'layback' && !audioChoiceMade) audioModePrompt = true;
-}
-
-// From the prompt: 'audio' opens the page, 'layback' waits for a video.
-async function chooseAudioMode(choice) {
-  audioChoiceMade = true;
-  audioModePrompt = false;
-  appMode = choice === 'audio' ? 'audio' : 'layback';
-  await autoMatch();
+  if (!allAudio && appMode === 'audio') appMode = 'layback';
 }
 
 async function setAppMode(mode) {
   appMode = mode;
-  audioChoiceMade = true;
   await autoMatch();
 }
 
@@ -497,6 +501,293 @@ async function processAudioAllNow(op, param = null) {
   }
 }
 
+// ── Multifunction Chain ──────────────────────────────────────────────────────
+// One ordered set of steps run on every audio file: shape → QC → fixes (with
+// prompts) → clock → convert → rename. The current chain and named presets
+// are remembered between launches.
+let chain = $state(normaliseChain(loadPref('chain', DEFAULT_CHAIN)));
+let chainPresets = $state(loadPref('chainPresets', []));
+let chainRunning = $state(false);
+let chainProgress = $state({ done: 0, total: 0, file: '', step: '' });
+let chainReport = $state([]);
+let chainPrompt = $state(null);
+let _chainResolve = null;
+let _chainStop = false;
+let _chainRunAt = null;
+
+function setChain(patch) {
+  chain = normaliseChain({ ...chain, ...patch });
+  savePref('chain', chain);
+}
+function saveChainPreset(name) {
+  const others = chainPresets.filter(p => p.name !== name);
+  chainPresets = [...others, { name, chain: JSON.parse(JSON.stringify(chain)) }].sort((a, b) => a.name.localeCompare(b.name));
+  savePref('chainPresets', chainPresets);
+}
+function loadChainPreset(name) {
+  const p = chainPresets.find(p => p.name === name);
+  if (p) setChain(p.chain);
+}
+function deleteChainPreset(name) {
+  chainPresets = chainPresets.filter(p => p.name !== name);
+  savePref('chainPresets', chainPresets);
+}
+
+// A blocking question mid-run. Resolves { choice, applyAll }.
+function askChain(spec) {
+  chainPrompt = spec;
+  return new Promise((resolve) => { _chainResolve = resolve; });
+}
+function resolveChainPrompt(choice, applyAll) {
+  chainPrompt = null;
+  const r = _chainResolve; _chainResolve = null;
+  if (r) r({ choice, applyAll });
+}
+function stopChain() { _chainStop = true; }
+
+function chainSpec() {
+  return { mode: qcMode, targetLufs: qcTargetLufs, truePeak: qcTruePeak };
+}
+function chainSpecLabel() {
+  return qcMode === 'peak' ? `${qcTruePeak} dBTP` : `${qcTargetLufs} LUFS / ${qcTruePeak} dBTP`;
+}
+
+function dirOf(path) {
+  const i = path.lastIndexOf('/');
+  return i > 0 ? path.slice(0, i) : '.';
+}
+
+async function runChain() {
+  if (isProcessing || qcRunning || clockRunning || chainRunning) return;
+  const targets = matchedPairs.filter(p => !p.video);
+  if (targets.length === 0) return;
+
+  chainRunning = true;
+  _chainStop = false;
+  _chainRunAt = new Date();
+  chainReport = [];
+  chainProgress = { done: 0, total: targets.length, file: '', step: 'Starting…' };
+  const spec = chainSpec();
+  const c = chain;
+  const auto = { sixFr: null, loudness: null, unfixable: null }; // "apply to all" answers
+  const stamp = stampFor(localStorage.getItem('timestampFormat') || 'YYYYMMDD_HHmm');
+  const outputs = [];
+  const produced = new Set(); // originals that got at least one output (they leave the list)
+  let work = null;
+
+  // Ask (or reuse the batch answer). Returns the choice id; 'stop' ends the run.
+  async function decide(kind, spec) {
+    if (auto[kind]) return auto[kind];
+    const { choice, applyAll } = await askChain(spec);
+    if (applyAll && choice !== 'stop') auto[kind] = choice;
+    return choice;
+  }
+
+  try {
+    work = await invoke('chain_workdir');
+    for (let i = 0; i < targets.length; i++) {
+      const p = targets[i];
+      if (_chainStop) break;
+      chainProgress = { done: i, total: targets.length, file: p.audio.filename, step: 'Shaping…' };
+      const row = { file: p.audio.filename, output: '', status: '', steps: [], before: {}, after: {}, warnings: [], notes: '' };
+      let stopped = false;
+      try {
+        const ops = shapeOps(c);
+        const shapeRes = await invoke('chain_shape', { audioPath: p.audio.path, ops, workDir: `${work}/${i}` });
+        const shaped = shapeRes.files;
+        const opLabel = (kind) => ({ fold_stereo: 'fold → stereo', fold_mono: 'fold → mono', trim: 'trim silence', split: 'split to mono',
+          fade: `fade ${c.fade >= 1 ? c.fade + ' s' : c.fade * 1000 + ' ms'}` })[kind] ?? kind;
+        for (const kind of shapeRes.applied) row.steps.push(opLabel(kind));
+        // Steps that didn't apply (fold-to-stereo on a stereo file…) are noted, not errors.
+        if (shapeRes.skipped.length) row.notes = shapeRes.skipped.map(k => `${opLabel(k)} not needed`).join(' · ');
+        const stemRows = [];
+        for (let k = 0; k < shaped.length; k++) {
+          const s = shaped[k];
+          const sub = shaped.length > 1 ? { ...row, file: `${p.audio.filename} → ${s.split('/').pop()}`, steps: [...row.steps] } : row;
+          chainProgress = { ...chainProgress, step: 'Measuring…' };
+          const [media] = await invoke('scan_files', { paths: [s] });
+          const [lufs, tp] = await invoke('measure_loudness', { audioPath: s });
+          const [head, tail] = await invoke('check_silence', { audioPath: s, durationSecs: media.durationSecs, silenceMs: 240 });
+          let stereo = null;
+          if ((media.channelCount ?? 1) >= 2) {
+            try { stereo = await invoke('check_stereo', { audioPath: s, channels: media.channelCount }); } catch { stereo = null; }
+          }
+          sub.before = { lufs, tp, stereo: stereo?.verdict?.replace('_', ' ') ?? (media.channelCount === 1 ? 'mono' : ''), sixFr: (head || tail) ? `sound at ${head && tail ? 'head & tail' : head ? 'head' : 'tail'}` : 'silent' };
+
+          // QC verdicts, shown as ticks in the report. A pass is never "fixed".
+          const sixFrPass = !(head || tail);
+          const pass = spec.mode === 'peak'
+            ? Math.abs(tp - spec.truePeak) <= 0.1
+            : Math.abs(lufs - spec.targetLufs) <= 1.0 && tp <= spec.truePeak + 0.05;
+          const stereoPass = !stereo || !['anti_phase', 'one_sided', 'dual_mono'].includes(stereo.verdict);
+          sub.qc = { loudness: pass, sixFr: sixFrPass, stereo: stereo ? stereoPass : null };
+
+          // 6 Fr — only when the check fails
+          let sixFr = false;
+          if (!sixFrPass && c.sixFr === 'always') sixFr = true;
+          else if (!sixFrPass && c.sixFr === 'prompt') {
+            const where = head && tail ? 'the head and the tail' : head ? 'the head' : 'the tail';
+            const choice = await decide('sixFr', {
+              kind: 'fix', index: i + 1, total: targets.length, filename: sub.file,
+              title: 'SOUND IN THE FIRST OR LAST 6 FRAMES',
+              lines: [`There is sound within 6 frames (240 ms) of ${where}.`],
+              body: 'FIX mutes the first and last 6 frames with a short fade. SKIP leaves them as they are and carries on with the rest of the chain.',
+              choices: [{ id: 'skip', label: 'SKIP THIS STEP', kind: 'neutral' }, { id: 'fix', label: 'FIX — MUTE 6 Fr', kind: 'primary' }],
+            });
+            if (choice === 'stop') { stopped = true; break; }
+            sixFr = choice === 'fix';
+          }
+
+          // Loudness — only when the check fails
+          let normalise = false;
+          if (!pass && c.loudness === 'always') normalise = true;
+          else if (!pass && c.loudness === 'prompt') {
+            const choice = await decide('loudness', {
+              kind: 'fix', index: i + 1, total: targets.length, filename: sub.file,
+              title: 'OFF SPEC',
+              lines: [
+                `Measured ${lufs.toFixed(1)} LUFS, true peak ${tp.toFixed(1)} dBTP.`,
+                spec.mode === 'peak' ? `The spec is ${spec.truePeak} dBTP true peak.` : `The spec is ${spec.targetLufs} LUFS (±1) with a ${spec.truePeak} dBTP ceiling.`,
+              ],
+              body: 'FIX normalises the file to the spec. SKIP leaves the level alone and carries on.',
+              choices: [{ id: 'skip', label: 'SKIP THIS STEP', kind: 'neutral' }, { id: 'fix', label: 'FIX — NORMALISE', kind: 'primary' }],
+            });
+            if (choice === 'stop') { stopped = true; break; }
+            normalise = choice === 'fix';
+          }
+
+          // Unfixable
+          const issues = unfixableIssues({ lufs, tp, head, tail, stereo, durationSecs: media.durationSecs, channelCount: media.channelCount }, spec, c, normalise);
+          if (issues.length) {
+            let action = c.unfixable;
+            if (action === 'prompt') {
+              action = await decide('unfixable', {
+                kind: 'unfixable', index: i + 1, total: targets.length, filename: sub.file,
+                title: issues.length === 1 ? 'THIS CAN’T BE FIXED BY THE CHAIN' : `${issues.length} THINGS THE CHAIN CAN’T FIX`,
+                lines: issues,
+                body: 'PASS ANYWAY carries on and notes it in the report. SKIP leaves this file out of the run, untouched.',
+                choices: [{ id: 'skip', label: 'SKIP THE FILE', kind: 'neutral' }, { id: 'pass', label: 'PASS ANYWAY', kind: 'primary' }],
+              });
+              if (action === 'stop') { stopped = true; break; }
+            }
+            if (action === 'skip') {
+              sub.status = 'skipped'; sub.notes = [sub.notes, ...issues].filter(Boolean).join(' · ');
+              stemRows.push(sub);
+              continue;
+            }
+            sub.warnings = issues;
+          }
+
+          // Render
+          chainProgress = { ...chainProgress, step: normalise ? 'Normalising…' : c.clock ? 'Clocking…' : 'Rendering…' };
+          const tags = specTags({ normalise, sixFr, clock: c.clock, spec, convert: c.convert });
+          const willEncode = normalise || sixFr || c.clock || tags !== '' || (c.convert.container !== 'original');
+          // Shaped intermediates are WAVs; only an untouched source keeps its own extension.
+          const srcExt = s === p.audio.path ? p.audio.extension : media.extension;
+          const ext = chainOutputExt(srcExt, c.convert, willEncode);
+          const stemName = shaped.length > 1 ? media.filenameNoExt : p.audio.filenameNoExt;
+          let stem = renamedStem(c.rename, {
+            name: stemName, date: stamp, spec: tags,
+            lufs: spec.mode === 'peak' ? '' : `${spec.targetLufs}LUFS`, dbtp: `${spec.truePeak}dBTP`,
+            rate: c.convert.sampleRate ? `${c.convert.sampleRate / 1000}k` : (media.sampleRate ? `${media.sampleRate / 1000}k` : ''),
+            depth: c.convert.bitDepth ? (c.convert.bitDepth === 32 ? '32f' : `${c.convert.bitDepth}bit`) : (media.bitDepth ? `${media.bitDepth}bit` : ''),
+            ch: channelWord(media.channelCount), n: i + 1,
+          });
+          const destDir = exportSettings.useAudioFileLocation || !exportSettings.outputDirectory
+            ? dirOf(p.audio.path) : exportSettings.outputDirectory;
+          // Never land on the original.
+          if (`${destDir}/${stem}.${ext}`.toLowerCase() === p.audio.path.toLowerCase()) stem = `${stem}_chain`;
+          if (normalise) sub.steps.push(spec.mode === 'peak' ? `normalise → ${spec.truePeak} dBTP` : `normalise → ${spec.targetLufs} LUFS`);
+          if (sixFr) sub.steps.push('6 Fr');
+          if (c.clock) sub.steps.push('clock');
+          if (c.convert.container !== 'original' || c.convert.sampleRate || c.convert.bitDepth) sub.steps.push(`convert → ${ext}${c.convert.sampleRate ? ' ' + c.convert.sampleRate / 1000 + 'k' : ''}${c.convert.bitDepth ? ' ' + (c.convert.bitDepth === 32 ? '32f' : c.convert.bitDepth + '-bit') : ''}`);
+
+          const pair = {
+            ...p,
+            id: `chain-${i}-${k}-${Date.now()}`,
+            video: null,
+            audio: media,
+            outputFilename: `${stem}.${ext}`,
+            normalizationEnabled: normalise,
+            normalizationSettings: batchNormSettings(p.normalizationSettings),
+            silenceCompliance: sixFr,
+            silenceMs: 240.0,
+            fadeMs: 5.0,
+            clockEnabled: !!c.clock,
+            timecodeOffsetSecs: 0,
+            slateEnabled: false,
+          };
+          const settings = {
+            ...exportSettings,
+            useAudioFileLocation: false,
+            outputDirectory: destDir,
+            audioContainer: c.convert.container,
+            sampleRate: c.convert.sampleRate,
+            bitDepth: c.convert.bitDepth,
+            aacBitrate: c.convert.aacBitrate ?? exportSettings.aacBitrate,
+          };
+          const [res] = await invoke('process_pairs', { pairs: [pair], settings });
+          if (!res?.success) throw new Error(res?.error ?? 'render failed');
+          outputs.push(res.outputPath);
+          produced.add(p.audio.path);
+          sub.output = res.outputPath;
+          sub.status = 'done';
+          try {
+            const [aL, aT] = await invoke('measure_loudness', { audioPath: res.outputPath });
+            sub.after = { lufs: aL, tp: aT };
+          } catch { /* report without after-figures */ }
+          stemRows.push(sub);
+        }
+        if (stopped) {
+          chainReport = [...chainReport, ...(stemRows.length ? stemRows : [{ ...row, status: 'stopped' }])];
+          break;
+        }
+        chainReport = [...chainReport, ...(stemRows.length ? stemRows : [{ ...row, status: 'skipped' }])];
+      } catch (e) {
+        row.status = 'failed';
+        row.notes = String(e);
+        chainReport = [...chainReport, row];
+        errors = [...errors, `Chain failed on ${p.audio.filename}: ${e}`];
+      }
+      chainProgress = { ...chainProgress, done: i + 1 };
+    }
+  } catch (e) {
+    errors = [...errors, `Chain failed: ${e}`];
+  } finally {
+    if (work) invoke('remove_workdir', { path: work }).catch(() => {});
+    chainRunning = false;
+    chainProgress = { ...chainProgress, step: '' };
+  }
+  if (outputs.length > 0) {
+    playCompletionSound();
+    // Originals that produced nothing (skipped, failed, stopped before, or
+    // never reached) stay in the list exactly as they were.
+    const kept = targets.filter(p => !produced.has(p.audio.path)).map(p => p.audio.path);
+    await reloadList([...outputs, ...kept]);
+  }
+}
+
+async function exportChainReport() {
+  if (chainReport.length === 0) return;
+  const when = _chainRunAt ?? new Date();
+  const csv = csvReport(chainReport, {
+    title: 'Laybacker — Multifunction Chain report',
+    chain: describeChain(chain, chainSpecLabel()),
+    when: when.toLocaleString(),
+  });
+  try {
+    const path = await saveDialog({
+      title: 'Save chain report',
+      defaultPath: `Laybacker chain report ${stampFor('YYYY-MM-DD_HH-mm', when)}.csv`,
+      filters: [{ name: 'CSV', extensions: ['csv'] }],
+    });
+    if (!path) return;
+    await invoke('write_text_file', { path, contents: csv });
+  } catch (e) {
+    errors = [...errors, `Could not save the report: ${e}`];
+  }
+}
+
 // The mono sets in the list that can be joined (matched by _L/_R/_C… suffix).
 function joinGroups() {
   return findJoinGroups(matchedPairs.filter(p => !p.video).map(p => p.audio));
@@ -720,7 +1011,7 @@ async function scanFiles(paths) {
 
     // Audio on its own? Ask which page the user wants before pairing up.
     maybePromptAudioMode();
-    if (!audioModePrompt) await autoMatch();
+    await autoMatch();
   } catch (e) {
     console.error('[store] SCAN ERROR:', e);
     errors = [...errors, `Scan failed: ${e}`];
@@ -941,11 +1232,18 @@ async function processAll() {
 
   // Render each slate card at its video's exact frame size (the backend can't
   // draw text — the bundled ffmpeg has no freetype).
-  matchedPairs = matchedPairs.map(p =>
-    p.video && p.slateEnabled
-      ? { ...p, slateImage: renderSlateImage(p.slateText, p.video.width, p.video.height, slateStyleFor(p)) }
-      : p
-  );
+  // Overlay mode sends a second image — the text's matte — and tells the
+  // backend to lay it over the picture instead of prepending a card.
+  matchedPairs = matchedPairs.map(p => {
+    if (!p.video || !p.slateEnabled) return p;
+    const st = slateStyleFor(p);
+    return {
+      ...p,
+      slateOverlay: st.mode === 'overlay',
+      slateImage: renderSlateImage(p.slateText, p.video.width, p.video.height, st),
+      slateMatte: renderSlateMatte(p.slateText, p.video.width, p.video.height, st),
+    };
+  });
 
   isProcessing = true;
   processingResults = [];
@@ -1196,8 +1494,6 @@ function clearAll() {
   nameRule = defaultNameRule;
   // Back to the layback page; the next lone-audio drop asks again.
   appMode = 'layback';
-  audioModePrompt = false;
-  audioChoiceMade = false;
 }
 
 function dismissError(index) {
@@ -1248,8 +1544,6 @@ export function getAppState() {
     processAll,
     runMainAction,
     get appMode() { return appMode; },
-    get audioModePrompt() { return audioModePrompt; },
-    chooseAudioMode,
     setAppMode,
     get nameRule() { return nameRule; },
     setNameRule,
@@ -1296,6 +1590,18 @@ export function getAppState() {
     get joinableGroups() { return joinGroups(); },
     convertAllNow,
     processAudioAllNow,
+    // Multifunction Chain
+    get chain() { return chain; },
+    setChain,
+    get chainPresets() { return chainPresets; },
+    saveChainPreset, loadChainPreset, deleteChainPreset,
+    runChain, stopChain, exportChainReport,
+    get chainRunning() { return chainRunning; },
+    get chainProgress() { return chainProgress; },
+    get chainReport() { return chainReport; },
+    get chainPrompt() { return chainPrompt; },
+    resolveChainPrompt,
+    get chainSpecLabel() { return chainSpecLabel(); },
     get conversionSet() { return conversionSet(); },
     get conversionLabel() { return conversionLabel(); },
     get clockChecks() { return clockChecks; },

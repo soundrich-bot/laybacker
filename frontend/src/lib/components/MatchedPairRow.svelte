@@ -418,7 +418,9 @@
         class:active={pair.slateEnabled}
         onclick={() => onOpenSlate(pair.id)}
         title={pair.slateEnabled
-          ? `Slate ON — ${pair.slateDurationSecs}s card at the head; click to edit or remove`
+          ? (pair.slateOverlay || pair.slateMode === 'overlay'
+              ? `Slate ON — text over the first ${pair.slateDurationSecs}s of picture (runtime unchanged); click to edit or remove`
+              : `Slate ON — ${pair.slateDurationSecs}s card at the head; click to edit or remove`)
           : "Add a text slate to the front of this video"}
       >
         SLATE

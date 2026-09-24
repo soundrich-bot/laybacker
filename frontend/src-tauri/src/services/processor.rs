@@ -186,7 +186,11 @@ pub fn process_pair(
             pair.video.as_ref().map(|v| v.duration_secs).unwrap_or(0.0)
         };
         let total = base + slate_secs;
-        let label = if slate_spec.is_some() { "Rendering slate + programme" } else { "Freezing last frame to match audio" };
+        let label = match slate_spec.as_ref() {
+            Some(s) if s.is_overlay() => "Rendering slate text over the picture",
+            Some(_) => "Rendering slate + programme",
+            None => "Freezing last frame to match audio",
+        };
         ffmpeg::run_ffmpeg_with_progress(&args, total, |pct| {
             progress_callback(ProcessingProgress {
                 pair_id: pair_id.clone(),
@@ -199,9 +203,12 @@ pub fn process_pair(
         ffmpeg::run_ffmpeg(&args)
     };
 
-    // The slate image was only needed for the run.
+    // The slate image (and an overlay's matte) were only needed for the run.
     if let Some(ref spec) = slate_spec {
         let _ = std::fs::remove_file(&spec.image_path);
+        if let Some(ref matte) = spec.matte_path {
+            let _ = std::fs::remove_file(matte);
+        }
     }
 
     match run_result {
@@ -275,20 +282,35 @@ fn write_slate_image(pair: &MatchedPair) -> Result<Option<ffmpeg::SlateSpec>, St
     let Some(ref b64) = pair.slate_image else {
         return Err("Slate is enabled but no slate image was rendered".to_string());
     };
-    // Accept both a raw base64 payload and a data URL ("data:image/jpeg;base64,…").
+    let path = write_b64_jpeg(b64, &format!("laybacker_slate_{}.jpg", pair.id))?;
+    // Overlay mode needs the matte too.
+    let matte_path = if pair.slate_overlay {
+        let Some(ref matte) = pair.slate_matte else {
+            return Err("Slate overlay is enabled but no matte was rendered".to_string());
+        };
+        Some(write_b64_jpeg(matte, &format!("laybacker_slate_{}_matte.jpg", pair.id))?)
+    } else {
+        None
+    };
+    Ok(Some(ffmpeg::SlateSpec {
+        image_path: path,
+        duration_secs: pair.slate_duration_secs.max(0.5),
+        black_secs: pair.slate_black_secs.max(0.0),
+        matte_path,
+    }))
+}
+
+/// Decode a base64 JPEG (raw payload or a "data:image/jpeg;base64,…" URL) into
+/// a temp file and return its path.
+pub fn write_b64_jpeg(b64: &str, filename: &str) -> Result<String, String> {
     let payload = b64.rsplit(',').next().unwrap_or(b64);
     use base64::Engine as _;
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(payload.trim())
         .map_err(|e| format!("Slate image decode failed: {}", e))?;
-    let path = std::env::temp_dir().join(format!("laybacker_slate_{}.jpg", pair.id));
-    let path = path.to_string_lossy().to_string();
+    let path = std::env::temp_dir().join(filename).to_string_lossy().to_string();
     std::fs::write(&path, bytes).map_err(|e| format!("Slate image write failed: {}", e))?;
-    Ok(Some(ffmpeg::SlateSpec {
-        image_path: path,
-        duration_secs: pair.slate_duration_secs.max(0.5),
-        black_secs: pair.slate_black_secs.max(0.0),
-    }))
+    Ok(path)
 }
 
 fn resolve_output_path(pair: &MatchedPair, settings: &ExportSettings) -> String {
@@ -483,6 +505,8 @@ mod tests {
             slate_text: String::new(),
             slate_image: None,
             slate_black_secs: 0.0,
+            slate_overlay: false,
+            slate_matte: None,
         }
     }
 

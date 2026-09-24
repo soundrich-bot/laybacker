@@ -179,13 +179,20 @@ pub fn build_split_command(path: &str, layout: &str, outputs: &[String]) -> Vec<
 /// Split a multichannel file into mono files beside it: "<stem>_L.wav" …
 /// Returns the output paths in channel order.
 pub fn split_channels(path: &str, layout: Option<&str>, channels: u32) -> Result<Vec<String>, String> {
+    split_channels_to(path, layout, channels, None)
+}
+
+/// As `split_channels`, writing the stems into `out_dir` when given.
+pub fn split_channels_to(path: &str, layout: Option<&str>, channels: u32, out_dir: Option<&str>) -> Result<Vec<String>, String> {
     if channels < 2 {
         return Err("That file is already mono".to_string());
     }
     let layout = layout.filter(|l| !l.is_empty()).unwrap_or_else(|| layout_for_count(channels)).to_string();
     let names = channel_names(&layout, channels);
     let p = Path::new(path);
-    let dir = p.parent().map(|d| d.to_string_lossy().to_string()).unwrap_or_else(|| ".".to_string());
+    let dir = out_dir
+        .map(|d| d.to_string())
+        .unwrap_or_else(|| p.parent().map(|d| d.to_string_lossy().to_string()).unwrap_or_else(|| ".".to_string()));
     let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("audio");
     let outputs: Vec<String> = names.iter().map(|n| format!("{}/{}_{}.wav", dir, stem, n)).collect();
     let args = build_split_command(path, &layout, &outputs);

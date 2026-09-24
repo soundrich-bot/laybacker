@@ -40,6 +40,12 @@ export const DEFAULT_SLATE_STYLE = {
   font: 'helvetica', size: 'm', bgId: null,
   fit: 'fit', scale: 0.7, anchor: 'c', textPos: 'middle',
   black: 0, // seconds of black after the card, before programme
+  // 'prepend' puts a card in front of the picture; 'overlay' lays the text
+  // over the first seconds of the picture (runtime and sound unchanged).
+  mode: 'prepend',
+  // Lines the user has dragged: { [lineIndex]: { x, y } } as fractions of the
+  // frame (the line's centre). A line with no entry sits in the auto layout.
+  linePos: {},
 };
 
 function anchorFractions(anchor) {
@@ -48,19 +54,78 @@ function anchorFractions(anchor) {
   return { ax, ay };
 }
 
-// `style`: { font, size, bgImage, fit, scale, anchor, textPos } — bgImage is a
-// loaded HTMLImageElement or null.
-export function drawSlate(canvas, text, style = {}) {
+// The non-empty lines of slate text, in order — the index is what `linePos` keys on.
+export function slateLines(text) {
+  return (text || '').split('\n').map(l => l.trim()).filter(l => l.length > 0);
+}
+
+// Work out where every line goes on a w×h frame: font size (shrunk to fit),
+// and each line's centre — the dragged position if it has one, else the auto
+// layout (a centred block at top / middle / bottom). Shared by drawing and by
+// the editor's hit-testing, so what you grab is what is drawn.
+export function layoutSlate(ctx, w, h, text, style = {}) {
+  const font = SLATE_FONTS[style.font] ?? SLATE_FONTS.helvetica;
+  const sizeFrac = (SLATE_SIZES[style.size] ?? SLATE_SIZES.m).frac;
+  const lines = slateLines(text);
+  if (lines.length === 0) return { lines: [], size: 0, font };
+
+  // Start at the chosen size, shrink until the widest line fits.
+  let size = Math.floor(h * sizeFrac);
+  const maxWidth = w * 0.86;
+  while (size > 4) {
+    ctx.font = `${font.weight} ${size}px ${font.family}`;
+    const widest = Math.max(...lines.map(l => ctx.measureText(l).width));
+    const total = lines.length * size * 1.4;
+    if (widest <= maxWidth && total <= h * 0.8) break;
+    size -= 2;
+  }
+  ctx.font = `${font.weight} ${size}px ${font.family}`;
+  const lineHeight = size * 1.4;
+  const block = (lines.length - 1) * lineHeight;
+  const pos = style.textPos ?? 'middle';
+  const centreY = pos === 'top' ? h * 0.10 + size / 2 + block / 2
+    : pos === 'bottom' ? h * 0.90 - size / 2 - block / 2
+    : h / 2;
+  const startY = centreY - block / 2;
+  const linePos = style.linePos ?? {};
+  return {
+    size, font,
+    lines: lines.map((t, i) => {
+      const custom = linePos[i];
+      const x = custom ? custom.x * w : w / 2;
+      const y = custom ? custom.y * h : startY + i * lineHeight;
+      return { text: t, index: i, x, y, width: ctx.measureText(t).width, height: size, moved: !!custom };
+    }),
+  };
+}
+
+// `style`: { font, size, bgImage, fit, scale, anchor, textPos, linePos } —
+// bgImage is a loaded HTMLImageElement or null.
+// `opts.layer`:
+//   'full'  (default) the prepended card: black / image background + text
+//   'text'  overlay colour layer: white text on black
+//   'matte' overlay alpha: white text (plus a soft halo that becomes a dark
+//           edge over the picture, for legibility) on black
+// `opts.backdrop`: an image drawn behind everything — the editor's preview of
+// the video's own first frame in overlay mode. Never used for an export.
+// `opts.highlight`: a line index to outline (the one being dragged / hovered).
+export function drawSlate(canvas, text, style = {}, opts = {}) {
   const w = canvas.width;
   const h = canvas.height;
   const ctx = canvas.getContext('2d');
-  const font = SLATE_FONTS[style.font] ?? SLATE_FONTS.helvetica;
-  const sizeFrac = (SLATE_SIZES[style.size] ?? SLATE_SIZES.m).frac;
+  const layer = opts.layer ?? 'full';
 
-  // Background: black, then the user's image if any.
+  ctx.shadowColor = 'transparent';
   ctx.fillStyle = '#000000';
   ctx.fillRect(0, 0, w, h);
-  const img = style.bgImage;
+
+  const backdrop = opts.backdrop;
+  if (backdrop && backdrop.naturalWidth > 0) {
+    ctx.drawImage(backdrop, 0, 0, w, h);
+  }
+
+  // The card's own image — prepend mode only.
+  const img = layer === 'full' && !backdrop ? style.bgImage : null;
   if (img && img.naturalWidth > 0 && img.naturalHeight > 0) {
     const fit = style.fit ?? 'fit';
     const { ax, ay } = anchorFractions(style.anchor ?? 'c');
@@ -78,49 +143,81 @@ export function drawSlate(canvas, text, style = {}) {
     }
   }
 
-  const drawn = (text || '').split('\n').map(l => l.trim()).filter(l => l.length > 0);
-  if (drawn.length === 0) return;
+  const layout = layoutSlate(ctx, w, h, text, style);
+  if (layout.lines.length === 0) return layout;
 
-  ctx.fillStyle = '#ffffff';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  if (img) {
+  ctx.font = `${layout.font.weight} ${layout.size}px ${layout.font.family}`;
+
+  const overPicture = !!img || !!backdrop;
+  if (layer === 'matte') {
+    // Halo first: a blurred, part-opaque spread around the glyphs. The colour
+    // layer is black there, so over the picture it reads as a dark edge.
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
+    ctx.shadowColor = 'rgba(255, 255, 255, 0.55)';
+    ctx.shadowBlur = Math.max(4, h * 0.014);
+    layout.lines.forEach(l => ctx.fillText(l.text, l.x, l.y));
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+  } else if (overPicture) {
     // Keep text legible over any picture.
     ctx.shadowColor = 'rgba(0, 0, 0, 0.85)';
     ctx.shadowBlur = Math.max(4, h * 0.012);
-    ctx.shadowOffsetY = Math.max(1, h * 0.003);
+    ctx.shadowOffsetY = layer === 'full' && !backdrop ? Math.max(1, h * 0.003) : 0;
   }
-
-  // Start at the chosen size, shrink until the widest line fits.
-  let size = Math.floor(h * sizeFrac);
-  const maxWidth = w * 0.86;
-  while (size > 4) {
-    ctx.font = `${font.weight} ${size}px ${font.family}`;
-    const widest = Math.max(...drawn.map(l => ctx.measureText(l).width));
-    const total = drawn.length * size * 1.4;
-    if (widest <= maxWidth && total <= h * 0.8) break;
-    size -= 2;
-  }
-  const lineHeight = size * 1.4;
-  const block = (drawn.length - 1) * lineHeight;
-  // Text placement: keep the words clear of a logo when asked.
-  const pos = style.textPos ?? 'middle';
-  const centreY = pos === 'top' ? h * 0.10 + size / 2 + block / 2
-    : pos === 'bottom' ? h * 0.90 - size / 2 - block / 2
-    : h / 2;
-  const startY = centreY - block / 2;
-  drawn.forEach((line, i) => ctx.fillText(line, w / 2, startY + i * lineHeight));
+  ctx.fillStyle = '#ffffff';
+  layout.lines.forEach(l => ctx.fillText(l.text, l.x, l.y));
   ctx.shadowColor = 'transparent';
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetY = 0;
+
+  // Editor affordance: outline the grabbed / hovered line.
+  if (opts.highlight != null) {
+    const l = layout.lines[opts.highlight];
+    if (l) {
+      const padX = l.height * 0.35, padY = l.height * 0.2;
+      ctx.strokeStyle = '#08f7fe';
+      ctx.lineWidth = Math.max(1, h * 0.004);
+      ctx.setLineDash([h * 0.02, h * 0.012]);
+      ctx.strokeRect(l.x - l.width / 2 - padX, l.y - l.height / 2 - padY, l.width + 2 * padX, l.height + 2 * padY);
+      ctx.setLineDash([]);
+    }
+  }
+  return layout;
+}
+
+// Which line (index) is under a point in canvas pixels, or null.
+export function hitSlateLine(layout, px, py) {
+  if (!layout?.lines) return null;
+  // Last drawn wins, so a line dragged on top of another is the one you grab.
+  for (let i = layout.lines.length - 1; i >= 0; i--) {
+    const l = layout.lines[i];
+    const padX = l.height * 0.35, padY = l.height * 0.25;
+    if (Math.abs(px - l.x) <= l.width / 2 + padX && Math.abs(py - l.y) <= l.height / 2 + padY) return l.index;
+  }
+  return null;
+}
+
+function renderLayer(text, width, height, style, layer) {
+  const canvas = document.createElement('canvas');
+  canvas.width = width || 1920;
+  canvas.height = height || 1080;
+  drawSlate(canvas, text, style, { layer });
+  return canvas.toDataURL('image/jpeg', 0.95);
 }
 
 // Render the slate at the video's exact frame size and return a JPEG data URL —
 // JPEG because the bundled ffmpeg decodes mjpeg but not PNG.
 export function renderSlateImage(text, width, height, style = {}) {
-  const canvas = document.createElement('canvas');
-  canvas.width = width || 1920;
-  canvas.height = height || 1080;
-  drawSlate(canvas, text, style);
-  return canvas.toDataURL('image/jpeg', 0.95);
+  return renderLayer(text, width, height, style, style.mode === 'overlay' ? 'text' : 'full');
+}
+
+// Overlay mode's second image: the text's greyscale matte (JPEG has no alpha,
+// so ffmpeg merges this in as the alpha channel). null in prepend mode.
+export function renderSlateMatte(text, width, height, style = {}) {
+  if (style.mode !== 'overlay') return null;
+  return renderLayer(text, width, height, style, 'matte');
 }
 
 // Turn a data URL into a loaded <img> the renderer can draw (data: URLs never

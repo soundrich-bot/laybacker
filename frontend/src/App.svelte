@@ -28,7 +28,6 @@
   import DropZone from './lib/components/DropZone.svelte';
   import MatchedPairsList from './lib/components/MatchedPairsList.svelte';
   import AudioPage from './lib/components/AudioPage.svelte';
-  import AudioModePrompt from './lib/components/AudioModePrompt.svelte';
   import SettingsPanel from './lib/components/SettingsPanel.svelte';
   import ProcessButton from './lib/components/ProcessButton.svelte';
   import ErrorBar from './lib/components/ErrorBar.svelte';
@@ -36,6 +35,8 @@
   import LengthFixModal from './lib/components/LengthFixModal.svelte';
   import SlateEditor from './lib/components/SlateEditor.svelte';
   import AudioStartModal from './lib/components/AudioStartModal.svelte';
+  import ChainPanel from './lib/components/ChainPanel.svelte';
+  import ChainPromptModal from './lib/components/ChainPromptModal.svelte';
 
   const app = getAppState();
   let isDraggingOver = $state(false);
@@ -100,6 +101,26 @@
   }
 </script>
 
+{#snippet chainSection()}
+  <ChainPanel
+    chain={app.chain}
+    onChange={app.setChain}
+    presets={app.chainPresets}
+    onSavePreset={app.saveChainPreset}
+    onLoadPreset={app.loadChainPreset}
+    onDeletePreset={app.deleteChainPreset}
+    onRun={app.runChain}
+    running={app.chainRunning}
+    progress={app.chainProgress}
+    report={app.chainReport}
+    onExportReport={app.exportChainReport}
+    fileCount={app.matchedPairs.filter(p => !p.video).length}
+    specLabel={app.chainSpecLabel}
+    qcMode={app.qcMode}
+    busy={app.isProcessing || app.qcRunning || app.clockRunning}
+  />
+{/snippet}
+
 <div class="app-container">
   <div class="noise-overlay"></div>
 
@@ -154,6 +175,8 @@
     conversionSet={app.conversionSet}
     conversionLabel={app.conversionLabel}
     onProcessAll={app.processAudioAllNow}
+    chainRunning={app.chainRunning}
+    {chainSection}
   />
   {:else}
   <MatchedPairsList
@@ -197,6 +220,7 @@
     clockRunning={app.clockRunning}
     clockProgress={app.clockProgress}
     onRunClockCheck={app.runClockCheck}
+    onAudioOnly={() => app.setAppMode('audio')}
   />
   {/if}
 
@@ -240,8 +264,8 @@
   />
 {/if}
 
-{#if app.audioModePrompt}
-  <AudioModePrompt count={app.getAudios().length} onChoose={app.chooseAudioMode} />
+{#if app.chainPrompt}
+  <ChainPromptModal prompt={app.chainPrompt} onChoose={app.resolveChainPrompt} />
 {/if}
 
 {#if app.startPrompt}

@@ -350,6 +350,8 @@ mod tests {
             slate_text: String::new(),
             slate_image: None,
             slate_black_secs: 0.0,
+            slate_overlay: false,
+            slate_matte: None,
         }
     }
 
