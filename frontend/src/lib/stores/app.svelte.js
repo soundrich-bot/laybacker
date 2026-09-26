@@ -267,6 +267,29 @@ let qcTargetLufs = $state(loadPref('qcTargetLufs', -23));
 //    triggers when target_lufs >= 0, so peak mode carries target_lufs = 0.)
 let qcTruePeak = $state(loadPref('qcTruePeak', -1.0));
 let qcMode = $state(loadPref('qcMode', 'lufs')); // 'lufs' | 'peak'
+
+// Delivery spec presets. The preset sets the targets AND the tolerances QC
+// judges with: EBU R128 allows ±1 LU; ATSC A/85 allows ±2 LU and ±0.5 dB on
+// the true peak. Typing your own numbers makes it CUSTOM (R128 tolerances).
+export const QC_SPECS = {
+  r128:   { label: 'EBU R128',  unit: 'LUFS', lufs: -23, tp: -1.0, lufsTol: 1.0, tpTol: 0.05, desc: 'European broadcast: −23 LUFS ±1 LU, true peak ≤ −1 dBTP' },
+  a85:    { label: 'ATSC A/85', unit: 'LKFS', lufs: -24, tp: -2.0, lufsTol: 2.0, tpTol: 0.5,  desc: 'US television (and streaming under SB576): −24 LKFS ±2 LU, true peak ≤ −2 dBTP ±0.5 dB' },
+  custom: { label: 'CUSTOM',    unit: 'LUFS', lufs: null, tp: null, lufsTol: 1.0, tpTol: 0.05, desc: 'Your own targets, judged ±1 LU' },
+};
+let qcSpec = $state(loadPref('qcSpec', 'r128'));
+function specDef() { return QC_SPECS[qcSpec] ?? QC_SPECS.custom; }
+function lufsTolerance() { return specDef().lufsTol; }
+function tpTolerance() { return specDef().tpTol; }
+function setQcSpec(key) {
+  const def = QC_SPECS[key];
+  if (!def) return;
+  qcSpec = key;
+  savePref('qcSpec', key);
+  if (def.lufs != null) setQcTargetLufs(def.lufs, true);
+  if (def.tp != null) setQcTruePeak(def.tp, true);
+  qcResults = {};
+  clockChecks = {};
+}
 // QC checks everything, every time — the user reads the list and disregards
 // what doesn't apply. These stay as constants so the result shape is unchanged.
 let qcCheckSilence = $state(true);
@@ -315,9 +338,11 @@ let qcProgress = $state({ done: 0, total: 0 });
 
 // Changing the batch loudness value retargets every pair's NORM and voids any
 // existing results (they were measured against a different spec).
-function setQcTargetLufs(value) {
+function setQcTargetLufs(value, fromPreset = false) {
   qcTargetLufs = value;
   savePref('qcTargetLufs', value);
+  // Typing a number of your own leaves the preset — unless the preset set it.
+  if (!fromPreset && qcSpec !== 'custom' && value !== specDef().lufs) { qcSpec = 'custom'; savePref('qcSpec', 'custom'); }
   matchedPairs = matchedPairs.map(p => ({
     ...p,
     normalizationSettings: batchNormSettings(p.normalizationSettings),
@@ -329,7 +354,8 @@ function setQcTargetLufs(value) {
 
 // Changing the batch true-peak value retargets every pair and voids results
 // (the peak check and the NORM cap/target both depend on it).
-function setQcTruePeak(value) {
+function setQcTruePeak(value, fromPreset = false) {
+  if (!fromPreset && qcSpec !== 'custom' && value !== specDef().tp) { qcSpec = 'custom'; savePref('qcSpec', 'custom'); }
   qcTruePeak = value;
   savePref('qcTruePeak', value);
   matchedPairs = matchedPairs.map(p => ({
@@ -579,10 +605,10 @@ function resolveChainPrompt(choice, applyAll) {
 function stopChain() { _chainStop = true; }
 
 function chainSpec() {
-  return { mode: qcMode, targetLufs: qcTargetLufs, truePeak: qcTruePeak };
+  return { mode: qcMode, targetLufs: qcTargetLufs, truePeak: qcTruePeak, lufsTol: lufsTolerance(), tpTol: tpTolerance(), unit: specDef().unit };
 }
 function chainSpecLabel() {
-  return qcMode === 'peak' ? `${qcTruePeak} dBTP` : `${qcTargetLufs} LUFS / ${qcTruePeak} dBTP`;
+  return qcMode === 'peak' ? `${qcTruePeak} dBTP` : `${qcTargetLufs} ${specDef().unit} / ${qcTruePeak} dBTP`;
 }
 
 function dirOf(path) {
@@ -651,7 +677,7 @@ async function runChain() {
           const sixFrPass = !(head || tail);
           const pass = spec.mode === 'peak'
             ? Math.abs(tp - spec.truePeak) <= 0.1
-            : Math.abs(lufs - spec.targetLufs) <= 1.0 && tp <= spec.truePeak + 0.05;
+            : Math.abs(lufs - spec.targetLufs) <= spec.lufsTol && tp <= spec.truePeak + spec.tpTol;
           const stereoPass = !stereo || !['anti_phase', 'one_sided', 'dual_mono'].includes(stereo.verdict);
           let clicksPass = null;
           if (qcCheckClicks) {
@@ -701,7 +727,7 @@ async function runChain() {
               title: 'OFF SPEC',
               lines: [
                 `Measured ${lufs.toFixed(1)} LUFS, true peak ${tp.toFixed(1)} dBTP.`,
-                spec.mode === 'peak' ? `The spec is ${spec.truePeak} dBTP true peak.` : `The spec is ${spec.targetLufs} LUFS (±1) with a ${spec.truePeak} dBTP ceiling.`,
+                spec.mode === 'peak' ? `The spec is ${spec.truePeak} dBTP true peak.` : `The spec is ${spec.targetLufs} ${spec.unit} (±${spec.lufsTol}) with a ${spec.truePeak} dBTP ceiling.`,
               ],
               body: 'FIX normalises the file to the spec. SKIP leaves the level alone and carries on.',
               choices: [{ id: 'skip', label: 'SKIP THIS STEP', kind: 'neutral' }, { id: 'fix', label: 'FIX — NORMALISE', kind: 'primary' }],
@@ -934,8 +960,8 @@ async function runBatchQc() {
         lufsPass = true;
         peakPass = Math.abs(measuredTP - qcTruePeak) <= 0.1;
       } else {
-        lufsPass = Math.abs(measuredLufs - qcTargetLufs) <= 1.0;
-        peakPass = measuredTP <= peakLimit + 0.05; // ceiling, not a target
+        lufsPass = Math.abs(measuredLufs - qcTargetLufs) <= lufsTolerance();
+        peakPass = measuredTP <= peakLimit + tpTolerance(); // ceiling, not a target
       }
       const silencePass = qcCheckSilence ? (!headHasAudio && !tailHasAudio) : true;
       results[p.id] = {
@@ -1403,8 +1429,8 @@ async function evaluateClockFor(pair) {
   const willBeLevelled = pair.normalizationEnabled;
   const { targetLufs, truePeakLimit } = pair.normalizationSettings;
   const hasLufsTarget = targetLufs < 0;
-  const lufsPass = willBeLevelled || !hasLufsTarget || Math.abs(measuredLufs - targetLufs) <= 1.0;
-  const peakPass = willBeLevelled || measuredTP <= truePeakLimit + 0.05;
+  const lufsPass = willBeLevelled || !hasLufsTarget || Math.abs(measuredLufs - targetLufs) <= lufsTolerance();
+  const peakPass = willBeLevelled || measuredTP <= truePeakLimit + tpTolerance();
   return {
     silencePass, loudnessPass: lufsPass && peakPass, lufsPass, peakPass,
     willBeLevelled, hasLufsTarget, targetLufs, truePeakLimit,
@@ -1644,6 +1670,10 @@ export function getAppState() {
     get qcTruePeak() { return qcTruePeak; },
     get qcMode() { return qcMode; },
     get qcCheckSilence() { return qcCheckSilence; },
+    get qcSpec() { return qcSpec; },
+    setQcSpec,
+    get qcUnit() { return specDef().unit; },
+    get qcLufsTol() { return lufsTolerance(); },
     get qcCheckClicks() { return qcCheckClicks; },
     setQcCheckClicks,
     get qcClickSensitivity() { return qcClickSensitivity; },

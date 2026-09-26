@@ -148,6 +148,10 @@
     qcTruePeak={app.qcTruePeak}
     qcMode={app.qcMode}
     qcCheckSilence={app.qcCheckSilence}
+    qcSpec={app.qcSpec}
+    onQcSpecChange={app.setQcSpec}
+    qcUnit={app.qcUnit}
+    qcLufsTol={app.qcLufsTol}
     qcCheckClicks={app.qcCheckClicks}
     qcClickSensitivity={app.qcClickSensitivity}
     onQcClicksChange={app.setQcCheckClicks}
@@ -214,6 +218,9 @@
     onQcTruePeakChange={app.setQcTruePeak}
     onQcModeChange={app.setQcMode}
     onQcSilenceChange={app.setQcCheckSilence}
+    qcSpec={app.qcSpec}
+    onQcSpecChange={app.setQcSpec}
+    qcUnit={app.qcUnit}
     onRunQc={app.runBatchQc}
     onNormalizeAll={app.normalizeAllNow}
     onClockAll={app.clockAllNow}

@@ -206,7 +206,7 @@ export function unfixableIssues(m, spec, chain, willNormalise) {
   if (willNormalise && spec.mode !== 'peak' && isFinite(m.lufs) && isFinite(m.tp)) {
     const gain = spec.targetLufs - m.lufs;
     const predictedTp = m.tp + gain;
-    if (predictedTp > spec.truePeak + 0.05) {
+    if (predictedTp > spec.truePeak + (spec.tpTol ?? 0.05)) {
       issues.push(`At ${spec.targetLufs} LUFS the true peak would reach ${predictedTp.toFixed(1)} dBTP, over the ${spec.truePeak} dBTP ceiling — it will be held at the ceiling and land ${(predictedTp - spec.truePeak).toFixed(1)} dB under target`);
     }
   }

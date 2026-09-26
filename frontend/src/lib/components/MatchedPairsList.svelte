@@ -31,6 +31,9 @@
     onQcTruePeakChange,
     onQcModeChange,
     onQcSilenceChange,
+    qcSpec = 'r128',
+    onQcSpecChange,
+    qcUnit = 'LUFS',
     onRunQc,
     onNormalizeAll,
     onClockAll,
@@ -164,6 +167,12 @@
             >PEAK</button>
           </div>
 
+          <select class="qc-spec" value={qcSpec} disabled={busy} onchange={(e) => onQcSpecChange(e.target.value)}
+            title="Delivery spec: sets the targets and the tolerances QC judges with. Typing your own numbers makes it CUSTOM.">
+            <option value="r128">EBU R128</option>
+            <option value="a85">ATSC A/85</option>
+            <option value="custom">CUSTOM</option>
+          </select>
           <span class="qc-target" class:dimmed={qcMode === 'peak'}>
             <input
               class="qc-input"
@@ -174,7 +183,7 @@
               onchange={(e) => onQcTargetChange(parseFloat(e.target.value))}
               title={qcMode === 'peak' ? 'Loudness is ignored in Peak mode' : 'Loudness target for the whole batch'}
             />
-            <span class="qc-unit">LUFS</span>
+            <span class="qc-unit">{qcUnit}</span>
           </span>
           <span class="qc-target" class:primary={qcMode === 'peak'}>
             <input
@@ -567,6 +576,7 @@
   }
   .qc-input:focus { outline: none; border-color: var(--neon-cyan); }
 
+  .qc-spec { font-size: 12px; font-weight: 700; letter-spacing: 0.05em; padding: 4px 24px 4px 10px; color: var(--text-primary); }
   .qc-unit {
     font-family: var(--font-mono);
     font-size: 10px;

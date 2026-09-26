@@ -20,6 +20,10 @@
     qcTruePeak = -1.0,
     qcMode = 'lufs',
     qcCheckSilence = false,
+    qcSpec = 'r128',
+    onQcSpecChange,
+    qcUnit = 'LUFS',
+    qcLufsTol = 1,
     qcCheckClicks = false,
     qcClickSensitivity = 'normal',
     onQcClicksChange,
@@ -182,12 +186,21 @@
           title="True Peak: set every file's peak to the dBTP target — loudness ignored">PEAK</button>
       </div>
 
+      <label class="ctl" title="Delivery spec: sets the targets and the tolerances QC judges with. Typing your own numbers makes it CUSTOM.">
+        <span class="ctl-label">SPEC</span>
+        <select class="sens" value={qcSpec} disabled={busy} onchange={(e) => onQcSpecChange(e.target.value)}>
+          <option value="r128">EBU R128</option>
+          <option value="a85">ATSC A/85</option>
+          <option value="custom">CUSTOM</option>
+        </select>
+      </label>
+
       <span class="target" class:dimmed={qcMode === 'peak'}>
         <input class="num" type="number" step="0.5" value={qcTargetLufs}
           disabled={busy || qcMode === 'peak'}
           onchange={(e) => onQcTargetChange(parseFloat(e.target.value))}
-          title={qcMode === 'peak' ? 'Loudness is ignored in Peak mode' : 'Loudness target for the batch'} />
-        <span class="unit">LUFS</span>
+          title={qcMode === 'peak' ? 'Loudness is ignored in Peak mode' : `Loudness target for the batch, judged ±${qcLufsTol} LU`} />
+        <span class="unit">{qcUnit}</span>
       </span>
       <span class="target" class:primary={qcMode === 'peak'}>
         <input class="num" type="number" step="0.5" value={qcTruePeak} disabled={busy}
@@ -221,7 +234,7 @@
           <thead>
             <tr>
               <th class="t-file">FILE</th>
-              <th class="t-num">LUFS</th>
+              <th class="t-num">{qcUnit}</th>
               <th class="t-num">dBTP</th>
               <th class="t-tag">STEREO</th>
               <th class="t-tag">6 Fr</th>
@@ -243,7 +256,7 @@
                 <tr class:row-fail={!r.pass}>
                   <td class="t-file" title={pair.audio.path}>{pair.audio.filename}</td>
                   <td class="t-num" class:bad={!r.lufsPass} class:dim={r.mode === 'peak'}
-                    title={r.mode === 'peak' ? 'Loudness is not judged in Peak mode' : `Target ${qcTargetLufs} LUFS (±1)`}>
+                    title={r.mode === 'peak' ? 'Loudness is not judged in Peak mode' : `Target ${qcTargetLufs} ${qcUnit} (±${qcLufsTol} LU)`}>
                     {fmt(r.measuredLufs)}
                   </td>
                   <td class="t-num" class:bad={!r.peakPass}
