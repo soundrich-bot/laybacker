@@ -104,8 +104,9 @@
 
   .drop-text {
     font-family: var(--font-display);
+    font-weight: 700;
     font-size: 17px;
-    letter-spacing: 0.15em;
+    letter-spacing: 0.04em;
     color: var(--text-secondary);
     margin-bottom: var(--gap-xs);
   }
@@ -123,10 +124,11 @@
   }
 
   .drop-formats {
-    font-family: var(--font-mono);
+    font-family: var(--font-text);
+    font-weight: 500;
     font-size: 11px;
     color: var(--text-muted);
-    letter-spacing: 0.05em;
+    letter-spacing: 0;
   }
 
   .spinner {
@@ -164,12 +166,12 @@
   }
   .drop-zone.compact.dragging { transform: none; }
 
-  :global(:root.tame) .drop-zone.dragging {
+  :global(:root.tame) .drop-zone.dragging, :global(:root.porcelain) .drop-zone.dragging {
     background: rgba(90, 138, 122, 0.06);
     box-shadow: none;
   }
 
-  :global(:root.tame) .dragging .drop-text {
+  :global(:root.tame) .dragging .drop-text, :global(:root.porcelain) .dragging .drop-text {
     text-shadow: none;
   }
 </style>

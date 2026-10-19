@@ -48,7 +48,8 @@
   }
 
   .clear-btn {
-    font-family: var(--font-mono);
+    font-family: var(--font-text);
+    font-weight: 500;
     font-size: 11px;
     letter-spacing: 0.1em;
     color: var(--text-muted);
@@ -79,8 +80,9 @@
 
   .process-btn {
     font-family: var(--font-display);
+    font-weight: 700;
     font-size: 17px;
-    letter-spacing: 0.2em;
+    letter-spacing: 0.04em;
     color: var(--bg-dark);
     background: var(--neon-green);
     border: none;
@@ -115,8 +117,9 @@
 
   .cancel-btn {
     font-family: var(--font-display);
+    font-weight: 700;
     font-size: 17px;
-    letter-spacing: 0.2em;
+    letter-spacing: 0.04em;
     color: #fff;
     background: var(--neon-pink);
     border: none;
@@ -136,21 +139,21 @@
       0 0 80px rgba(255, 46, 99, 0.2);
   }
 
-  :global(:root.tame) .process-btn {
+  :global(:root.tame) .process-btn, :global(:root.porcelain) .process-btn {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     color: #fff7f0;
   }
 
-  :global(:root.tame) .process-btn:hover:not(:disabled) {
+  :global(:root.tame) .process-btn:hover:not(:disabled), :global(:root.porcelain) .process-btn:hover:not(:disabled) {
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
   }
 
-  :global(:root.tame) .cancel-btn {
+  :global(:root.tame) .cancel-btn, :global(:root.porcelain) .cancel-btn {
     color: #fff7f0;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   }
 
-  :global(:root.tame) .cancel-btn:hover {
+  :global(:root.tame) .cancel-btn:hover, :global(:root.porcelain) .cancel-btn:hover {
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
   }
 </style>

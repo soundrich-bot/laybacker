@@ -395,8 +395,9 @@
 
   .title {
     font-family: var(--font-display);
+    font-weight: 700;
     font-size: 14px;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.04em;
     color: var(--neon-cyan);
     margin-bottom: var(--gap-md);
   }
@@ -417,7 +418,8 @@
   .preview.grabbing { cursor: grabbing; border-color: var(--neon-cyan); }
 
   .scrub { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
-  .scrub-label { font-family: var(--font-display); font-size: 9px; letter-spacing: 0.12em; color: var(--text-muted); flex-shrink: 0; }
+  .scrub-label { font-family: var(--font-display);
+    font-weight: 700; font-size: 9px; letter-spacing: 0.04em; color: var(--text-muted); flex-shrink: 0; }
   .scrub-range { flex: 1; accent-color: var(--neon-cyan); cursor: pointer; }
   .scrub-readout { font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: var(--text-secondary); min-width: 48px; text-align: right; }
 
@@ -426,7 +428,8 @@
     align-items: center;
     justify-content: space-between;
     gap: 10px;
-    font-family: var(--font-mono);
+    font-family: var(--font-text);
+    font-weight: 500;
     font-size: 10.5px;
     color: var(--text-muted);
     margin-bottom: var(--gap-md);
@@ -434,8 +437,9 @@
   }
   .link-btn {
     font-family: var(--font-display);
+    font-weight: 700;
     font-size: 9px;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.04em;
     color: var(--neon-cyan);
     background: none;
     border: none;
@@ -461,8 +465,10 @@
     transition: all 0.15s;
     box-shadow: var(--cap-shadow);
   }
-  .mode-name { font-family: var(--font-display); font-size: 10px; letter-spacing: 0.1em; color: var(--text-muted); }
-  .mode-desc { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); opacity: 0.8; }
+  .mode-name { font-family: var(--font-display);
+    font-weight: 700; font-size: 10px; letter-spacing: 0.04em; color: var(--text-muted); }
+  .mode-desc { font-family: var(--font-text);
+    font-weight: 500; font-size: 10px; color: var(--text-muted); opacity: 0.8; }
   .mode-btn:hover:not(.active) { border-color: rgba(8, 247, 254, 0.5); }
   .mode-btn.active { border-color: var(--neon-cyan); background: rgba(8, 247, 254, 0.08); }
   .mode-btn.active .mode-name { color: var(--neon-cyan); }
@@ -471,7 +477,8 @@
   .slate-text {
     width: 100%;
     resize: vertical;
-    font-family: var(--font-mono);
+    font-family: var(--font-text);
+    font-weight: 500;
     font-size: 13px;
     line-height: 1.5;
     color: var(--text-primary);
@@ -498,8 +505,9 @@
     width: 64px;
     flex-shrink: 0;
     font-family: var(--font-display);
+    font-weight: 700;
     font-size: 10px;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.04em;
     color: var(--text-muted);
   }
   .seg {
@@ -510,8 +518,9 @@
   }
   .seg-btn {
     font-family: var(--font-display);
+    font-weight: 700;
     font-size: 10px;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.04em;
     color: var(--text-muted);
     background: var(--cap-face);
     border: 1px solid var(--border-color);
@@ -563,7 +572,8 @@
   .duration-row { flex-wrap: nowrap; gap: 8px; }
   .duration-part { display: inline-flex; align-items: center; gap: 5px; }
   .duration-plus, .duration-total {
-    font-family: var(--font-mono);
+    font-family: var(--font-text);
+    font-weight: 500;
     font-size: 11px;
     color: var(--text-muted);
   }
@@ -606,13 +616,15 @@
   }
   .duration-input:focus { outline: none; border-color: var(--neon-cyan); }
   .duration-unit {
-    font-family: var(--font-mono);
+    font-family: var(--font-text);
+    font-weight: 500;
     font-size: 11px;
     color: var(--text-muted);
   }
 
   .note {
-    font-family: var(--font-mono);
+    font-family: var(--font-text);
+    font-weight: 500;
     font-size: 11px;
     line-height: 1.55;
     color: var(--text-muted);
@@ -627,10 +639,10 @@
   .spacer { flex: 1; }
 
   .cancel, .remove {
-    font-family: var(--font-mono);
+    font-family: var(--font-text);
     font-size: 11px;
     font-weight: 700;
-    letter-spacing: 0.05em;
+    letter-spacing: 0;
     color: var(--text-muted);
     background: var(--cap-face);
     border: 1px solid var(--border-color);
@@ -647,8 +659,9 @@
 
   .apply {
     font-family: var(--font-display);
+    font-weight: 700;
     font-size: 11px;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.04em;
     color: var(--bg-dark);
     background: var(--neon-cyan);
     border: 1px solid var(--neon-cyan);

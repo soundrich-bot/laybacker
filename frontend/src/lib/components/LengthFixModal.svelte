@@ -90,14 +90,16 @@
 
   .title {
     font-family: var(--font-display);
+    font-weight: 700;
     font-size: 14px;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.04em;
     color: var(--neon-orange);
     margin-bottom: var(--gap-md);
   }
 
   .body {
-    font-family: var(--font-mono);
+    font-family: var(--font-text);
+    font-weight: 500;
     font-size: 12.5px;
     line-height: 1.6;
     color: var(--text-secondary);
@@ -140,18 +142,19 @@
 
   .opt-title {
     font-family: var(--font-display);
+    font-weight: 700;
     font-size: 13px;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.04em;
     color: var(--text-primary);
     display: flex;
     align-items: center;
     gap: 8px;
   }
   .opt-tag {
-    font-family: var(--font-mono);
+    font-family: var(--font-text);
     font-size: 9px;
     font-weight: 700;
-    letter-spacing: 0.06em;
+    letter-spacing: 0;
     text-transform: uppercase;
     color: var(--bg-dark);
     background: var(--neon-cyan);
@@ -159,7 +162,8 @@
     border-radius: 999px;
   }
   .opt-desc {
-    font-family: var(--font-mono);
+    font-family: var(--font-text);
+    font-weight: 500;
     font-size: 11.5px;
     line-height: 1.5;
     color: var(--text-secondary);
@@ -170,10 +174,10 @@
     justify-content: flex-end;
   }
   .cancel {
-    font-family: var(--font-mono);
+    font-family: var(--font-text);
     font-size: 11px;
     font-weight: 700;
-    letter-spacing: 0.05em;
+    letter-spacing: 0;
     color: var(--text-muted);
     background: transparent;
     border: 1px solid var(--border-color);

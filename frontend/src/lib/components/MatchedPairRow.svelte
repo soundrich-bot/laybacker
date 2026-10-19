@@ -888,14 +888,16 @@
 
   .confirm-title {
     font-family: var(--font-display);
+    font-weight: 700;
     font-size: 14px;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.04em;
     color: var(--neon-orange);
     margin-bottom: var(--gap-md);
   }
 
   .confirm-body {
-    font-family: var(--font-mono);
+    font-family: var(--font-text);
+    font-weight: 500;
     font-size: 12px;
     line-height: 1.6;
     color: var(--text-secondary);
@@ -914,10 +916,10 @@
   }
 
   .confirm-cancel {
-    font-family: var(--font-mono);
+    font-family: var(--font-text);
     font-size: 11px;
     font-weight: 700;
-    letter-spacing: 0.05em;
+    letter-spacing: 0;
     color: var(--text-muted);
     background: var(--cap-face);
     border: 1px solid var(--border-color);
@@ -938,8 +940,9 @@
 
   .confirm-apply {
     font-family: var(--font-display);
+    font-weight: 700;
     font-size: 11px;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.04em;
     color: var(--bg-dark);
     background: var(--neon-orange);
     border: 1px solid var(--neon-orange);
@@ -981,11 +984,11 @@
     border-color: rgba(255, 46, 99, 0.3);
   }
 
-  :global(:root.tame) .pair-card.complete {
+  :global(:root.tame) .pair-card.complete, :global(:root.porcelain) .pair-card.complete {
     border-color: rgba(106, 154, 90, 0.4);
   }
 
-  :global(:root.tame) .pair-card.failed {
+  :global(:root.tame) .pair-card.failed, :global(:root.porcelain) .pair-card.failed {
     border-color: rgba(224, 122, 95, 0.4);
   }
 
@@ -1035,8 +1038,9 @@
 
   .audio-only-badge {
     font-family: var(--font-display);
+    font-weight: 700;
     font-size: 9px;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.04em;
     color: var(--neon-cyan);
     background: rgba(8, 247, 254, 0.08);
     border: 1px solid rgba(8, 247, 254, 0.25);
@@ -1089,9 +1093,10 @@
   }
 
   .file-spec {
-    font-family: var(--font-mono);
+    font-family: var(--font-text);
+    font-weight: 500;
     font-size: 11.5px;
-    letter-spacing: 0.04em;
+    letter-spacing: 0;
     color: var(--text-muted);
     white-space: nowrap;
     flex-shrink: 0;
@@ -1102,9 +1107,10 @@
   }
 
   .file-name {
-    font-family: var(--font-mono);
-    font-size: 12px;
-    color: var(--text-secondary);
+    font-family: var(--font-text);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
     word-break: break-all;
     line-height: 1.3;
   }
@@ -1150,7 +1156,7 @@
     box-shadow: 0 0 16px rgba(255, 159, 28, 0.7);
   }
 
-  :global(:root.tame) .duration-warn {
+  :global(:root.tame) .duration-warn, :global(:root.porcelain) .duration-warn {
     box-shadow: none;
   }
 
@@ -1168,8 +1174,9 @@
     background: var(--cap-face);
     color: var(--text-muted);
     font-family: var(--font-display);
+    font-weight: 700;
     font-size: 10px;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.04em;
     cursor: pointer;
     transition: all 0.2s;
     box-shadow: var(--cap-shadow);
@@ -1201,8 +1208,9 @@
     background: var(--cap-face);
     color: var(--text-muted);
     font-family: var(--font-display);
+    font-weight: 700;
     font-size: 10px;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.04em;
     cursor: pointer;
     transition: all 0.2s;
     box-shadow: var(--cap-shadow);
@@ -1225,7 +1233,8 @@
   }
 
   .norm-settings-btn {
-    font-family: var(--font-mono);
+    font-family: var(--font-text);
+    font-weight: 500;
     font-size: 11px;
     color: var(--neon-yellow);
     background: rgba(237, 255, 33, 0.08);
@@ -1269,8 +1278,9 @@
     background: var(--cap-face);
     color: var(--text-muted);
     font-family: var(--font-display);
+    font-weight: 700;
     font-size: 10px;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.04em;
     cursor: pointer;
     transition: all 0.2s;
     flex-shrink: 0;
@@ -1322,7 +1332,8 @@
   .silence-checking {
     flex-shrink: 0;
     color: var(--text-muted);
-    font-family: var(--font-mono);
+    font-family: var(--font-text);
+    font-weight: 500;
     font-size: 10px;
   }
 
@@ -1343,7 +1354,7 @@
     background: rgba(255, 46, 99, 0.1);
   }
 
-  :global(:root.tame) .remove-btn:hover {
+  :global(:root.tame) .remove-btn:hover, :global(:root.porcelain) .remove-btn:hover {
     background: rgba(224, 122, 95, 0.12);
   }
 
@@ -1361,8 +1372,9 @@
 
   .output-label {
     font-family: var(--font-display);
+    font-weight: 700;
     font-size: 9px;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.04em;
     color: var(--text-muted);
     flex-shrink: 0;
   }
@@ -1392,9 +1404,9 @@
   }
 
   .output-name-text {
-    font-family: var(--font-mono);
+    font-family: var(--font-text);
     font-size: 14px;
-    font-weight: 700;
+    font-weight: 600;
     color: var(--text-primary);
     white-space: nowrap;
     overflow: hidden;
@@ -1406,14 +1418,14 @@
 
   .output-ext {
     flex-shrink: 0;
-    font-family: var(--font-mono);
+    font-family: var(--font-text);
     font-size: 14px;
-    font-weight: 700;
+    font-weight: 600;
     color: var(--neon-cyan);
     line-height: 1.3;
   }
 
-  :global(:root.tame) .output-ext {
+  :global(:root.tame) .output-ext, :global(:root.porcelain) .output-ext {
     color: var(--neon-green);
   }
 
@@ -1434,8 +1446,9 @@
     align-items: center;
     gap: 5px;
     font-family: var(--font-display);
+    font-weight: 700;
     font-size: 10px;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.04em;
     color: var(--neon-cyan);
     background: var(--cap-face);
     border: 1px solid rgba(8, 247, 254, 0.45);
@@ -1466,7 +1479,7 @@
     width: 100%;
     font-size: 14px;
     font-weight: 700;
-    font-family: var(--font-mono);
+    font-family: var(--font-text);
     padding: 4px 10px;
     height: 30px;
     box-sizing: border-box;
@@ -1511,7 +1524,8 @@
   }
 
   .progress-label {
-    font-family: var(--font-mono);
+    font-family: var(--font-text);
+    font-weight: 500;
     font-size: 10px;
     color: var(--text-muted);
     white-space: nowrap;
@@ -1527,10 +1541,10 @@
     display: flex;
     align-items: center;
     gap: 4px;
-    font-family: var(--font-mono);
+    font-family: var(--font-text);
     font-size: 11px;
     font-weight: 700;
-    letter-spacing: 0.05em;
+    letter-spacing: 0;
     color: var(--neon-cyan);
     background: var(--cap-face);
     border: 1px solid rgba(8, 247, 254, 0.4);
@@ -1556,7 +1570,7 @@
   }
 
   .result-badge {
-    font-family: var(--font-mono);
+    font-family: var(--font-text);
     font-size: 11px;
     font-weight: 700;
     padding: 4px 10px;
@@ -1575,11 +1589,11 @@
     color: var(--neon-pink);
   }
 
-  :global(:root.tame) .result-badge.success {
+  :global(:root.tame) .result-badge.success, :global(:root.porcelain) .result-badge.success {
     background: rgba(106, 154, 90, 0.15);
   }
 
-  :global(:root.tame) .result-badge.error {
+  :global(:root.tame) .result-badge.error, :global(:root.porcelain) .result-badge.error {
     background: rgba(224, 122, 95, 0.15);
   }
 
@@ -1589,7 +1603,8 @@
     flex-direction: column;
     gap: var(--gap-md);
     padding: var(--gap-md) var(--gap-lg);
-    font-family: var(--font-mono);
+    font-family: var(--font-text);
+    font-weight: 500;
     font-size: 12px;
     color: var(--text-secondary);
     background: rgba(237, 255, 33, 0.03);
@@ -1605,7 +1620,8 @@
     flex-direction: column;
     gap: var(--gap-xs);
     padding: var(--gap-md) var(--gap-lg);
-    font-family: var(--font-mono);
+    font-family: var(--font-text);
+    font-weight: 500;
     font-size: 12px;
     color: var(--text-secondary);
     background: rgba(255, 159, 28, 0.05);
@@ -1619,8 +1635,9 @@
     align-items: center;
     gap: 6px;
     font-family: var(--font-display);
+    font-weight: 700;
     font-size: 11px;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.04em;
     color: var(--neon-orange);
   }
   .silence-detail-list {
@@ -1717,8 +1734,9 @@
   .name-menu button {
     text-align: left;
     font-family: var(--font-display);
+    font-weight: 700;
     font-size: 10px;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.04em;
     color: var(--text-secondary);
     background: transparent;
     border: none;
@@ -1740,10 +1758,10 @@
   .clock-proceed {
     margin-top: 8px;
     align-self: flex-start;
-    font-family: var(--font-mono);
+    font-family: var(--font-text);
     font-size: 11px;
     font-weight: 700;
-    letter-spacing: 0.04em;
+    letter-spacing: 0;
     color: var(--neon-orange);
     background: var(--cap-face);
     border: 1px solid rgba(255, 159, 28, 0.5);
@@ -1776,8 +1794,9 @@
 
   .mode-btn {
     font-family: var(--font-display);
+    font-weight: 700;
     font-size: 10px;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.04em;
     padding: 6px 14px;
     border: none;
     border-radius: 3px;
@@ -1817,7 +1836,7 @@
   }
 
   .preset-btn {
-    font-family: var(--font-mono);
+    font-family: var(--font-text);
     font-size: 12px;
     font-weight: 700;
     padding: 6px 12px;
@@ -1870,8 +1889,9 @@
 
   .custom-label {
     font-family: var(--font-display);
+    font-weight: 700;
     font-size: 10px;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.04em;
     color: var(--neon-yellow);
     opacity: 0.7;
     white-space: nowrap;
@@ -1902,7 +1922,8 @@
 
   /* Measured result display */
   .norm-measured {
-    font-family: var(--font-mono);
+    font-family: var(--font-text);
+    font-weight: 500;
     font-size: 11px;
     color: var(--neon-green);
     padding: var(--gap-xs) var(--gap-sm);
@@ -1912,19 +1933,19 @@
     width: fit-content;
   }
 
-  :global(:root.tame) .norm-settings-btn {
+  :global(:root.tame) .norm-settings-btn, :global(:root.porcelain) .norm-settings-btn {
     color: #8b6914;
     background: rgba(201, 162, 39, 0.12);
     border-color: rgba(201, 162, 39, 0.4);
     font-weight: 600;
   }
 
-  :global(:root.tame) .norm-detail-row {
+  :global(:root.tame) .norm-detail-row, :global(:root.porcelain) .norm-detail-row {
     background: rgba(201, 162, 39, 0.06);
     border-color: rgba(201, 162, 39, 0.2);
   }
 
-  :global(:root.tame) .norm-measured {
+  :global(:root.tame) .norm-measured, :global(:root.porcelain) .norm-measured {
     background: rgba(106, 154, 90, 0.08);
     border-color: rgba(106, 154, 90, 0.2);
   }

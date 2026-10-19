@@ -167,7 +167,7 @@
   }
 
   .logo {
-    font-family: var(--font-display);
+    font-family: var(--font-logo);
     font-size: 29px;
     letter-spacing: 0.15em;
     color: var(--neon-pink);
@@ -207,8 +207,9 @@
 
   .about-version {
     font-family: var(--font-display);
+    font-weight: 700;
     font-size: 14px;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.04em;
     color: var(--neon-cyan);
   }
 
@@ -219,10 +220,11 @@
   }
 
   .about-copy {
-    font-family: var(--font-mono);
+    font-family: var(--font-text);
+    font-weight: 500;
     font-size: 12px;
     color: var(--text-secondary);
-    letter-spacing: 0.03em;
+    letter-spacing: 0;
   }
 
   .about-note {
@@ -239,8 +241,9 @@
     gap: 6px;
     width: 100%;
     font-family: var(--font-display);
+    font-weight: 700;
     font-size: 11px;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.04em;
     color: var(--neon-pink);
     background: rgba(255, 46, 99, 0.08);
     border: 1px solid rgba(255, 46, 99, 0.3);
@@ -256,12 +259,12 @@
     box-shadow: 0 0 10px rgba(255, 46, 99, 0.15);
   }
 
-  :global(:root.tame) .donate-btn {
+  :global(:root.tame) .donate-btn, :global(:root.porcelain) .donate-btn {
     background: rgba(224, 122, 95, 0.1);
     border-color: rgba(224, 122, 95, 0.35);
   }
 
-  :global(:root.tame) .donate-btn:hover {
+  :global(:root.tame) .donate-btn:hover, :global(:root.porcelain) .donate-btn:hover {
     background: rgba(224, 122, 95, 0.18);
     box-shadow: none;
   }
@@ -273,8 +276,9 @@
     gap: 6px;
     width: 100%;
     font-family: var(--font-display);
+    font-weight: 700;
     font-size: 11px;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.04em;
     color: var(--neon-cyan);
     background: rgba(0, 255, 255, 0.06);
     border: 1px solid rgba(0, 255, 255, 0.25);
@@ -290,22 +294,23 @@
     box-shadow: 0 0 10px rgba(0, 255, 255, 0.12);
   }
 
-  :global(:root.tame) .feedback-btn {
+  :global(:root.tame) .feedback-btn, :global(:root.porcelain) .feedback-btn {
     background: rgba(90, 138, 122, 0.08);
     border-color: rgba(90, 138, 122, 0.3);
   }
 
-  :global(:root.tame) .feedback-btn:hover {
+  :global(:root.tame) .feedback-btn:hover, :global(:root.porcelain) .feedback-btn:hover {
     background: rgba(90, 138, 122, 0.15);
     box-shadow: none;
   }
 
   .about-tech {
-    font-family: var(--font-mono);
+    font-family: var(--font-text);
+    font-weight: 500;
     font-size: 10px;
     color: var(--text-muted);
     opacity: 0.6;
-    letter-spacing: 0.05em;
+    letter-spacing: 0;
   }
 
   .about-disclaimer {
@@ -317,7 +322,8 @@
   }
 
   .tagline {
-    font-family: var(--font-mono);
+    font-family: var(--font-text);
+    font-weight: 500;
     font-size: 12px;
     color: var(--text-muted);
     letter-spacing: 0.1em;
@@ -386,7 +392,7 @@
   }
 
   .help-close {
-    font-family: var(--font-mono);
+    font-family: var(--font-text);
     font-size: 12px;
     font-weight: 700;
     color: var(--text-muted);
@@ -403,8 +409,9 @@
 
   .help-title {
     font-family: var(--font-display);
+    font-weight: 700;
     font-size: 13px;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.04em;
     color: var(--neon-cyan);
   }
 
@@ -467,18 +474,18 @@
     border: 1px solid rgba(255, 46, 99, 0.3);
   }
 
-  :global(:root.tame) .status-badge.good {
+  :global(:root.tame) .status-badge.good, :global(:root.porcelain) .status-badge.good {
     background: rgba(106, 154, 90, 0.15);
     border-color: rgba(106, 154, 90, 0.3);
   }
 
-  :global(:root.tame) .status-badge.bad {
+  :global(:root.tame) .status-badge.bad, :global(:root.porcelain) .status-badge.bad {
     background: rgba(224, 122, 95, 0.15);
     border-color: rgba(224, 122, 95, 0.3);
   }
 
   :global(:root.tame) .about-panel,
-  :global(:root.tame) .help-panel {
+  :global(:root.tame) .help-panel, :global(:root.porcelain) .help-panel {
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
   }
 

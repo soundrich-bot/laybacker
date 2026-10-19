@@ -109,7 +109,8 @@
     background: linear-gradient(90deg, rgba(8,247,254,0.10), rgba(57,255,20,0.06));
     border-bottom: 1px solid rgba(8,247,254,0.3);
     padding: 8px var(--gap-lg);
-    font-family: var(--font-mono);
+    font-family: var(--font-text);
+    font-weight: 500;
     font-size: 12px;
     color: var(--text-primary);
   }
@@ -129,7 +130,7 @@
   .btn-update {
     font-family: var(--font-display);
     font-size: 11px;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.04em;
     color: var(--bg-dark);
     background: var(--neon-cyan);
     border: none;
@@ -140,7 +141,8 @@
   }
   .btn-update:hover { filter: brightness(1.1); }
   .btn-later {
-    font-family: var(--font-mono);
+    font-family: var(--font-text);
+    font-weight: 500;
     font-size: 11px;
     color: var(--text-muted);
     background: none;

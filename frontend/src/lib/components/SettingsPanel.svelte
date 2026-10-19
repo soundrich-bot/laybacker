@@ -2,8 +2,8 @@
   let {
     settings,
     onSettingsChange,
-    tameMode = false,
-    onToggleTame,
+    theme = 'neon',
+    onThemeChange,
     timestampFormat = 'YYYYMMDD_HHmm',
     onTimestampFormatChange,
     proresProfile = 'lt',
@@ -230,14 +230,13 @@
     </button>
     {#if showSettings}
       <div class="cog-dropdown">
-        <button
-          class="dropdown-item"
-          class:active={tameMode}
-          onclick={onToggleTame}
-          title="Reduce neon intensity for sensitive eyes"
-        >
-          MY EYES
-        </button>
+        <span class="dropdown-label" title="How the app looks">THEME</span>
+        <button class="dropdown-item" class:active={theme === 'neon'} onclick={() => onThemeChange('neon')}
+          title="The original: dark with neon accents">NEON</button>
+        <button class="dropdown-item" class:active={theme === 'tame'} onclick={() => onThemeChange('tame')}
+          title="Warm cream, softer colour — easier on the eyes">MY EYES</button>
+        <button class="dropdown-item" class:active={theme === 'porcelain'} onclick={() => onThemeChange('porcelain')}
+          title="White, high contrast, clear colour — for clarity">PORCELAIN</button>
         <div class="dropdown-divider"></div>
         <span class="dropdown-label">DATE FORMAT</span>
         {#each formats as fmt}
@@ -321,8 +320,9 @@
 
   .setting-label {
     font-family: var(--font-display);
+    font-weight: 700;
     font-size: 12.5px;
-    letter-spacing: 0.15em;
+    letter-spacing: 0.04em;
     color: var(--text-muted);
     min-width: 50px;
   }
@@ -337,7 +337,7 @@
   }
 
   .option-btn {
-    font-family: var(--font-mono);
+    font-family: var(--font-text);
     font-size: 12px;
     font-weight: 700;
     padding: 4px 12px;
@@ -347,7 +347,7 @@
     color: var(--text-muted);
     cursor: pointer;
     transition: all 0.15s;
-    letter-spacing: 0.05em;
+    letter-spacing: 0;
   }
 
   .option-btn.active {
@@ -376,7 +376,7 @@
     color: var(--neon-pink);
     border-color: rgba(255, 46, 99, 0.45);
   }
-  :global(:root.tame) .spec-select.changed {
+  :global(:root.tame) .spec-select.changed, :global(:root.porcelain) .spec-select.changed {
     color: var(--neon-green);
     border-color: rgba(90, 138, 122, 0.45);
   }
@@ -387,10 +387,10 @@
   }
 
   .output-format {
-    font-family: var(--font-mono);
+    font-family: var(--font-text);
     font-size: 12px;
     font-weight: 700;
-    letter-spacing: 0.05em;
+    letter-spacing: 0;
     text-transform: uppercase;
     color: var(--neon-cyan);
     background: rgba(8, 247, 254, 0.08);
@@ -400,7 +400,7 @@
     cursor: help;
   }
 
-  :global(:root.tame) .output-format {
+  :global(:root.tame) .output-format, :global(:root.porcelain) .output-format {
     color: var(--neon-green);
     background: rgba(90, 138, 122, 0.1);
     border-color: rgba(90, 138, 122, 0.3);
@@ -417,9 +417,9 @@
     border: 1px solid var(--border-accent);
     border-radius: var(--radius-sm);
     padding: 8px 10px;
-    font-family: var(--font-mono);
+    font-family: var(--font-text);
     font-size: 11px;
-    font-weight: 400;
+    font-weight: 500;
     letter-spacing: normal;
     line-height: 1.5;
     text-transform: none;
@@ -483,7 +483,7 @@
     border-color: rgba(8, 247, 254, 0.3);
   }
 
-  :global(:root.tame) .cog-btn.open {
+  :global(:root.tame) .cog-btn.open, :global(:root.porcelain) .cog-btn.open {
     border-color: rgba(90, 138, 122, 0.35);
   }
 
@@ -503,8 +503,9 @@
   .dropdown-label {
     display: block;
     font-family: var(--font-display);
+    font-weight: 700;
     font-size: 11px;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.04em;
     color: var(--text-secondary);
     padding: 6px 12px 3px;
   }
@@ -519,10 +520,10 @@
     display: block;
     width: 100%;
     text-align: left;
-    font-family: var(--font-mono);
+    font-family: var(--font-text);
     font-size: 13px;
     font-weight: 700;
-    letter-spacing: 0.05em;
+    letter-spacing: 0;
     padding: 5px 12px;
     border-radius: 3px;
     border: none;
@@ -542,7 +543,7 @@
     color: var(--neon-cyan);
   }
 
-  :global(:root.tame) .dropdown-item.active {
+  :global(:root.tame) .dropdown-item.active, :global(:root.porcelain) .dropdown-item.active {
     background: rgba(90, 138, 122, 0.1);
   }
 </style>

@@ -40,21 +40,24 @@
 
   const app = getAppState();
   let isDraggingOver = $state(false);
-  let tameMode = $state(localStorage.getItem('tameMode') === 'true');
+  // Theme: 'neon' (default), 'tame' (MY EYES, warm cream) or 'porcelain'
+  // (white, clear colour). The old MY EYES on/off setting migrates to 'tame'.
+  const THEMES = ['neon', 'tame', 'porcelain'];
+  let theme = $state(localStorage.getItem('theme')
+    || (localStorage.getItem('tameMode') === 'true' ? 'tame' : 'neon'));
   let timestampFormat = $state(localStorage.getItem('timestampFormat') || 'YYYYMMDD_HHmm');
   let proresProfile = $state(localStorage.getItem('proresProfile') || 'lt');
 
-  // Apply saved tame mode on load
-  if (tameMode) document.documentElement.classList.add('tame');
+  function applyTheme(t) {
+    for (const k of THEMES) document.documentElement.classList.toggle(k, k === t && t !== 'neon');
+  }
+  applyTheme(theme);
 
-  function toggleTame() {
-    tameMode = !tameMode;
-    localStorage.setItem('tameMode', tameMode);
-    if (tameMode) {
-      document.documentElement.classList.add('tame');
-    } else {
-      document.documentElement.classList.remove('tame');
-    }
+  function setTheme(t) {
+    if (!THEMES.includes(t)) return;
+    theme = t;
+    localStorage.setItem('theme', t);
+    applyTheme(t);
   }
 
   onMount(async () => {
@@ -242,8 +245,8 @@
   <SettingsPanel
     settings={app.exportSettings}
     onSettingsChange={handleSettingsChange}
-    {tameMode}
-    onToggleTame={toggleTame}
+    {theme}
+    onThemeChange={setTheme}
     {timestampFormat}
     onTimestampFormatChange={(fmt) => { timestampFormat = fmt; localStorage.setItem('timestampFormat', fmt); }}
     onChooseOutputDir={chooseOutputDir}

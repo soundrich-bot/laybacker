@@ -2,7 +2,7 @@
    LAYBACKER — Indie Pedal / Club Flyer Aesthetic
    ============================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Archivo+Black&family=Inter:wght@400;500;600;700&display=swap');
+@import url('/fonts/fonts.css');
 
 :root {
   /* Core palette — neon on dark, like a gig poster */
@@ -34,7 +34,12 @@
   --border-accent: #4a4a6a;
 
   /* Fonts */
-  --font-display: 'Archivo Black', 'Impact', sans-serif;
+  /* Type: the wordmark keeps Archivo Black; headings are Inter Bold with
+     modest tracking; running text is Inter Medium; Space Mono is for figures,
+     times and filenames only (fixed-width digits line up). */
+  --font-logo: 'Archivo Black', 'Impact', sans-serif;
+  --font-display: 'Inter', -apple-system, sans-serif;
+  --font-text: 'Inter', -apple-system, sans-serif;
   --font-mono: 'Space Mono', 'Courier New', monospace;
   --font-body: 'Inter', -apple-system, sans-serif;
 
@@ -173,18 +178,52 @@ select {
   --cap-shadow-pressed: inset 0 1px 2px rgba(58, 46, 30, 0.2);
 }
 
+/* ============================================
+   "PORCELAIN" — white, cool, high-contrast, clear colour
+   ============================================ */
+:root.porcelain {
+  --bg-dark: #f3f4f7;          /* page */
+  --bg-panel: #ffffff;         /* cards */
+  --bg-panel-hover: #f6f7fa;
+  --bg-raised: #eef0f4;
+
+  /* Clear colour in the same roles the neon theme uses */
+  --neon-pink: #c2185b;        /* primary actions */
+  --neon-yellow: #b8860b;      /* normalise */
+  --neon-cyan: #0b63c4;        /* titles, run, selected */
+  --neon-orange: #d9480f;      /* warnings, fails */
+  --neon-green: #1f7a3a;       /* pass, processing */
+
+  --text-primary: #16181f;
+  --text-secondary: #3f4452;
+  --text-muted: #6b7180;
+
+  --success: #1f7a3a;
+  --warning: #b8860b;
+  --error: #c2185b;
+  --info: #0b63c4;
+
+  --border-color: #d9dce3;
+  --border-accent: #b9bec9;
+
+  --cap-face: linear-gradient(180deg, #ffffff, #f1f3f7);
+  --cap-shadow: 0 1px 0 rgba(22, 24, 31, 0.08);
+  --cap-shadow-hover: 0 2px 0 rgba(22, 24, 31, 0.10);
+  --cap-shadow-pressed: inset 0 1px 2px rgba(22, 24, 31, 0.18);
+}
+
 /* Hide noise overlay in tame mode */
-:root.tame .noise-overlay {
+:root.tame .noise-overlay , :root.porcelain .noise-overlay {
   display: none;
 }
 
 /* Fix selection in tame mode */
-:root.tame ::selection {
+:root.tame ::selection , :root.porcelain ::selection {
   background: var(--neon-pink);
   color: #fff7f0;
 }
 
 /* Scrollbar in tame mode */
-:root.tame ::-webkit-scrollbar-track { background: var(--bg-dark); }
-:root.tame ::-webkit-scrollbar-thumb { background: var(--border-accent); }
-:root.tame ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+:root.tame ::-webkit-scrollbar-track , :root.porcelain ::-webkit-scrollbar-track { background: var(--bg-dark); }
+:root.tame ::-webkit-scrollbar-thumb , :root.porcelain ::-webkit-scrollbar-thumb { background: var(--border-accent); }
+:root.tame ::-webkit-scrollbar-thumb:hover , :root.porcelain ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }

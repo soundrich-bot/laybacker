@@ -279,14 +279,16 @@
 
   .modal-type {
     font-family: var(--font-display);
+    font-weight: 700;
     font-size: 10px;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.04em;
     color: var(--neon-cyan);
     flex-shrink: 0;
   }
 
   .modal-filename {
-    font-family: var(--font-mono);
+    font-family: var(--font-text);
+    font-weight: 500;
     font-size: 12px;
     color: var(--text-secondary);
     flex: 1;
@@ -315,15 +317,15 @@
     background: rgba(255, 46, 99, 0.1);
   }
 
-  :global(:root.tame) .modal-overlay {
+  :global(:root.tame) .modal-overlay, :global(:root.porcelain) .modal-overlay {
     background: rgba(0, 0, 0, 0.5);
   }
 
-  :global(:root.tame) .modal-content {
+  :global(:root.tame) .modal-content, :global(:root.porcelain) .modal-content {
     box-shadow: 0 16px 64px rgba(0, 0, 0, 0.15);
   }
 
-  :global(:root.tame) .close-btn:hover {
+  :global(:root.tame) .close-btn:hover, :global(:root.porcelain) .close-btn:hover {
     border-color: rgba(224, 122, 95, 0.3);
     background: rgba(224, 122, 95, 0.1);
   }
@@ -359,8 +361,9 @@
   .audio-visual.loading { flex-direction: column; gap: 10px; }
   .wave-loading {
     font-family: var(--font-display);
+    font-weight: 700;
     font-size: 9px;
-    letter-spacing: 0.15em;
+    letter-spacing: 0.04em;
     color: var(--text-muted);
   }
 
@@ -389,7 +392,8 @@
   }
 
   .error-msg {
-    font-family: var(--font-mono);
+    font-family: var(--font-text);
+    font-weight: 500;
     font-size: 13px;
     color: var(--neon-pink);
     padding: 32px;

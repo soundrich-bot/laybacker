@@ -366,8 +366,9 @@
 
   .pairs-count {
     font-family: var(--font-display);
+    font-weight: 700;
     font-size: 12px;
-    letter-spacing: 0.15em;
+    letter-spacing: 0.04em;
     color: var(--neon-cyan);
   }
 
@@ -380,8 +381,9 @@
 
   .col-label {
     font-family: var(--font-display);
+    font-weight: 700;
     font-size: 10px;
-    letter-spacing: 0.15em;
+    letter-spacing: 0.04em;
     color: var(--text-muted);
     opacity: 0.6;
   }
@@ -398,8 +400,9 @@
 
   .col-norm-btn {
     font-family: var(--font-display);
+    font-weight: 700;
     font-size: 10px;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.04em;
     color: var(--text-muted);
     background: var(--cap-face);
     border: 1px solid var(--border-color);
@@ -448,8 +451,9 @@
   }
   .name-rule-label {
     font-family: var(--font-display);
+    font-weight: 700;
     font-size: 10px;
-    letter-spacing: 0.15em;
+    letter-spacing: 0.04em;
     color: var(--text-muted);
     opacity: 0.6;
     margin-right: 4px;
@@ -457,8 +461,9 @@
   }
   .name-rule-btn {
     font-family: var(--font-display);
+    font-weight: 700;
     font-size: 10px;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.04em;
     color: var(--text-muted);
     background: var(--cap-face);
     border: 1px solid var(--border-color);
@@ -485,8 +490,9 @@
 
   .name-rule-cancel {
     font-family: var(--font-display);
+    font-weight: 700;
     font-size: 10px;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.04em;
     color: var(--neon-orange);
     background: var(--cap-face);
     border: 1px solid rgba(255, 149, 0, 0.45);
@@ -520,8 +526,9 @@
 
   .qc-label {
     font-family: var(--font-display);
+    font-weight: 700;
     font-size: 11px;
-    letter-spacing: 0.15em;
+    letter-spacing: 0.04em;
     color: var(--neon-cyan);
     cursor: help;
   }
@@ -536,8 +543,9 @@
   }
   .qc-mode-btn {
     font-family: var(--font-display);
+    font-weight: 700;
     font-size: 10px;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.04em;
     color: var(--text-muted);
     background: var(--cap-face);
     border: none;
@@ -578,7 +586,8 @@
 
   .qc-spec { font-size: 12px; font-weight: 700; letter-spacing: 0.05em; padding: 4px 24px 4px 10px; color: var(--text-primary); }
   .qc-unit {
-    font-family: var(--font-mono);
+    font-family: var(--font-text);
+    font-weight: 500;
     font-size: 10px;
     color: var(--text-muted);
   }
@@ -588,8 +597,9 @@
   .qc-fix-all,
   .qc-sixfr {
     font-family: var(--font-display);
+    font-weight: 700;
     font-size: 10px;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.04em;
     color: var(--text-muted);
     background: var(--cap-face);
     border: 1px solid var(--border-color);
@@ -678,14 +688,16 @@
 
   .empty-text {
     font-family: var(--font-display);
+    font-weight: 700;
     font-size: 15px;
-    letter-spacing: 0.15em;
+    letter-spacing: 0.04em;
     color: var(--text-muted);
     margin-bottom: var(--gap-xs);
   }
 
   .empty-hint {
-    font-family: var(--font-mono);
+    font-family: var(--font-text);
+    font-weight: 500;
     font-size: 12px;
     color: var(--text-muted);
   }
@@ -706,28 +718,30 @@
     text-shadow: 0 0 6px rgba(57, 255, 20, 0.5);
   }
 
-  :global(:root.tame) .checkmark {
+  :global(:root.tame) .checkmark, :global(:root.porcelain) .checkmark {
     text-shadow: none;
   }
 
   .waiting-text {
     font-family: var(--font-display);
+    font-weight: 700;
     font-size: 19px;
-    letter-spacing: 0.15em;
+    letter-spacing: 0.04em;
     color: var(--neon-cyan);
     margin-bottom: var(--gap-xs);
     text-shadow: 0 0 12px rgba(8, 247, 254, 0.3);
   }
 
-  :global(:root.tame) .waiting-text {
+  :global(:root.tame) .waiting-text, :global(:root.porcelain) .waiting-text {
     text-shadow: none;
   }
 
   .waiting-hint {
-    font-family: var(--font-mono);
+    font-family: var(--font-text);
+    font-weight: 500;
     font-size: 13px;
     color: var(--text-secondary);
-    letter-spacing: 0.03em;
+    letter-spacing: 0;
   }
 
   /* The non-blocking Audio Only offer under "waiting for video" */
@@ -738,14 +752,16 @@
     margin-top: var(--gap-md);
   }
   .or-text {
-    font-family: var(--font-mono);
+    font-family: var(--font-text);
+    font-weight: 500;
     font-size: 11px;
     color: var(--text-muted);
   }
   .audio-only-btn {
     font-family: var(--font-display);
+    font-weight: 700;
     font-size: 10px;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.04em;
     color: var(--neon-cyan);
     background: var(--cap-face);
     border: 1px solid rgba(8, 247, 254, 0.45);
@@ -800,7 +816,8 @@
   .vp-name {
     flex: 1;
     min-width: 0;
-    font-family: var(--font-mono);
+    font-family: var(--font-text);
+    font-weight: 500;
     font-size: 12px;
     color: var(--text-secondary);
     white-space: nowrap;
@@ -836,14 +853,16 @@
 
   .confirm-title {
     font-family: var(--font-display);
+    font-weight: 700;
     font-size: 14px;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.04em;
     color: var(--neon-orange);
     margin-bottom: var(--gap-md);
   }
 
   .confirm-body {
-    font-family: var(--font-mono);
+    font-family: var(--font-text);
+    font-weight: 500;
     font-size: 12px;
     line-height: 1.6;
     color: var(--text-secondary);
@@ -859,10 +878,10 @@
   }
 
   .confirm-cancel {
-    font-family: var(--font-mono);
+    font-family: var(--font-text);
     font-size: 11px;
     font-weight: 700;
-    letter-spacing: 0.05em;
+    letter-spacing: 0;
     color: var(--text-muted);
     background: var(--cap-face);
     border: 1px solid var(--border-color);
@@ -883,8 +902,9 @@
 
   .confirm-apply {
     font-family: var(--font-display);
+    font-weight: 700;
     font-size: 11px;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.04em;
     color: var(--bg-dark);
     background: var(--neon-orange);
     border: 1px solid var(--neon-orange);

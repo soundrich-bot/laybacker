@@ -44,10 +44,10 @@
     position: relative;
     overflow: hidden;
     flex-shrink: 0;
-    font-family: var(--font-mono);
+    font-family: var(--font-text);
     font-size: 10px;
     font-weight: 700;
-    letter-spacing: 0.04em;
+    letter-spacing: 0;
     color: var(--text-muted);
     background: var(--cap-face);
     border: 1px solid var(--border-color);

@@ -49,20 +49,27 @@
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
   }
   .box.warn { border-color: var(--neon-orange); }
-  .eyebrow { font-family: var(--font-display); font-size: 9px; letter-spacing: 0.15em; color: var(--text-muted); margin-bottom: 6px; }
-  .title { font-family: var(--font-display); font-size: 14px; letter-spacing: 0.08em; color: var(--neon-cyan); margin-bottom: 4px; }
+  .eyebrow { font-family: var(--font-display);
+    font-weight: 700; font-size: 9px; letter-spacing: 0.04em; color: var(--text-muted); margin-bottom: 6px; }
+  .title { font-family: var(--font-display);
+    font-weight: 700; font-size: 14px; letter-spacing: 0.04em; color: var(--neon-cyan); margin-bottom: 4px; }
   .box.warn .title { color: var(--neon-orange); }
-  .file { font-family: var(--font-mono); font-size: 12px; color: var(--text-primary); margin-bottom: var(--gap-md); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .lines { margin: 0 0 var(--gap-md) 18px; padding: 0; font-family: var(--font-mono); font-size: 12px; line-height: 1.6; color: var(--text-secondary); }
-  .body { font-family: var(--font-mono); font-size: 12px; line-height: 1.6; color: var(--text-secondary); margin: 0 0 var(--gap-md); }
-  .apply-all { display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); margin-bottom: var(--gap-lg); cursor: pointer; }
+  .file { font-family: var(--font-text);
+    font-weight: 500; font-size: 12px; color: var(--text-primary); margin-bottom: var(--gap-md); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lines { margin: 0 0 var(--gap-md) 18px; padding: 0; font-family: var(--font-text);
+    font-weight: 500; font-size: 12px; line-height: 1.6; color: var(--text-secondary); }
+  .body { font-family: var(--font-text);
+    font-weight: 500; font-size: 12px; line-height: 1.6; color: var(--text-secondary); margin: 0 0 var(--gap-md); }
+  .apply-all { display: flex; align-items: center; gap: 8px; font-family: var(--font-text);
+    font-weight: 500; font-size: 11px; color: var(--text-muted); margin-bottom: var(--gap-lg); cursor: pointer; }
   .apply-all input { accent-color: var(--neon-cyan); }
   .actions { display: flex; align-items: center; gap: var(--gap-sm); }
   .spacer { flex: 1; }
   .btn {
     font-family: var(--font-display);
+    font-weight: 700;
     font-size: 11px;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.04em;
     padding: 7px 14px;
     border-radius: var(--radius-sm);
     border: 1px solid var(--border-color);

@@ -33,13 +33,14 @@
     border-radius: var(--radius-sm);
   }
 
-  :global(:root.tame) .error-item {
+  :global(:root.tame) .error-item, :global(:root.porcelain) .error-item {
     background: rgba(224, 122, 95, 0.1);
     border-color: rgba(224, 122, 95, 0.25);
   }
 
   .error-icon {
     font-family: var(--font-display);
+    font-weight: 700;
     font-size: 13px;
     color: var(--neon-pink);
     width: 20px;
@@ -53,7 +54,8 @@
   }
 
   .error-text {
-    font-family: var(--font-mono);
+    font-family: var(--font-text);
+    font-weight: 500;
     font-size: 12px;
     color: var(--neon-pink);
     flex: 1;

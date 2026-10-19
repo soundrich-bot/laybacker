@@ -274,18 +274,21 @@
     gap: 8px;
   }
   .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-  .label { font-family: var(--font-display); font-size: 12.5px; letter-spacing: 0.12em; color: var(--neon-cyan); }
+  .label { font-family: var(--font-display);
+    font-weight: 700; font-size: 12.5px; letter-spacing: 0.04em; color: var(--neon-cyan); }
   .file-select { font-size: 13px; font-weight: 700; max-width: 520px; color: var(--text-primary); }
   .verdict {
-    font-family: var(--font-display); font-size: 11px; letter-spacing: 0.12em;
+    font-family: var(--font-display);
+    font-weight: 700; font-size: 11px; letter-spacing: 0.04em;
     padding: 2px 8px; border-radius: 3px; border: 1px solid currentColor;
   }
   .verdict.pass { color: var(--neon-green); }
   .verdict.fail { color: var(--neon-orange); }
   .spacer { flex: 1; }
-  .fault-count { font-family: var(--font-mono); font-size: 12.5px; color: var(--neon-orange); font-weight: 700; }
+  .fault-count { font-family: var(--font-text); font-size: 12.5px; color: var(--neon-orange); font-weight: 600; }
   .cap {
-    font-family: var(--font-display); font-size: 11.5px; letter-spacing: 0.1em; color: var(--text-secondary);
+    font-family: var(--font-display);
+    font-weight: 700; font-size: 11.5px; letter-spacing: 0.04em; color: var(--text-secondary);
     background: var(--cap-face); border: 1px solid var(--border-color); border-radius: var(--radius-sm);
     padding: 5px 10px; cursor: pointer; box-shadow: var(--cap-shadow);
   }
@@ -295,7 +298,8 @@
   .wave { display: block; width: 100%; height: 100%; }
   .wave-note {
     position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-    font-family: var(--font-display); font-size: 11.5px; letter-spacing: 0.12em; color: var(--text-secondary); pointer-events: none;
+    font-family: var(--font-display);
+    font-weight: 700; font-size: 11.5px; letter-spacing: 0.04em; color: var(--text-secondary); pointer-events: none;
   }
 
   .play {
@@ -313,5 +317,6 @@
     padding: 2px 8px; cursor: pointer;
   }
   .chip:hover { background: rgba(255, 149, 0, 0.2); }
-  .more { font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary); }
+  .more { font-family: var(--font-text);
+    font-weight: 500; font-size: 12px; color: var(--text-secondary); }
 </style>

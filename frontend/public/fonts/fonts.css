@@ -1,0 +1,6 @@
+/* Bundled so the app looks the same offline — no Google Fonts at runtime.
+   Inter is one variable file covering every weight. */
+@font-face { font-family: 'Inter'; font-style: normal; font-weight: 100 900; font-display: swap; src: url('/fonts/Inter-Variable.woff2') format('woff2'); }
+@font-face { font-family: 'Space Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url('/fonts/SpaceMono-400.woff2') format('woff2'); }
+@font-face { font-family: 'Space Mono'; font-style: normal; font-weight: 700; font-display: swap; src: url('/fonts/SpaceMono-700.woff2') format('woff2'); }
+@font-face { font-family: 'Archivo Black'; font-style: normal; font-weight: 400; font-display: swap; src: url('/fonts/ArchivoBlack-400.woff2') format('woff2'); }
