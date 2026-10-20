@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import { renderSlateImage, renderSlateMatte, loadImage, DEFAULT_SLATE_STYLE } from '../slate.js';
+import { renderSlateImage, renderSlateMatte, loadImage, fillSlateTokens, DEFAULT_SLATE_STYLE } from '../slate.js';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { save as saveDialog } from '@tauri-apps/plugin-dialog';
 import { DEFAULT_CHAIN, normaliseChain, shapeOps, outputExt as chainOutputExt, stampFor, specTags, renamedStem, unfixableIssues, channelWord, csvReport, describeChain } from '../chain.js';
@@ -118,13 +118,14 @@ function openSlateEditor(scope) {
     // The first video's opening frame stands in for the whole batch in the preview.
     const first = matchedPairs.find(p => p.video);
     slateEditor = { scope, text: batchSlate.text, duration: batchSlate.duration, ...base,
-      framePath: first?.video?.path ?? null, frameDuration: first?.video?.durationSecs ?? 0 };
+      framePath: first?.video?.path ?? null, frameDuration: first?.video?.durationSecs ?? 0,
+      previewVideo: first?.video ?? null, previewAudio: first?.audio ?? null };
     return;
   }
   // A solo video (no pair) — the object form carries the MediaFile itself.
   if (typeof scope === 'object' && scope?.path) {
     slateEditor = { scope: 'solo', video: scope, text: batchSlate.text, duration: batchSlate.duration, ...base,
-      framePath: scope.path, frameDuration: scope.durationSecs ?? 0 };
+      framePath: scope.path, frameDuration: scope.durationSecs ?? 0, previewVideo: scope };
     return;
   }
   const p = matchedPairs.find(p => p.id === scope);
@@ -140,6 +141,7 @@ function openSlateEditor(scope) {
     black: own.black,
     mode: own.mode ?? 'prepend', linePos: { ...(own.linePos ?? {}) },
     framePath: p.video?.path ?? null, frameDuration: p.video?.durationSecs ?? 0,
+    previewVideo: p.video ?? null, previewAudio: p.audio ?? null,
   };
 }
 
@@ -157,13 +159,14 @@ async function applySoloSlate(video, text, dur, style = {}) {
       ...style,
       bgImage: style.bgId ? (slateAssets[style.bgId]?.img ?? null) : null,
     };
-    const image = renderSlateImage(text, video.width, video.height, full);
+    const filled = fillSlateTokens(text, video);
+    const image = renderSlateImage(filled, video.width, video.height, full);
     const output = await invoke('slate_video', {
       videoPath: path,
       videoDurationSecs: video.durationSecs,
       slateImage: image,
       // Overlay mode: the text's matte rides along (null = a prepended card).
-      slateMatte: renderSlateMatte(text, video.width, video.height, full),
+      slateMatte: renderSlateMatte(filled, video.width, video.height, full),
       slateDurationSecs: dur,
       slateBlackSecs: Math.max(0, style.black ?? 0),
       frameRate: video.frameRate ?? null,
@@ -1336,8 +1339,8 @@ async function processAll() {
     return {
       ...p,
       slateOverlay: st.mode === 'overlay',
-      slateImage: renderSlateImage(p.slateText, p.video.width, p.video.height, st),
-      slateMatte: renderSlateMatte(p.slateText, p.video.width, p.video.height, st),
+      slateImage: renderSlateImage(fillSlateTokens(p.slateText, p.video, p.audio), p.video.width, p.video.height, st),
+      slateMatte: renderSlateMatte(fillSlateTokens(p.slateText, p.video, p.audio), p.video.width, p.video.height, st),
     };
   });
 

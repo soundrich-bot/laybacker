@@ -1,6 +1,6 @@
 <script>
-  import { invoke } from '@tauri-apps/api/core';
-  import { drawSlate, hitSlateLine, loadImage, slateLines, SLATE_FONTS, SLATE_SIZES, SLATE_ANCHORS } from '../slate.js';
+  import { invoke, convertFileSrc } from '@tauri-apps/api/core';
+  import { drawSlate, hitSlateLine, loadImage, slateLines, fillSlateTokens, SLATE_TOKENS, SLATE_FONTS, SLATE_SIZES, SLATE_ANCHORS } from '../slate.js';
 
   let {
     editor, isBatch, isSolo = false, videoCount = 0,
@@ -50,19 +50,47 @@
     }
   });
 
-  // Overlay preview backdrop: a real frame of the video, scrubbable across
-  // the seconds the text will cover, so it can be placed clear of whatever
-  // the picture already carries (its own slate, a clock, burnt-in timecode).
-  let backdropImg = $state(null);
+  // Overlay preview backdrop: the video itself, scrubbed live across the
+  // seconds the text will cover, so it can be placed clear of whatever the
+  // picture already carries (its own slate, a clock, burnt-in timecode).
+  // A hidden <video> decodes natively, so dragging the slider scrubs at
+  // frame rate. Formats WebKit can't play (ProRes, MXF…) fall back to an
+  // ffmpeg frame grab, which is slower but always works.
+  let backdropImg = $state(null);   // the <video> once it can draw, or an <img> from the fallback
   let frameAt = $state(0.5);
   let frameLoading = $state(false);
   let frameMax = $derived(Math.max(0.5, Math.min(parseFloat(duration) || 5, (editor.frameDuration || 5) - 0.1)));
+  let scrubVideo = $state(null);    // bound <video>
+  let videoUsable = $state(null);   // null = unknown, true = plays, false = fallback
+  let videoSrc = $derived.by(() => {
+    if (!editor.framePath) return '';
+    try { return convertFileSrc(editor.framePath); } catch { return ''; }
+  });
+  let redraw = $state(0);           // bumped on every seeked frame
+
+  function onVideoReady() {
+    videoUsable = true;
+    backdropImg = scrubVideo;
+    scrubVideo.currentTime = Math.min(frameAt, frameMax);
+  }
+  function onVideoError() {
+    videoUsable = false;
+    backdropImg = null;
+  }
+  // Live scrub: every slider change seeks; every decoded frame redraws.
+  $effect(() => {
+    const secs = Math.min(frameAt, frameMax);
+    if (!overlay || videoUsable !== true || !scrubVideo) return;
+    if (Math.abs(scrubVideo.currentTime - secs) > 0.02) scrubVideo.currentTime = secs;
+  });
+
+  // Fallback: ffmpeg frame grabs, lightly debounced, stale results dropped.
   let frameTimer = null;
   let frameSeq = 0;
   $effect(() => {
     const path = editor.framePath;
     const secs = Math.min(frameAt, frameMax);
-    if (!overlay || !path) return;
+    if (!overlay || !path || videoUsable !== false) return;
     clearTimeout(frameTimer);
     frameTimer = setTimeout(async () => {
       const seq = ++frameSeq;
@@ -73,9 +101,20 @@
         if (seq === frameSeq) backdropImg = img;
       } catch { /* keep the last good frame */ }
       finally { if (seq === frameSeq) frameLoading = false; }
-    }, 120);
+    }, 60);
     return () => clearTimeout(frameTimer);
   });
+
+  // The text shown in the preview has its tokens filled for this video.
+  let previewText = $derived(fillSlateTokens(text, editor.previewVideo, editor.previewAudio ?? null));
+  // One file: put the actual name in the text. A batch: a token, so each
+  // card gets its own name at render time.
+  function insertToken(tok) {
+    const literal = tok === '{audio}' ? editor.previewAudio?.filenameNoExt : editor.previewVideo?.filenameNoExt;
+    const piece = (!isBatch && literal) ? literal : tok;
+    const t = text.trimEnd();
+    text = t.length ? `${t}\n${piece}` : piece;
+  }
 
   let bgAsset = $derived(bgId ? (assets[bgId] ?? null) : null);
 
@@ -86,10 +125,11 @@
   let grabOffset = { x: 0, y: 0 };
   let snapX = $state(false);
 
-  // Live preview: redraw whenever the text, style or a drag changes.
+  // Live preview: redraw whenever the text, style, a drag, or a scrubbed frame changes.
   $effect(() => {
     if (!previewCanvas) return;
-    layout = drawSlate(previewCanvas, text,
+    redraw;
+    layout = drawSlate(previewCanvas, previewText,
       { font, size, bgImage: overlay ? null : (bgAsset?.img ?? null), fit, scale, anchor, textPos, linePos },
       { backdrop: overlay ? backdropImg : null, highlight: dragging ?? hover });
     if (snapX && dragging != null) {
@@ -171,6 +211,8 @@
   <div class="box" onclick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
     <div class="title">{isBatch ? 'SLATE — ALL VIDEOS' : isSolo ? `SLATE — ${editor.video?.filename ?? 'THIS VIDEO'}` : 'SLATE — THIS FILE'}</div>
 
+    <div class="cols">
+    <div class="col-left">
     <div class="mode-row" role="group" aria-label="Slate type">
       <button class="mode-btn" class:active={!overlay} onclick={() => mode = 'prepend'}
         title="A card in front of the picture. The file gets longer by the slate's length.">
@@ -198,10 +240,15 @@
       onpointercancel={onPointerUp}
       onpointerleave={() => { if (dragging == null) hover = null; }}
     ></canvas>
+    {#if overlay && editor.framePath && videoSrc}
+      <!-- Hidden decoder for live scrubbing; muted so it never makes a sound. -->
+      <video class="scrub-video" bind:this={scrubVideo} src={videoSrc} muted playsinline preload="auto"
+        onloadeddata={onVideoReady} onseeked={() => redraw++} onerror={onVideoError}></video>
+    {/if}
     {#if overlay && editor.framePath}
       <div class="scrub">
         <span class="scrub-label">PREVIEW FRAME</span>
-        <input class="scrub-range" type="range" min="0" max={frameMax} step="0.1" bind:value={frameAt}
+        <input class="scrub-range" type="range" min="0" max={frameMax} step="0.04" bind:value={frameAt}
           title="Scrub through the seconds the text will cover, to check it clears what's already on the picture" />
         <span class="scrub-readout">{Math.min(frameAt, frameMax).toFixed(1)}s{frameLoading ? ' …' : ''}</span>
       </div>
@@ -213,13 +260,26 @@
       {/if}
     </div>
 
+    <div class="token-row">
+      <span class="token-label">INSERT</span>
+      {#each SLATE_TOKENS as t (t.token)}
+        {#if t.token !== '{audio}' || !isSolo}
+          <button class="token-btn" onclick={() => insertToken(t.token)} title={t.desc}>{t.label}</button>
+        {/if}
+      {/each}
+      {#if /\{filename\}|\{audio\}/i.test(text)}
+        <span class="token-hint">Each card gets its own names — here: {editor.previewVideo?.filenameNoExt ?? 'the video'}{editor.previewAudio ? ` / ${editor.previewAudio.filenameNoExt}` : ''}</span>
+      {/if}
+    </div>
     <textarea
       class="slate-text"
       rows="3"
       placeholder={overlay ? 'Type the text to lay over the picture — one line per row, drag each into place' : bgId ? 'Text over the image (optional) — drag each line into place' : 'Type the slate text — one line per row, drag each into place'}
       bind:value={text}
     ></textarea>
+    </div>
 
+    <div class="col-right">
     <div class="controls">
       <div class="control">
         <label class="control-label" for="slate-font">FONT</label>
@@ -354,6 +414,8 @@
         quick; other formats re-encode in full (a progress bar will show).
       {/if}
     </p>
+    </div>
+    </div>
 
     <div class="actions">
       {#if onRemove}
@@ -383,7 +445,7 @@
   }
 
   .box {
-    width: min(560px, calc(100vw - 48px));
+    width: min(1040px, calc(100vw - 48px));
     max-height: calc(100vh - 48px);
     overflow-y: auto;
     background: var(--bg-panel);
@@ -392,6 +454,12 @@
     padding: var(--gap-lg);
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
   }
+
+  /* Two columns when there's room: picture and text left, settings right —
+     so the whole editor fits on screen without scrolling. */
+  .cols { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: var(--gap-lg); align-items: start; }
+  .col-left, .col-right { min-width: 0; }
+  @media (max-width: 980px) { .cols { grid-template-columns: 1fr; } }
 
   .title {
     font-family: var(--font-display);
@@ -418,6 +486,16 @@
   .preview.grabbing { cursor: grabbing; border-color: var(--neon-cyan); }
 
   .scrub { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+  .scrub-video { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+  .token-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
+  .token-label { font-family: var(--font-display); font-weight: 700; font-size: 10px; letter-spacing: 0.04em; color: var(--text-secondary); }
+  .token-btn {
+    font-family: var(--font-display); font-weight: 700; font-size: 10.5px; letter-spacing: 0.04em; color: var(--neon-cyan);
+    background: var(--cap-face); border: 1px solid rgba(8, 247, 254, 0.35); border-radius: var(--radius-sm);
+    padding: 3px 9px; cursor: pointer; box-shadow: var(--cap-shadow);
+  }
+  .token-btn:hover { border-color: var(--neon-cyan); }
+  .token-hint { font-family: var(--font-text); font-weight: 500; font-size: 11px; color: var(--text-secondary); }
   .scrub-label { font-family: var(--font-display);
     font-weight: 700; font-size: 9px; letter-spacing: 0.04em; color: var(--text-muted); flex-shrink: 0; }
   .scrub-range { flex: 1; accent-color: var(--neon-cyan); cursor: pointer; }

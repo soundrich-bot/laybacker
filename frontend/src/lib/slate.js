@@ -54,6 +54,23 @@ function anchorFractions(anchor) {
   return { ax, ay };
 }
 
+// Slate text tokens. `{filename}` becomes the video's name (no extension) at
+// render time, so one slate serves a whole batch with each card named.
+export const SLATE_TOKENS = [
+  { token: '{filename}', label: 'VIDEO NAME', desc: 'The video’s filename, without its extension' },
+  { token: '{audio}',    label: 'AUDIO NAME', desc: 'The audio file’s name, without its extension — the mix being laid back' },
+];
+function stem(f) {
+  return f?.filenameNoExt ?? f?.filename?.replace(/\.[^.]+$/, '') ?? '';
+}
+// `{filename}` = the video, `{audio}` = the mix laid back onto it. A solo
+// video (no audio) leaves `{audio}` blank, and blank lines are not drawn.
+export function fillSlateTokens(text, video, audio = null) {
+  return (text || '')
+    .replace(/\{filename\}/gi, stem(video))
+    .replace(/\{audio\}/gi, stem(audio));
+}
+
 // The non-empty lines of slate text, in order — the index is what `linePos` keys on.
 export function slateLines(text) {
   return (text || '').split('\n').map(l => l.trim()).filter(l => l.length > 0);
@@ -119,9 +136,10 @@ export function drawSlate(canvas, text, style = {}, opts = {}) {
   ctx.fillStyle = '#000000';
   ctx.fillRect(0, 0, w, h);
 
+  // An <img> (ffmpeg frame grab) or a <video> element seeked to the frame.
   const backdrop = opts.backdrop;
-  if (backdrop && backdrop.naturalWidth > 0) {
-    ctx.drawImage(backdrop, 0, 0, w, h);
+  if (backdrop && ((backdrop.naturalWidth ?? 0) > 0 || (backdrop.videoWidth ?? 0) > 0)) {
+    try { ctx.drawImage(backdrop, 0, 0, w, h); } catch { /* not decodable yet */ }
   }
 
   // The card's own image — prepend mode only.

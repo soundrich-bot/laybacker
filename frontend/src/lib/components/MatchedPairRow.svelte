@@ -47,6 +47,18 @@
   let editName = $state('');
   let previewFile = $state(null); // { path, filename, mediaType }
 
+  // "H.264 · 1920×1080 · 25 fps" under the video filename.
+  let videoSpec = $derived.by(() => {
+    const v = pair.video;
+    if (!v) return '';
+    const codec = { h264: 'H.264', hevc: 'HEVC', prores: 'ProRes', dnxhd: 'DNxHD', mpeg2video: 'MPEG-2', mjpeg: 'MJPEG', vp9: 'VP9', av1: 'AV1' }[v.codecInfo] ?? (v.codecInfo ? v.codecInfo.toUpperCase() : '');
+    const bits = [];
+    if (codec) bits.push(codec);
+    if (v.width && v.height) bits.push(`${v.width}×${v.height}`);
+    if (v.frameRate) bits.push(`${Number.isInteger(v.frameRate) ? v.frameRate : v.frameRate.toFixed(2)} fps`);
+    return bits.join(' · ');
+  });
+
   // "48k · 24-bit · 2ch" after the audio filename — or the bit rate for a
   // compressed file ("48k · 320 kbps · 2ch").
   let audioSpec = $derived.by(() => {
@@ -306,12 +318,16 @@
       </div>
 
       <div class="file-block audio-block" style="flex: 2;">
-        <button class="play-btn" onclick={() => previewFile = { path: pair.audio.path, filename: pair.audio.filename, mediaType: 'audio' }} title="Preview audio">
-          <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 1L9 5L2 9V1Z" fill="currentColor"/></svg>
-        </button>
-        <span class="file-duration">{formatDuration(pair.audio.durationSecs)}</span>
-        <span class="file-name" title="{pair.audio.channelCount ?? '?'}ch {pair.audio.sampleRate ? (pair.audio.sampleRate / 1000).toFixed(1) + 'kHz' : ''}">{pair.audio.filename}</span>
-        {#if audioSpec}<span class="file-spec" title="Sample rate · bit depth (or bit rate for compressed files) · channels">{audioSpec}</span>{/if}
+        <div class="file-main">
+          <button class="play-btn" onclick={() => previewFile = { path: pair.audio.path, filename: pair.audio.filename, mediaType: 'audio' }} title="Preview audio">
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 1L9 5L2 9V1Z" fill="currentColor"/></svg>
+          </button>
+          <span class="file-duration">{formatDuration(pair.audio.durationSecs)}</span>
+          <span class="file-name">{pair.audio.filename}</span>
+        </div>
+        {#if audioSpec}
+          <div class="file-meta"><span class="file-spec" title="Sample rate · bit depth (or bit rate for compressed files) · channels">{audioSpec}</span></div>
+        {/if}
       </div>
 
       <span class="audio-only-badge">AUDIO ONLY</span>
@@ -333,17 +349,21 @@
 
       <!-- Video info -->
       <div class="file-block video-block">
-        <button class="play-btn" onclick={() => previewFile = { path: pair.video.path, filename: pair.video.filename, mediaType: 'video' }} title="Preview video">
-          <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 1L9 5L2 9V1Z" fill="currentColor"/></svg>
-        </button>
-        <span class="file-duration">{formatDuration(pair.video.durationSecs)}</span>
-        <span class="file-name" title="{pair.video.codecInfo ?? ''}">{pair.video.filename}</span>
+        <div class="file-main">
+          <button class="play-btn" onclick={() => previewFile = { path: pair.video.path, filename: pair.video.filename, mediaType: 'video' }} title="Preview video">
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 1L9 5L2 9V1Z" fill="currentColor"/></svg>
+          </button>
+          <span class="file-duration">{formatDuration(pair.video.durationSecs)}</span>
+          <span class="file-name">{pair.video.filename}</span>
+        </div>
+        <div class="file-meta">
+          {#if videoSpec}<span class="file-spec" title="Codec · frame size · frame rate">{videoSpec}</span>{/if}
+          <!-- ProRes working file (Pro Tools) -->
+          {#if onCreateProres}
+            <ProResButton videoPath={pair.video.path} durationSecs={pair.video.durationSecs} {onCreateProres} {onReveal} />
+          {/if}
+        </div>
       </div>
-
-      <!-- ProRes working file (Pro Tools) -->
-      {#if onCreateProres}
-        <ProResButton videoPath={pair.video.path} durationSecs={pair.video.durationSecs} {onCreateProres} {onReveal} />
-      {/if}
 
       <!-- Arrow -->
       <div class="connector" title="Audio will be relayed onto this video">
@@ -354,12 +374,16 @@
 
       <!-- Audio info -->
       <div class="file-block audio-block">
-        <button class="play-btn" onclick={() => previewFile = { path: pair.audio.path, filename: pair.audio.filename, mediaType: 'audio' }} title="Preview audio">
-          <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 1L9 5L2 9V1Z" fill="currentColor"/></svg>
-        </button>
-        <span class="file-duration">{formatDuration(pair.audio.durationSecs)}</span>
-        <span class="file-name" title="{pair.audio.channelCount ?? '?'}ch {pair.audio.sampleRate ? (pair.audio.sampleRate / 1000).toFixed(1) + 'kHz' : ''}">{pair.audio.filename}</span>
-        {#if audioSpec}<span class="file-spec" title="Sample rate · bit depth (or bit rate for compressed files) · channels">{audioSpec}</span>{/if}
+        <div class="file-main">
+          <button class="play-btn" onclick={() => previewFile = { path: pair.audio.path, filename: pair.audio.filename, mediaType: 'audio' }} title="Preview audio">
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 1L9 5L2 9V1Z" fill="currentColor"/></svg>
+          </button>
+          <span class="file-duration">{formatDuration(pair.audio.durationSecs)}</span>
+          <span class="file-name">{pair.audio.filename}</span>
+        </div>
+        {#if audioSpec}
+          <div class="file-meta"><span class="file-spec" title="Sample rate · bit depth (or bit rate for compressed files) · channels">{audioSpec}</span></div>
+        {/if}
       </div>
 
       <!-- Duration warning -->
@@ -383,69 +407,7 @@
       {/if}
     {/if}
 
-    <!-- Batch QC result -->
-    {#if qcResult?.error}
-      <span class="qc-badge fail" title={qcResult.error}>QC &#10007;</span>
-    {:else if qcResult}
-      {#if qcResult.pass}
-        <span class="qc-badge pass" class:peak={qcResult.mode === 'peak'} title="QC passed — {qcResult.measuredLufs.toFixed(1)} LUFS integrated, {qcResult.measuredTP.toFixed(1)} dBTP true peak">
-          &#10003; <span class="qc-lufs">{qcResult.measuredLufs.toFixed(1)} LUFS</span>
-          <span class="qc-tp">· {qcResult.measuredTP.toFixed(1)} dBTP</span>
-        </span>
-      {:else}
-        <span class="qc-badge fail" class:peak={qcResult.mode === 'peak'} title="QC failed — {qcReason}">
-          <span class="qc-lufs">{qcResult.measuredLufs.toFixed(1)} LUFS</span>
-          <span class="qc-tp" class:over={!qcResult.peakPass}>· {qcResult.measuredTP.toFixed(1)} dBTP</span>
-        </span>
-      {/if}
-      {#if qcResult.silenceChecked}
-        {#if qcResult.silencePass}
-          <span class="qc-badge sixfr-pass" title="6-frame check passed — head and tail are already silent">6Fr &#10003;</span>
-        {:else}
-          <span class="qc-badge sixfr-fail" title="6-frame check — sound found at the {qcResult.headHasAudio && qcResult.tailHasAudio ? 'head & tail' : qcResult.headHasAudio ? 'head' : 'tail'}; use 6 Fr to mute it">6Fr &#10007;</span>
-        {/if}
-      {/if}
-      {#if qcResult.clicks}
-        {#if qcResult.clicksPass}
-          <span class="qc-badge pass" title="No digital clicks or edge pops found">CLICKS &#10003;</span>
-        {:else}
-          <span class="qc-badge fail" title="{qcResult.clicks.count} possible click{qcResult.clicks.count === 1 ? '' : 's'}{qcResult.clicks.headPop ? ', head pop' : ''}{qcResult.clicks.tailPop ? ', tail pop' : ''} — see the QC table to listen back">CLICKS &#10007; {qcResult.clicks.count > 0 ? qcResult.clicks.count : ''}</span>
-        {/if}
-      {/if}
-      {#if qcResult.clipping}
-        {#if qcResult.clippingPass}
-          <span class="qc-badge pass" title="No clipping found">CLIP &#10003;</span>
-        {:else}
-          <span class="qc-badge fail" title="{qcResult.clipping.error ?? `Clipping in ${qcResult.clipping.count} places, ${qcResult.clipping.clippedSamples} samples — see the QC table to listen back`}">CLIP &#10007; {qcResult.clipping.count || ''}</span>
-        {/if}
-      {/if}
-      {#if qcResult.dropouts}
-        {#if qcResult.dropoutsPass}
-          <span class="qc-badge pass" title="No dropouts — no digital silence inside the programme">DROP &#10003;</span>
-        {:else}
-          <span class="qc-badge fail" title="{qcResult.dropouts.error ?? `${qcResult.dropouts.count} dropouts, ${qcResult.dropouts.totalSecs?.toFixed(2)} s of silence inside the programme — see the QC table to listen back`}">DROP &#10007; {qcResult.dropouts.count || ''}</span>
-        {/if}
-      {/if}
-      {#if qcResult.stereo}
-        {@const st = qcResult.stereo}
-        {#if st.verdict === 'stereo'}
-          <span class="qc-badge pass" title="Genuine stereo — L {st.leftDb?.toFixed(1)} dB, R {st.rightDb?.toFixed(1)} dB. Phase correlation {st.correlation?.toFixed(2)} (+1 = mono-compatible, −1 = cancels in mono)">
-            STEREO &#10003; <span class="qc-tp">{st.correlation >= 0 ? '+' : ''}{st.correlation?.toFixed(2)}</span>
-          </span>
-        {:else if st.verdict === 'dual_mono'}
-          <span class="qc-badge stereo-warn" title="Left and right are identical — this is a mono signal delivered as a stereo file (correlation {st.correlation?.toFixed(2)})">DUAL MONO</span>
-        {:else if st.verdict === 'anti_phase'}
-          <span class="qc-badge fail" title="Channels are out of phase (correlation {st.correlation?.toFixed(2)}) — this will cancel or hollow out when summed to mono">ANTI-PHASE</span>
-        {:else if st.verdict === 'one_sided'}
-          <span class="qc-badge fail" title="One channel is silent or far below the other — L {st.leftDb?.toFixed(1)} dB, R {st.rightDb?.toFixed(1)} dB">ONE-SIDED</span>
-        {:else if st.verdict === 'multi'}
-          <span class="qc-badge stereo-info" title="{st.channels}-channel file — stereo check applies to 2-channel files">{st.channels} CH</span>
-        {:else if st.verdict === 'error'}
-          <span class="qc-badge stereo-warn" title={st.error}>STEREO ?</span>
-        {/if}
-      {/if}
-    {/if}
-
+    <div class="row-actions">
     <!-- Slate (video pairs): opens the editor for this file's card -->
     {#if !isAudioOnly && onOpenSlate}
       <button
@@ -573,11 +535,81 @@
     {#if !progress && !result}
       <button class="remove-btn" onclick={() => onRemove(pair.id)} title="Remove pair">&times;</button>
     {/if}
+    </div>
   </div>
+
+  <!-- QC results: their own line, so they never push the buttons about -->
+  {#if qcResult}
+  <div class="qc-row">
+    <span class="qc-row-label">QC</span>
+    {#if qcResult?.error}
+      <span class="qc-badge fail" title={qcResult.error}>QC &#10007;</span>
+    {:else if qcResult}
+      {#if qcResult.pass}
+        <span class="qc-badge pass" class:peak={qcResult.mode === 'peak'} title="QC passed — {qcResult.measuredLufs.toFixed(1)} LUFS integrated, {qcResult.measuredTP.toFixed(1)} dBTP true peak">
+          &#10003; <span class="qc-lufs">{qcResult.measuredLufs.toFixed(1)} LUFS</span>
+          <span class="qc-tp">· {qcResult.measuredTP.toFixed(1)} dBTP</span>
+        </span>
+      {:else}
+        <span class="qc-badge fail" class:peak={qcResult.mode === 'peak'} title="QC failed — {qcReason}">
+          <span class="qc-lufs">{qcResult.measuredLufs.toFixed(1)} LUFS</span>
+          <span class="qc-tp" class:over={!qcResult.peakPass}>· {qcResult.measuredTP.toFixed(1)} dBTP</span>
+        </span>
+      {/if}
+      {#if qcResult.silenceChecked}
+        {#if qcResult.silencePass}
+          <span class="qc-badge sixfr-pass" title="6-frame check passed — head and tail are already silent">6Fr &#10003;</span>
+        {:else}
+          <span class="qc-badge sixfr-fail" title="6-frame check — sound found at the {qcResult.headHasAudio && qcResult.tailHasAudio ? 'head & tail' : qcResult.headHasAudio ? 'head' : 'tail'}; use 6 Fr to mute it">6Fr &#10007;</span>
+        {/if}
+      {/if}
+      {#if qcResult.clicks}
+        {#if qcResult.clicksPass}
+          <span class="qc-badge pass" title="No digital clicks or edge pops found">CLICKS &#10003;</span>
+        {:else}
+          <span class="qc-badge fail" title="{qcResult.clicks.count} possible click{qcResult.clicks.count === 1 ? '' : 's'}{qcResult.clicks.headPop ? ', head pop' : ''}{qcResult.clicks.tailPop ? ', tail pop' : ''} — see the QC table to listen back">CLICKS &#10007; {qcResult.clicks.count > 0 ? qcResult.clicks.count : ''}</span>
+        {/if}
+      {/if}
+      {#if qcResult.clipping}
+        {#if qcResult.clippingPass}
+          <span class="qc-badge pass" title="No clipping found">CLIP &#10003;</span>
+        {:else}
+          <span class="qc-badge fail" title="{qcResult.clipping.error ?? `Clipping in ${qcResult.clipping.count} places, ${qcResult.clipping.clippedSamples} samples — see the QC table to listen back`}">CLIP &#10007; {qcResult.clipping.count || ''}</span>
+        {/if}
+      {/if}
+      {#if qcResult.dropouts}
+        {#if qcResult.dropoutsPass}
+          <span class="qc-badge pass" title="No dropouts — no digital silence inside the programme">DROP &#10003;</span>
+        {:else}
+          <span class="qc-badge fail" title="{qcResult.dropouts.error ?? `${qcResult.dropouts.count} dropouts, ${qcResult.dropouts.totalSecs?.toFixed(2)} s of silence inside the programme — see the QC table to listen back`}">DROP &#10007; {qcResult.dropouts.count || ''}</span>
+        {/if}
+      {/if}
+      {#if qcResult.stereo}
+        {@const st = qcResult.stereo}
+        {#if st.verdict === 'stereo'}
+          <span class="qc-badge pass" title="Genuine stereo — L {st.leftDb?.toFixed(1)} dB, R {st.rightDb?.toFixed(1)} dB. Phase correlation {st.correlation?.toFixed(2)} (+1 = mono-compatible, −1 = cancels in mono)">
+            STEREO &#10003; <span class="qc-tp">{st.correlation >= 0 ? '+' : ''}{st.correlation?.toFixed(2)}</span>
+          </span>
+        {:else if st.verdict === 'dual_mono'}
+          <span class="qc-badge stereo-warn" title="Left and right are identical — this is a mono signal delivered as a stereo file (correlation {st.correlation?.toFixed(2)})">DUAL MONO</span>
+        {:else if st.verdict === 'anti_phase'}
+          <span class="qc-badge fail" title="Channels are out of phase (correlation {st.correlation?.toFixed(2)}) — this will cancel or hollow out when summed to mono">ANTI-PHASE</span>
+        {:else if st.verdict === 'one_sided'}
+          <span class="qc-badge fail" title="One channel is silent or far below the other — L {st.leftDb?.toFixed(1)} dB, R {st.rightDb?.toFixed(1)} dB">ONE-SIDED</span>
+        {:else if st.verdict === 'multi'}
+          <span class="qc-badge stereo-info" title="{st.channels}-channel file — stereo check applies to 2-channel files">{st.channels} CH</span>
+        {:else if st.verdict === 'error'}
+          <span class="qc-badge stereo-warn" title={st.error}>STEREO ?</span>
+        {/if}
+      {/if}
+    {/if}
+
+  </div>
+  {/if}
 
   <!-- Row 2: Output name + status -->
   <div class="output-row">
-    <span class="output-label">SMART FILENAME</span>
+    <span class="output-label">FILENAME</span>
     {#if editingName}
       <div class="name-edit-wrapper">
         <input
@@ -1051,15 +1083,19 @@
   }
 
   /* File block: duration + name inline */
+  /* A file block is two lines: the name line (play · duration · name) and a
+     meta line beneath it (spec chip, and the ProRes button on a video). The
+     same shape for video and audio, so the two sides of a card line up. */
   .file-block {
     display: flex;
-    align-items: baseline;
-    gap: 6px;
+    flex-direction: column;
+    gap: 5px;
     min-width: 0;
     flex: 1;
-    flex-wrap: wrap;
   }
-  .file-block .file-name { flex: 1 1 200px; min-width: 0; overflow-wrap: anywhere; word-break: normal; }
+  .file-main { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+  .file-main .file-name { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; word-break: normal; }
+  .file-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding-left: 26px; }
 
   .play-btn {
     flex-shrink: 0;
@@ -1656,6 +1692,19 @@
     color: var(--text-muted);
     line-height: 1.5;
   }
+
+  /* The buttons that act on the pair sit together at the right of the name line. */
+  .row-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; flex-shrink: 0; }
+
+  /* QC results line, under the files */
+  .qc-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    padding: 0 var(--gap-md) 8px 60px;
+  }
+  .qc-row-label { font-family: var(--font-display); font-weight: 700; font-size: 10px; letter-spacing: 0.04em; color: var(--text-secondary); margin-right: 4px; }
 
   /* ── Batch QC badge ── */
   .qc-badge {

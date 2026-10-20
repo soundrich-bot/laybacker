@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Laybacker",
-  "version": "0.1.46",
+  "version": "0.1.47",
   "identifier": "com.laybacker.app",
   "build": {
     "frontendDist": "../dist",
@@ -13,10 +13,10 @@
     "windows": [
       {
         "title": "LAYBACKER",
-        "width": 960,
-        "height": 800,
-        "minWidth": 800,
-        "minHeight": 650,
+        "width": 1120,
+        "height": 860,
+        "minWidth": 900,
+        "minHeight": 700,
         "resizable": true,
         "fullscreen": false,
         "decorations": true,
