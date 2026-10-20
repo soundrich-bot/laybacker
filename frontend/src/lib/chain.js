@@ -138,7 +138,7 @@ export function specTags({ normalise, sixFr, clock, spec, convert }) {
   if (normalise) parts.push(spec.mode === 'peak' ? `${spec.truePeak}dBTP` : `${spec.targetLufs}LUFS`);
   if (sixFr) parts.push('6Fr');
   if (clock) parts.push('Clocked');
-  if (convert.sampleRate) parts.push(`${convert.sampleRate % 1000 === 0 ? convert.sampleRate / 1000 : convert.sampleRate / 1000}k`);
+  if (convert.sampleRate) parts.push(`${convert.sampleRate / 1000}k`); // 44100 → 44.1k, 48000 → 48k
   if (convert.bitDepth) parts.push(convert.bitDepth === 32 ? '32f' : `${convert.bitDepth}bit`);
   return parts.length ? `_${parts.join('_')}` : '';
 }

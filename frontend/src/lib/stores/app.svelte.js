@@ -213,7 +213,7 @@ function applySlate(text, duration, style = {}) {
     const video = slateEditor.video;
     batchSlate = { text, duration: dur, ...st }; // remember for the next slate
     slateEditor = null;
-    applySoloSlate(video, text, dur, st);
+    void applySoloSlate(video, text, dur, st);
     return;
   }
   if (scope === 'batch') {
@@ -352,7 +352,7 @@ function setQcTargetLufs(value, fromPreset = false) {
   }));
   qcResults = {};
   clockChecks = {}; // clock verdicts were judged against the old target
-  regenerateNames(); // the spec in the filename follows the target
+  void regenerateNames(); // the spec in the filename follows the target
 }
 
 // Changing the batch true-peak value retargets every pair and voids results
@@ -367,7 +367,7 @@ function setQcTruePeak(value, fromPreset = false) {
   }));
   qcResults = {};
   clockChecks = {};
-  regenerateNames();
+  void regenerateNames();
 }
 
 // Switch the whole batch between loudness (LUFS) and true-peak (dBTP) targeting.
@@ -380,7 +380,7 @@ function setQcMode(mode) {
   }));
   qcResults = {};
   clockChecks = {};
-  regenerateNames();
+  void regenerateNames();
 }
 
 // ── Batch passes that act immediately ───────────────────────────────────────
@@ -1065,7 +1065,7 @@ function updateOutputExtensions() {
   // Audio-only outputs: the container sets the extension and a rate / depth
   // change is recorded in the name — the namer does both, keeping any name
   // the user typed (regenerateNames swaps only the extension on those).
-  if (matchedPairs.some(p => !p.video)) regenerateNames();
+  if (matchedPairs.some(p => !p.video)) void regenerateNames();
 }
 
 function getVideos() {
@@ -1388,7 +1388,7 @@ function updatePairNormalization(pairId, enabled, settings) {
     }
     return p;
   });
-  regenerateNames();
+  void regenerateNames();
 }
 
 function updatePairCompliance(pairId, enabled) {
@@ -1406,7 +1406,7 @@ function updatePairClock(pairId, enabled) {
   matchedPairs = matchedPairs.map(p =>
     p.id === pairId ? { ...p, clockEnabled: enabled } : p
   );
-  regenerateNames();
+  void regenerateNames();
 }
 
 // ── Clock ───────────────────────────────────────────────────────────────────
@@ -1480,7 +1480,7 @@ async function runBatchClock() {
   matchedPairs = matchedPairs.map(p => (passed.has(p.id) ? { ...p, clockEnabled: true } : p));
   clockChecks = checks;
   clockRunning = false;
-  regenerateNames();
+  void regenerateNames();
 }
 
 // A name the user has edited is theirs: it survives every recompute (NORM,
@@ -1529,7 +1529,7 @@ function setNameRule(rule) {
   nameRule = rule;
   // The rule is the batch's word: it overrides earlier per-file names.
   matchedPairs = matchedPairs.map(p => ({ ...p, nameCustomized: false }));
-  regenerateNames();
+  void regenerateNames();
 }
 
 // Per-file NAME FROM. 'smart' hands the name back to the namer; anything else
@@ -1537,7 +1537,7 @@ function setNameRule(rule) {
 function applyNameRule(pairId, rule) {
   if (rule === 'smart') {
     matchedPairs = matchedPairs.map(p => p.id === pairId ? { ...p, nameCustomized: false } : p);
-    regenerateNames();
+    void regenerateNames();
     return;
   }
   matchedPairs = matchedPairs.map(p => {
@@ -1559,7 +1559,7 @@ function toggleAllNorm() {
       ? batchNormSettings(p.normalizationSettings)
       : p.normalizationSettings,
   }));
-  regenerateNames();
+  void regenerateNames();
 }
 
 function removePair(pairId) {
