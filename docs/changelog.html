@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Laybacker changelog — what changed in each version</title>
+  <meta name="description" content="Every Laybacker release with what changed: slates, loudness and QC checks, the Audio Only page, the Multifunction Chain, themes and fixes. Latest: v0.1.47." />
+  <link rel="canonical" href="https://laybacker.com/changelog.html" />
+  <meta property="og:url" content="https://laybacker.com/changelog.html" />
+  <meta property="og:title" content="Laybacker changelog" />
+  <meta property="og:description" content="What changed in each Laybacker release. Latest: v0.1.47." />
+  <meta property="og:type" content="website" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    "@id": "https://laybacker.com/changelog.html",
+    "name": "Laybacker changelog",
+    "description": "What changed in each Laybacker release.",
+    "dateModified": "2026-10-20",
+    "isPartOf": { "@type": "WebSite", "url": "https://laybacker.com/", "name": "Laybacker" },
+    "about": { "@id": "https://laybacker.com/#app" }
+  }
+  </script>
+  <style>
+    :root {
+      --bg-dark: #08080c; --bg-panel: #11121a; --border: #23252f;
+      --text: #eef0f6; --text-2: #aeb2c0; --text-mut: #6b7080;
+      --pink: #ff2e63; --cyan: #08f7fe;
+      --mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
+      --disp: "Helvetica Neue", Arial, system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body { background: radial-gradient(1200px 600px at 50% -10%, #15131f 0%, var(--bg-dark) 60%) fixed; color: var(--text); font-family: var(--mono); line-height: 1.65; -webkit-font-smoothing: antialiased; min-height: 100vh; }
+    .wrap { max-width: 760px; margin: 0 auto; padding: 0 24px 64px; }
+    header.top { padding: 56px 0 28px; }
+    .logo { font-family: var(--disp); font-weight: 900; font-size: 22px; letter-spacing: 0.14em; }
+    .logo a { color: var(--text); text-decoration: none; }
+    .logo a span { background: linear-gradient(90deg, var(--pink), var(--cyan)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    h1 { font-family: var(--disp); font-size: 28px; margin-top: 18px; letter-spacing: 0.01em; }
+    .lead { color: var(--text-2); font-size: 14px; margin-top: 8px; max-width: 560px; }
+    .lead a { color: var(--cyan); text-decoration: none; border-bottom: 1px solid rgba(8,247,254,0.3); }
+    .entry { border: 1px solid var(--border); border-radius: 12px; background: var(--bg-panel); padding: 20px 22px; margin: 14px 0; }
+    .entry header { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 10px; }
+    .entry h2 { font-family: var(--disp); font-size: 18px; letter-spacing: 0.02em; }
+    .entry h2 a { color: var(--text); text-decoration: none; }
+    .entry h2 a:hover { color: var(--cyan); }
+    .entry time { color: var(--text-mut); font-size: 12.5px; }
+    .entry .dl { margin-left: auto; color: var(--cyan); font-size: 12px; text-decoration: none; border-bottom: 1px solid rgba(8,247,254,0.3); }
+    .entry p { color: var(--text-2); font-size: 13.5px; }
+    .entry p + p { margin-top: 8px; }
+    .entry:target { border-color: var(--cyan); }
+    footer { color: var(--text-mut); font-size: 12px; margin-top: 40px; }
+    footer a { color: var(--cyan); text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="top">
+      <div class="logo"><a href="/"><span>LAYBACKER</span></a></div>
+      <h1>Changelog</h1>
+      <p class="lead">What changed in each version, in the words it shipped with. Downloads for every release are on <a href="https://github.com/soundrich-bot/laybacker/releases">GitHub</a>; the newest is always at <a href="https://github.com/soundrich-bot/laybacker/releases/latest">releases/latest</a>.</p>
+    </header>
+      <article class="entry" id="v0.1.47">
+        <header>
+          <h2><a href="#v0.1.47">v0.1.47</a></h2>
+          <time datetime="2026-10-20">20 October 2026</time>
+          <a class="dl" href="https://github.com/soundrich-bot/laybacker/releases/tag/v0.1.47">download</a>
+        </header>
+        <p>Slates get names, and the cards get tidier. In the slate editor, VIDEO NAME and AUDIO NAME drop the file&#x27;s own name into the text — for a batch, every card gets its own. The preview frame slider now scrubs through the picture as you drag it, and the editor sits in two columns so the whole thing fits on screen; the app opens a little larger to suit. On the layback page each file now shows its details on a line of its own, with codec, frame size and frame rate for the video and sample rate, bit depth and channels for the audio, and QC results have moved to their own line so the buttons stay put. The filename field is now just called FILENAME.</p>
+      </article>
+      <article class="entry" id="v0.1.46">
+        <header>
+          <h2><a href="#v0.1.46">v0.1.46</a></h2>
+          <time datetime="2026-10-19">19 October 2026</time>
+          <a class="dl" href="https://github.com/soundrich-bot/laybacker/releases/tag/v0.1.46">download</a>
+        </header>
+        <p>Easier to read text throughout, and a new theme. Suggestions for improvements are welcome. Click on the logo to send feedback.</p>
+      </article>
+      <article class="entry" id="v0.1.45">
+        <header>
+          <h2><a href="#v0.1.45">v0.1.45</a></h2>
+          <time datetime="2026-09-26">26 September 2026</time>
+          <a class="dl" href="https://github.com/soundrich-bot/laybacker/releases/tag/v0.1.45">download</a>
+        </header>
+        <p>Delivery spec presets. QC now has a SPEC menu: EBU R128 (−23 LUFS ±1 LU, −1 dBTP) or the updated ATSC A/85 (−24 LKFS ±2 LU, −2 dBTP ±0.5 dB), and the tolerances QC judges with follow the preset rather than being fixed at ±1 LU. Type your own numbers and it becomes CUSTOM. One note added to the help section: Laybacker measures full-programme loudness, which is what R128 and A/85 short-form call for; A/85 long-form now asks for a dialogue-gated meter, which Laybacker can not currently provide.</p>
+      </article>
+      <article class="entry" id="v0.1.44">
+        <header>
+          <h2><a href="#v0.1.44">v0.1.44</a></h2>
+          <time datetime="2026-09-24">24 September 2026</time>
+          <a class="dl" href="https://github.com/soundrich-bot/laybacker/releases/tag/v0.1.44">download</a>
+        </header>
+        <p>QC now checks everything. There&#x27;s a handy player to quickly find double check issues, and slates can now be added in seconds. (Thanks David M) RUN QC now runs every check on every file. This will check level, true peak, stereo and phase, 6 frames of silence, and three new ones: clicks, clipping and dropouts. The results sit in one table, and a player underneath shows the file&#x27;s waveform with every fault marked on it, so you can jump straight to a click, a clipped run or a gap and hear it for yourself. Slates on H.264 files are now near instant: only the slate itself is encoded and the rest of the picture is copied untouched, with a full re-encode kept as the fallback for other formats. The Audio Only page has also had a readability pass: bigger text throughout, clearer fold arrows, and every file shows its sample rate and bit depth.</p>
+      </article>
+      <article class="entry" id="v0.1.43">
+        <header>
+          <h2><a href="#v0.1.43">v0.1.43</a></h2>
+          <time datetime="2026-09-24">24 September 2026</time>
+          <a class="dl" href="https://github.com/soundrich-bot/laybacker/releases/tag/v0.1.43">download</a>
+        </header>
+        <p>Multifunction Chain, slates over the picture, and no more pop-up. The Audio Only page has a new section, the Multifunction Chain: one ordered run of steps on every file. Shape it (fold, trim, fade, split), QC it, fix the 6 frames and the loudness only where they fail, with a prompt or without one, warn on the things that can&#x27;t be fixed, add clock handles, export to your format and rename, with a custom pattern if you want one. Save a chain as a preset and export a CSV report of what happened to each file. Slates can now be laid over the first seconds of the picture instead of added to the front, so the runtime and the sound stay put for A/B comparisons, and you can drag every line of slate text exactly where you want it. And dropping audio on its own no longer asks you anything: it waits for your video, with Audio Only a click away if there isn&#x27;t one. Thanks to the users who asked for all three.</p>
+      </article>
+      <article class="entry" id="v0.1.42">
+        <header>
+          <h2><a href="#v0.1.42">v0.1.42</a></h2>
+          <time datetime="2026-09-11">11 September 2026</time>
+          <a class="dl" href="https://github.com/soundrich-bot/laybacker/releases/tag/v0.1.42">download</a>
+        </header>
+        <p>A new Audio Only page. Drop audio on its own and choose AUDIO ONLY for a page built just for sound, in three sections. QC measures every file against your spec and now lays the results out in a table, with a stereo check that catches dual mono, one-sided and anti-phase files. File Deliverables render to a spec in one click: Normalise, 6 Fr, Clock, and a new Convert to WAV, AIFF, FLAC, ALAC or AAC at 44.1k, 48k or 96k, 16, 24 or 32-bit float. File Processing changes the shape of a file: split a multichannel file into named mono stems, join stems back into stereo, 5.1 or 7.1, fold surround to stereo or anything to mono, fade the ends, or trim head-and-tail silence. New files always land beside the originals. Also: waveforms in the preview player, and every audio file now shows its sample rate and bit depth. Thanks again to Tom G, this time for suggesting file splitting.</p>
+      </article>
+      <article class="entry" id="v0.1.41">
+        <header>
+          <h2><a href="#v0.1.41">v0.1.41</a></h2>
+          <time datetime="2026-09-09">9 September 2026</time>
+          <a class="dl" href="https://github.com/soundrich-bot/laybacker/releases/tag/v0.1.41">download</a>
+        </header>
+        <p>Updated Help and new features for slates: Upload your own images, a choice of fonts, and customisable black pre-roll.</p>
+      </article>
+      <article class="entry" id="v0.1.40">
+        <header>
+          <h2><a href="#v0.1.40">v0.1.40</a></h2>
+          <time datetime="2026-09-09">9 September 2026</time>
+          <a class="dl" href="https://github.com/soundrich-bot/laybacker/releases/tag/v0.1.40">download</a>
+        </header>
+        <p>Batch naming no longer sticks between sessions; set your default filename style in settings instead, and cancel a batch naming rule with one click. The settings box now closes when you click outside it. Further thanks go to Tom G.</p>
+      </article>
+      <article class="entry" id="v0.1.39">
+        <header>
+          <h2><a href="#v0.1.39">v0.1.39</a></h2>
+          <time datetime="2026-09-09">9 September 2026</time>
+          <a class="dl" href="https://github.com/soundrich-bot/laybacker/releases/tag/v0.1.39">download</a>
+        </header>
+        <p>More ways to name your files. Click NAME on any file to use the audio filename, the video filename, bump the version number or add a date — or set NAME ALL BY once for the whole batch. Your edited filenames now stay put when you change other settings. Also: a Save To folder option in the settings cog, a clearer warning when audio and video don&#x27;t match in length, and your format and QC settings are remembered between sessions. Thanks to Tom G for the filename suggestion.</p>
+      </article>
+      <article class="entry" id="v0.1.38">
+        <header>
+          <h2><a href="#v0.1.38">v0.1.38</a></h2>
+          <time datetime="2026-09-02">2 September 2026</time>
+          <a class="dl" href="https://github.com/soundrich-bot/laybacker/releases/tag/v0.1.38">download</a>
+        </header>
+        <p>Swap the sound on a slated picture. When the audio is shorter than the video, Laybacker now asks where the sound belongs — from the first frame, or lined up with the end so it lands right after the slate. Pictures slated by Laybacker remember their slate length, so the right answer is already picked for you.</p>
+      </article>
+      <article class="entry" id="v0.1.37">
+        <header>
+          <h2><a href="#v0.1.37">v0.1.37</a></h2>
+          <time datetime="2026-08-13">13 August 2026</time>
+          <a class="dl" href="https://github.com/soundrich-bot/laybacker/releases/tag/v0.1.37">download</a>
+        </header>
+        <p>Slates now exist. Add a text video slate to the front of your picture file with or without a sound layback. Thanks for the idea Arge. Also, bug fixes.</p>
+      </article>
+      <article class="entry" id="v0.1.36">
+        <header>
+          <h2><a href="#v0.1.36">v0.1.36</a></h2>
+          <time datetime="2026-08-07">7 August 2026</time>
+          <a class="dl" href="https://github.com/soundrich-bot/laybacker/releases/tag/v0.1.36">download</a>
+        </header>
+        <p>Fixed a bug on the normalize function.</p>
+      </article>
+      <article class="entry" id="v0.1.35">
+        <header>
+          <h2><a href="#v0.1.35">v0.1.35</a></h2>
+          <time datetime="2026-08-07">7 August 2026</time>
+          <a class="dl" href="https://github.com/soundrich-bot/laybacker/releases/tag/v0.1.35">download</a>
+        </header>
+        <p>True Peak normalisation mode added.</p>
+      </article>
+      <article class="entry" id="v0.1.34">
+        <header>
+          <h2><a href="#v0.1.34">v0.1.34</a></h2>
+          <time datetime="2026-08-05">5 August 2026</time>
+          <a class="dl" href="https://github.com/soundrich-bot/laybacker/releases/tag/v0.1.34">download</a>
+        </header>
+        <p>In addition to LUFS, the True Peak measurement is now displayed in QC mode. Thanks to David Moreau for the suggestion.</p>
+      </article>
+      <article class="entry" id="v0.1.33">
+        <header>
+          <h2><a href="#v0.1.33">v0.1.33</a></h2>
+          <time datetime="2026-07-29">29 July 2026</time>
+          <a class="dl" href="https://github.com/soundrich-bot/laybacker/releases/tag/v0.1.33">download</a>
+        </header>
+        <p>When the soundtrack is longer than the video file, you can now choose to freeze the final frame while the sound plays out. Thanks to Ellis McGourlay for the suggestion.</p>
+      </article>
+      <article class="entry" id="v0.1.32">
+        <header>
+          <h2><a href="#v0.1.32">v0.1.32</a></h2>
+          <time datetime="2026-07-23">23 July 2026</time>
+          <a class="dl" href="https://github.com/soundrich-bot/laybacker/releases/tag/v0.1.32">download</a>
+        </header>
+        <p>No jumping buttons, and some housekeeping for the 6 Frame feature.</p>
+      </article>
+      <article class="entry" id="v0.1.31">
+        <header>
+          <h2><a href="#v0.1.31">v0.1.31</a></h2>
+          <time datetime="2026-07-22">22 July 2026</time>
+          <a class="dl" href="https://github.com/soundrich-bot/laybacker/releases/tag/v0.1.31">download</a>
+        </header>
+        <p>Buttons have more clarity (thanks for the suggestion Mark W.)</p>
+      </article>
+      <article class="entry" id="v0.1.30">
+        <header>
+          <h2><a href="#v0.1.30">v0.1.30</a></h2>
+          <time datetime="2026-07-20">20 July 2026</time>
+          <a class="dl" href="https://github.com/soundrich-bot/laybacker/releases/tag/v0.1.30">download</a>
+        </header>
+        <p>Improved normalisation accuracy. Streamlined batch QC and audio file delivery process.</p><p>The QC bar now does the whole job: RUN QC measures your files, NORMALISE ALL levels them to your target there and then, and the new files are re-measured and displayed so you can see the result. CLOCK ALL checks each file and renders the clocked versions (with 10&quot; silence at the head, and 5&quot; silence at the tail) for the ones that pass.</p>
+      </article>
+      <article class="entry" id="v0.1.29">
+        <header>
+          <h2><a href="#v0.1.29">v0.1.29</a></h2>
+          <time datetime="2026-07-15">15 July 2026</time>
+          <a class="dl" href="https://github.com/soundrich-bot/laybacker/releases/tag/v0.1.29">download</a>
+        </header>
+        <p>- NORM ALL now normalises everything to the QC loudness value you&#x27;ve set, and the filename says so (e.g. `MyMix_-23LUFS_-1dBTP.wav`).
+- Clocked files keep their level exactly as it is — clocking only adds the handles — and the output is named `MyMix_Clocked.wav`.</p>
+      </article>
+      <article class="entry" id="v0.1.28">
+        <header>
+          <h2><a href="#v0.1.28">v0.1.28</a></h2>
+          <time datetime="2026-07-15">15 July 2026</time>
+          <a class="dl" href="https://github.com/soundrich-bot/laybacker/releases/tag/v0.1.28">download</a>
+        </header>
+        <p>- Clock now works across a whole batch — hit CLOCK ALL and Laybacker checks each file and adds the 10-second/5-second handles to the ones that pass.
+- Output filenames no longer say &quot;normalised&quot; — they just carry the spec, e.g. `MyMix_-23LUFS_-1dBTP.wav`.</p>
+      </article>
+      <article class="entry" id="v0.1.27">
+        <header>
+          <h2><a href="#v0.1.27">v0.1.27</a></h2>
+          <time datetime="2026-07-15">15 July 2026</time>
+          <a class="dl" href="https://github.com/soundrich-bot/laybacker/releases/tag/v0.1.27">download</a>
+        </header>
+        <p>- New batch QC — set one loudness value for a batch of files, hit RUN QC, and Laybacker checks every file&#x27;s level (and optionally the 6 frames of silence), showing you which pass and which don&#x27;t. Failures get a FIX button to bring them to spec on export.</p>
+      </article>
+      <article class="entry" id="v0.1.26">
+        <header>
+          <h2><a href="#v0.1.26">v0.1.26</a></h2>
+          <time datetime="2026-07-14">14 July 2026</time>
+          <a class="dl" href="https://github.com/soundrich-bot/laybacker/releases/tag/v0.1.26">download</a>
+        </header>
+        <p>- Clock: the −1 dBTP limit is now treated as a ceiling (peaks just stay under it), with your loudness target (e.g. −23 LUFS) as the level it checks.
+- Clock: if a file isn&#x27;t quite on spec, it now tells you the measured level and lets you proceed anyway.</p>
+      </article>
+      <article class="entry" id="v0.1.25">
+        <header>
+          <h2><a href="#v0.1.25">v0.1.25</a></h2>
+          <time datetime="2026-07-14">14 July 2026</time>
+          <a class="dl" href="https://github.com/soundrich-bot/laybacker/releases/tag/v0.1.25">download</a>
+        </header>
+        <p>- Audio-only: the NORM settings now open on the first click, not the second.
+- New **Clock** mode for audio files — it checks your levels and head/tail silence, and once they pass it adds a 10-second silent handle to the front and 5 seconds to the end for delivery.</p>
+      </article>
+      <article class="entry" id="v0.1.24">
+        <header>
+          <h2><a href="#v0.1.24">v0.1.24</a></h2>
+          <time datetime="2026-07-01">1 July 2026</time>
+          <a class="dl" href="https://github.com/soundrich-bot/laybacker/releases/tag/v0.1.24">download</a>
+        </header>
+        <p>- The auto-generated filename now shows a pencil icon so it&#x27;s clear you can click to rename it before exporting. Thanks to Mark Webster for the suggestion.</p>
+      </article>
+      <article class="entry" id="v0.1.23">
+        <header>
+          <h2><a href="#v0.1.23">v0.1.23</a></h2>
+          <time datetime="2026-06-26">26 June 2026</time>
+          <a class="dl" href="https://github.com/soundrich-bot/laybacker/releases/tag/v0.1.23">download</a>
+        </header>
+        <p>- This update fixes the mic permission prompt for real this time.</p>
+      </article>
+      <article class="entry" id="v0.1.22">
+        <header>
+          <h2><a href="#v0.1.22">v0.1.22</a></h2>
+          <time datetime="2026-06-26">26 June 2026</time>
+          <a class="dl" href="https://github.com/soundrich-bot/laybacker/releases/tag/v0.1.22">download</a>
+        </header>
+        <p>- Laybacker won&#x27;t ask for microphone access any more. It never needed or used it — the prompt was a default in the FFmpeg engine that has now been turned off.</p>
+      </article>
+    <footer>Laybacker is free and open source (GPL-3.0). <a href="/">Back to laybacker.com</a> · <a href="/llms.txt">Plain-text summary</a></footer>
+  </div>
+</body>
+</html>

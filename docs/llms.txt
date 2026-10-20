@@ -3,6 +3,7 @@
 > Free, open-source desktop app (macOS and Windows) for sound post-production: batch-replace the audio on video files ("layback"), add text slates to picture, normalise loudness to broadcast specs, and QC every file. Everything runs on the user's own machine with FFmpeg bundled; nothing is uploaded.
 
 Website: https://laybacker.com/
+Changelog: https://laybacker.com/changelog.html
 Download: https://github.com/soundrich-bot/laybacker/releases/latest
 Source (GPL-3.0): https://github.com/soundrich-bot/laybacker
 Developer: Soundrich Ltd, https://www.soundrich.co/
