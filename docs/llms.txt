@@ -1,0 +1,32 @@
+# Laybacker
+
+> Free, open-source desktop app (macOS and Windows) for sound post-production: batch-replace the audio on video files ("layback"), add text slates to picture, normalise loudness to broadcast specs, and QC every file. Everything runs on the user's own machine with FFmpeg bundled; nothing is uploaded.
+
+Website: https://laybacker.com/
+Download: https://github.com/soundrich-bot/laybacker/releases/latest
+Source (GPL-3.0): https://github.com/soundrich-bot/laybacker
+Developer: Soundrich Ltd, https://www.soundrich.co/
+
+## What it does
+
+- **Layback**: drop video and audio files together; Laybacker pairs each video with its mix by duration and filename (one mix onto many videos also works), then writes a new video file with the new audio. Original streams can be copied or re-encoded to H.264 / AAC. Filenames are generated from the pair and can be customised.
+- **Slates**: text (title, version, date, the file's own name) on the front of a picture. Either a card before the picture, silent, with the sound starting on the first frame of programme, or text laid over the opening seconds so the runtime and sound are unchanged. Each line is draggable on a live preview; fifteen fonts, four sizes, own logo or image, black preroll presets. On H.264 files only the slate is encoded and the picture is copied, so it takes seconds.
+- **Loudness**: normalise to EBU R128 (−23 LUFS, −1 dBTP), ATSC A/85 (−24 LKFS, −2 dBTP) or a custom target, measured to ITU-R BS.1770 with the relative gate; or normalise to a true-peak target. Pass tolerances follow the chosen spec.
+- **QC on every file**: integrated loudness, true peak, stereo and phase (dual mono, anti-phase, one-sided), 6 frames of silence at head and tail, digital clicks, clipping (including flat tops from upstream clipping), dropouts. Results in one table with a waveform player that jumps to each fault.
+- **Audio Only page**: split multichannel to named mono stems, join stems to stereo / 5.1 / 7.1, fold surround to stereo or mono, fade, trim silence, convert to WAV / AIFF / FLAC / ALAC / AAC at 44.1 / 48 / 96 kHz and 16 / 24 / 32-bit float.
+- **Multifunction Chain**: one ordered run on every file — shape, QC, fix 6 frames and loudness only where they fail (prompted or automatic), handle unfixable issues, clock handles, convert, rename (with a custom pattern) — saved as presets, with a CSV report.
+- **UK broadcast details**: 6-frame head/tail mutes, 10 s / 5 s clock handles, ProRes working files for Pro Tools.
+- **Privacy**: fully local, works offline, no account, no upload. Three themes including a high-contrast white one.
+
+## Formats
+
+Video in: MP4, MOV, M4V, MXF. Audio in: WAV, AIFF, BWF, FLAC, M4A, AAC, MP3 (mono to 7.1). Video out: original streams copied, or H.264 + AAC. Audio out: WAV, AIFF, FLAC, ALAC, AAC.
+
+## Limits worth knowing
+
+- Loudness is measured full-programme (relative-gated), as EBU R128 and ATSC A/85 short-form require. A/85 long-form asks for a dialogue-gated meter, which Laybacker does not provide.
+- No MP3 encoder is bundled; an MP3 source that is re-encoded comes out as WAV.
+
+## Verify a download
+
+Open source, VirusTotal-scanned, SHA-256 checksums on each release, signed build provenance (`gh attestation verify <file> --repo soundrich-bot/laybacker`).

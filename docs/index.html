@@ -3,11 +3,74 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Laybacker — Batch replace audio on video files.</title>
-  <meta name="description" content="Laybacker lays back audio onto video for sound post-production. Drag video and audio, auto-match by duration, normalise loudness to broadcast or online spec, and export. Free, runs locally, FFmpeg bundled." />
-  <meta property="og:title" content="Laybacker — Batch replace audio on video files" />
-  <meta property="og:description" content="A tool for sound post-production professionals. Batch replace audio, check and fix levels, fix frames of silence." />
+  <title>Laybacker — Lay back audio onto video, add slates, QC your mixes. Free, for Mac and Windows.</title>
+  <meta name="description" content="Laybacker is a free desktop app for sound post-production: batch-replace the audio on video files, add text slates (as a card or over the picture), normalise loudness to EBU R128 or ATSC A/85, and run a full QC — true peak, stereo and phase, 6 frames of silence, clicks, clipping and dropouts. Runs entirely on your own machine with FFmpeg built in." />
+  <link rel="canonical" href="https://laybacker.com/" />
+  <meta property="og:url" content="https://laybacker.com/" />
+  <meta property="og:site_name" content="Laybacker" />
+  <meta property="og:title" content="Laybacker — Lay back audio onto video, add slates, QC your mixes" />
+  <meta property="og:description" content="Free desktop app for sound post: batch-replace audio on video, make slates in seconds, normalise to broadcast loudness, and QC every file. Nothing leaves your machine." />
   <meta property="og:type" content="website" />
+  <meta property="og:image" content="https://laybacker.com/screenshot-dark.png" />
+  <meta property="og:image:alt" content="Laybacker's main window: paired video and audio files with QC results" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Laybacker — Lay back audio onto video, add slates, QC your mixes" />
+  <meta name="twitter:description" content="Free desktop app for sound post: batch-replace audio on video, make slates in seconds, normalise to broadcast loudness, and QC every file." />
+  <meta name="twitter:image" content="https://laybacker.com/screenshot-dark.png" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "SoftwareApplication",
+        "@id": "https://laybacker.com/#app",
+        "name": "Laybacker",
+        "url": "https://laybacker.com/",
+        "applicationCategory": "MultimediaApplication",
+        "applicationSubCategory": "Audio post-production",
+        "operatingSystem": "macOS 12 or later (Apple Silicon and Intel), Windows 10 or later",
+        "softwareVersion": "0.1.47",
+        "downloadUrl": "https://github.com/soundrich-bot/laybacker/releases/latest",
+        "license": "https://www.gnu.org/licenses/gpl-3.0.html",
+        "isAccessibleForFree": true,
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "GBP" },
+        "screenshot": "https://laybacker.com/screenshot-dark.png",
+        "description": "Laybacker lays back audio onto video files in batches, adds text slates to picture, normalises loudness to EBU R128 or ATSC A/85, and runs a full audio QC: true peak, stereo and phase, 6 frames of silence, clicks, clipping and dropouts. It runs entirely on the user's own machine with FFmpeg bundled.",
+        "featureList": [
+          "Batch replace the audio on video files (layback), matched automatically by duration and filename",
+          "Slates: a text card before the picture, or text laid over the opening seconds with the runtime unchanged; drag each line into place; the file's own name on every card; near-instant on H.264",
+          "Loudness normalisation to EBU R128, ATSC A/85 or a custom target, measured to ITU-R BS.1770; true-peak normalisation",
+          "QC on every file: level, true peak, stereo and phase (dual mono, anti-phase, one-sided), 6 frames of silence, digital clicks, clipping, dropouts — with a player that jumps to each fault",
+          "Audio Only page: split multichannel files to mono stems, join stems to stereo, 5.1 or 7.1, fold surround to stereo or mono, fade, trim silence, convert to WAV, AIFF, FLAC, ALAC or AAC at 44.1, 48 or 96 kHz, 16, 24 or 32-bit float",
+          "Multifunction Chain: one ordered run of QC, fixes, clock handles, conversion and renaming on every file, with presets and a CSV report",
+          "Clock handles (10 s head, 5 s tail), 6-frame head and tail mutes for UK commercial delivery, ProRes working files for Pro Tools",
+          "Three themes including a high-contrast white one; runs offline; nothing is uploaded"
+        ],
+        "author": { "@id": "https://laybacker.com/#org" },
+        "publisher": { "@id": "https://laybacker.com/#org" }
+      },
+      {
+        "@type": "Organization",
+        "@id": "https://laybacker.com/#org",
+        "name": "Soundrich Ltd",
+        "url": "https://www.soundrich.co/"
+      },
+      {
+        "@type": "FAQPage",
+        "@id": "https://laybacker.com/#faq",
+        "mainEntity": [
+          { "@type": "Question", "name": "What is a layback?", "acceptedAnswer": { "@type": "Answer", "text": "In sound post-production, a layback is putting the finished mix back onto the picture: replacing the audio on a video file with the mixed audio so the two can be delivered together. Laybacker does this in batches, pairing each video with its mix by duration and filename." } },
+          { "@type": "Question", "name": "Can Laybacker add a slate to a video?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. A slate is text such as the title, version and date shown at the start of a picture. Laybacker can add it as a card before the picture, or lay the text over the opening seconds so the runtime does not change. You type the text, drag each line where you want it, and the video's or the mix's filename can be put on the card automatically. On H.264 files the slate is added in seconds because only the slate itself is encoded." } },
+          { "@type": "Question", "name": "Which loudness standards does it support?", "acceptedAnswer": { "@type": "Answer", "text": "EBU R128 (−23 LUFS, −1 dBTP), ATSC A/85 (−24 LKFS, −2 dBTP) and any custom target, measured to ITU-R BS.1770 with the relative gate. It can also normalise to a true-peak target instead of a loudness target. The pass tolerances follow the chosen standard." } },
+          { "@type": "Question", "name": "What does the QC check?", "acceptedAnswer": { "@type": "Answer", "text": "Integrated loudness and true peak against the chosen spec, stereo and phase (dual mono, anti-phase, one-sided), 6 frames of silence at the head and tail, digital clicks, clipping (including flat tops from audio clipped upstream) and dropouts. Every check runs on every file, and a player underneath shows the waveform with each fault marked so you can listen back." } },
+          { "@type": "Question", "name": "Does Laybacker upload my files?", "acceptedAnswer": { "@type": "Answer", "text": "No. Everything is processed on your own computer with a copy of FFmpeg built into the app. It works without an internet connection and never sends your files anywhere." } },
+          { "@type": "Question", "name": "What does it cost and what platforms does it run on?", "acceptedAnswer": { "@type": "Answer", "text": "Laybacker is free and open source under the GPL-3.0 licence. It runs on macOS (Apple Silicon and Intel) and Windows." } },
+          { "@type": "Question", "name": "Which file formats does it handle?", "acceptedAnswer": { "@type": "Answer", "text": "Video: MP4, MOV, M4V and MXF. Audio: WAV, AIFF, BWF, FLAC, M4A, AAC and MP3, mono to 7.1. It can export audio as WAV, AIFF, FLAC, ALAC or AAC at 44.1, 48 or 96 kHz and 16, 24 or 32-bit float, and video with the original streams copied or re-encoded to H.264 and AAC." } }
+        ]
+      }
+    ]
+  }
+  </script>
   <style>
     :root {
       --bg-dark: #08080c;
@@ -173,6 +236,39 @@
     .feature p { color: var(--text-2); font-size: 13.5px; }
     .feature a { color: var(--cyan); text-decoration: none; border-bottom: 1px solid rgba(8,247,254,0.3); }
     .feature a:hover { border-color: var(--cyan); }
+    .section-lead { color: var(--text-2); font-size: 15px; max-width: 640px; margin: -8px auto 24px; text-align: center; }
+    .feature p b { color: var(--text); }
+
+    /* Slate demo: a card the way the app draws one */
+    .slate-demo { max-width: 640px; margin: 0 auto 28px; }
+    .slate-card {
+      position: relative; aspect-ratio: 16 / 9; background: #000;
+      border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.35em;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.55);
+      font-family: var(--disp); color: #fff; text-align: center;
+    }
+    .slate-line { font-weight: 600; line-height: 1.25; text-shadow: 0 2px 10px rgba(0,0,0,0.9); }
+    .slate-l1 { font-size: clamp(22px, 5vw, 40px); letter-spacing: 0.04em; }
+    .slate-l2 { font-size: clamp(16px, 3.6vw, 28px); }
+    .slate-l3 { font-size: clamp(13px, 2.8vw, 20px); color: #cfd3dc; }
+    .slate-corner {
+      position: absolute; right: 14px; bottom: 10px; font-family: var(--mono); font-size: clamp(9px, 1.6vw, 12px);
+      color: var(--cyan); opacity: 0.9; letter-spacing: 0.02em;
+    }
+    .slate-card::after {
+      /* drag handle hint on the first line */
+      content: ''; position: absolute; left: 50%; top: 50%; width: 46%; height: 20%;
+      transform: translate(-50%, -78%); border: 1px dashed rgba(8,247,254,0.55); border-radius: 4px; pointer-events: none;
+    }
+
+    /* FAQ */
+    .faq details { border: 1px solid var(--border); border-radius: 10px; background: var(--bg-panel); margin-bottom: 8px; padding: 0 16px; }
+    .faq summary { cursor: pointer; padding: 14px 0; font-family: var(--disp); font-weight: 700; font-size: 15px; color: var(--text); list-style: none; display: flex; align-items: center; gap: 10px; }
+    .faq summary::before { content: '▸'; color: var(--pink); transition: transform .15s; }
+    .faq details[open] summary::before { transform: rotate(90deg); }
+    .faq details p { color: var(--text-2); font-size: 13.5px; padding: 0 0 16px 22px; }
+
     .feature code, .feature p code { background: var(--bg-raised); padding: 1px 5px; border-radius: 4px; color: var(--text); font-size: 0.9em; word-break: break-word; }
     .verify-intro { text-align: center; color: var(--text-2); max-width: 600px; margin: 0 auto 28px; font-size: 14px; }
 
@@ -229,7 +325,7 @@
     <header>
       <div class="logo">LAYBACKER</div>
       <div class="tagline">batch relay sound to video</div>
-      <p class="lead">Replace the audio on your video files. Drag in video and audio, Laybacker auto-matches the pairs, checks and fixes sound levels, and exports. Built for sound post-production.</p>
+      <p class="lead">Lay the mix back onto the picture. Drag in video and audio, Laybacker pairs them, adds a slate if you want one, checks and fixes the levels, QCs every file, and exports. Built for sound post-production. Free, open source, and nothing leaves your machine.</p>
 
       <div class="downloads">
         <a class="dl dl-primary" id="dl-mac-arm" href="https://github.com/soundrich-bot/laybacker/releases/latest">
@@ -268,15 +364,38 @@
       <p class="shot-caption">👆 Click the screenshot to see <b id="shot-other">light</b> mode</p>
     </section>
 
+    <section id="slates" class="slates">
+      <h2>Make a slate in seconds</h2>
+      <p class="section-lead">Title, version, date — the words that go on the front of a picture. Type them once and Laybacker puts them on every video in the batch.</p>
+      <div class="slate-demo" aria-hidden="true">
+        <div class="slate-card">
+          <div class="slate-line slate-l1">ACME FILMS</div>
+          <div class="slate-line slate-l2">“Spring” 30s · V3</div>
+          <div class="slate-line slate-l3">Mix 2026-10-20</div>
+          <div class="slate-corner">PROJECT_SPRING_30_V3.mov</div>
+        </div>
+      </div>
+      <div class="features slate-features">
+        <div class="feature"><h3><span class="dot">▸</span> Card or overlay</h3><p>A card <b>before</b> the picture, silent underneath, with the sound starting on the first frame of programme — or the text laid <b>over</b> the opening seconds, so the runtime and the sound don't move and versions still line up for A/B.</p></div>
+        <div class="feature"><h3><span class="dot">▸</span> Drag it where you want it</h3><p>Every line of text is draggable on a live preview of the picture. Scrub through the opening seconds to keep it clear of whatever the frame already carries.</p></div>
+        <div class="feature"><h3><span class="dot">▸</span> Names itself</h3><p>Press <b>VIDEO NAME</b> or <b>AUDIO NAME</b> and the card carries the file's own filename. In a batch, every video gets its own.</p></div>
+        <div class="feature"><h3><span class="dot">▸</span> Seconds, not minutes</h3><p>On H.264 files only the slate itself is encoded and the rest of the picture is copied untouched. A full re-encode stays as the fallback for other formats.</p></div>
+        <div class="feature"><h3><span class="dot">▸</span> Your look</h3><p>Fifteen fonts, four sizes, your own logo or image, black preroll presets, and a 5-second or 10-second preroll in one click.</p></div>
+        <div class="feature"><h3><span class="dot">▸</span> Solo or with a layback</h3><p>Slate a video on its own, keeping its soundtrack, or slate while laying a new mix back — one pass, one file.</p></div>
+      </div>
+    </section>
+
     <section>
       <h2>What it does</h2>
       <div class="features">
-        <div class="feature"><h3><span class="dot">▸</span> Drag, drop, done</h3><p>Drop video and audio together — Laybacker matches them by duration and name, and lets you fix any pairing by hand.</p></div>
-        <div class="feature"><h3><span class="dot">▸</span> Broadcast-spec loudness</h3><p>Normalise to LUFS targets (EBU R128 −23, streaming −16, ATSC A/85) or full-scale peak, measured to ITU-R BS.1770-4.</p></div>
-        <div class="feature"><h3><span class="dot">▸</span> 6-frame silence check</h3><p>Verify and fix head/tail silence for UK commercial broadcast delivery, with clean fades to avoid clicks.</p></div>
-        <div class="feature"><h3><span class="dot">▸</span> Smart export</h3><p>Keep the original streams or re-encode to H.264 / AAC. Smart filenames with optional date stamps.</p></div>
-        <div class="feature"><h3><span class="dot">▸</span> FFmpeg included</h3><p>No separate install — a pinned, bundled FFmpeg ships inside the app. Nothing else to set up.</p></div>
-        <div class="feature"><h3><span class="dot">▸</span> <span class="privacy">Fully local &amp; private</span></h3><p>Every file is processed on your own machine. Nothing is ever uploaded.</p></div>
+        <div class="feature"><h3><span class="dot">▸</span> Drag, drop, done</h3><p>Drop video and audio together — Laybacker matches them by duration and name, and lets you fix any pairing by hand. One mix onto many videos works too.</p></div>
+        <div class="feature"><h3><span class="dot">▸</span> Broadcast-spec loudness</h3><p>Pick <b>EBU R128</b> or <b>ATSC A/85</b> and the targets and tolerances follow, or set your own. Measured to ITU-R BS.1770. Normalise to loudness or to a true-peak target.</p></div>
+        <div class="feature"><h3><span class="dot">▸</span> QC everything, every time</h3><p>Level, true peak, stereo &amp; phase, 6 frames of silence, <b>clicks</b>, <b>clipping</b> and <b>dropouts</b> on every file, laid out in one table with a player that jumps to each fault so you can hear it yourself.</p></div>
+        <div class="feature"><h3><span class="dot">▸</span> Audio Only page</h3><p>Split a multichannel file into named mono stems, join stems back into stereo, 5.1 or 7.1, fold surround to stereo or mono, fade, trim silence, and convert to WAV, AIFF, FLAC, ALAC or AAC at 44.1, 48 or 96 kHz.</p></div>
+        <div class="feature"><h3><span class="dot">▸</span> Multifunction Chain</h3><p>One ordered run on every file: QC, fix 6 frames and loudness only where they fail, add clock handles, convert, rename. Save it as a preset. Export a CSV of what happened to each file.</p></div>
+        <div class="feature"><h3><span class="dot">▸</span> Delivery details</h3><p>6-frame head and tail mutes for UK commercial delivery, 10 s / 5 s clock handles, ProRes working files for Pro Tools, and filenames that carry the spec.</p></div>
+        <div class="feature"><h3><span class="dot">▸</span> FFmpeg included</h3><p>No separate install — a pinned, bundled FFmpeg ships inside the app. Nothing else to set up, and it works offline.</p></div>
+        <div class="feature"><h3><span class="dot">▸</span> <span class="privacy">Fully local &amp; private</span></h3><p>Every file is processed on your own machine. Nothing is ever uploaded. Three themes, including a high-contrast white one.</p></div>
       </div>
     </section>
 
@@ -353,6 +472,19 @@
           <h3><span class="dot">▸</span> Signed provenance</h3>
           <p>Each binary carries a cryptographic attestation tying it to the exact public source. Verify with <code>gh attestation verify &lt;file&gt; --repo soundrich-bot/laybacker</code>.</p>
         </div>
+      </div>
+    </section>
+
+    <section id="faq">
+      <h2>Questions</h2>
+      <div class="faq">
+        <details><summary>What is a layback?</summary><p>In sound post-production, a layback is putting the finished mix back onto the picture: replacing the audio on a video file with the mixed audio so the two can be delivered together. Laybacker does this in batches, pairing each video with its mix by duration and filename.</p></details>
+        <details><summary>Can Laybacker add a slate to a video?</summary><p>Yes. A slate is text such as the title, version and date shown at the start of a picture. Laybacker can add it as a card before the picture, or lay the text over the opening seconds so the runtime does not change. You type the text, drag each line where you want it, and the video's or the mix's filename can be put on the card automatically. On H.264 files the slate is added in seconds because only the slate itself is encoded.</p></details>
+        <details><summary>Which loudness standards does it support?</summary><p>EBU R128 (−23 LUFS, −1 dBTP), ATSC A/85 (−24 LKFS, −2 dBTP) and any custom target, measured to ITU-R BS.1770 with the relative gate. It can also normalise to a true-peak target instead. The pass tolerances follow the chosen standard.</p></details>
+        <details><summary>What does the QC check?</summary><p>Integrated loudness and true peak against the chosen spec, stereo and phase (dual mono, anti-phase, one-sided), 6 frames of silence at the head and tail, digital clicks, clipping (including flat tops from audio clipped upstream) and dropouts. Every check runs on every file, and a player underneath shows the waveform with each fault marked so you can listen back.</p></details>
+        <details><summary>Does Laybacker upload my files?</summary><p>No. Everything is processed on your own computer with a copy of FFmpeg built into the app. It works without an internet connection and never sends your files anywhere.</p></details>
+        <details><summary>What does it cost and what does it run on?</summary><p>Laybacker is free and open source under the GPL-3.0 licence. It runs on macOS (Apple Silicon and Intel) and Windows.</p></details>
+        <details><summary>Which file formats does it handle?</summary><p>Video: MP4, MOV, M4V and MXF. Audio: WAV, AIFF, BWF, FLAC, M4A, AAC and MP3, mono to 7.1. It exports audio as WAV, AIFF, FLAC, ALAC or AAC at 44.1, 48 or 96 kHz and 16, 24 or 32-bit float, and video with the original streams copied or re-encoded to H.264 and AAC.</p></details>
       </div>
     </section>
   </div>
