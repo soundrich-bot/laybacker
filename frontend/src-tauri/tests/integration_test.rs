@@ -436,6 +436,9 @@ fn test_probe_reports_bit_depth_and_waveform_peaks() {
     assert!(f.bit_depth.is_some(), "a PCM WAV should report its bit depth");
     let peaks = waveform::compute_peaks(&test_fixture("test_tone.wav"), 50).expect("peaks");
     assert_eq!(peaks.len(), 50);
+    let lanes = waveform::compute_lanes(&test_fixture("test_tone.wav"), 50, 2).expect("lanes");
+    assert_eq!(lanes.len(), 2);
+    assert!(lanes.iter().all(|l| l.len() == 50 && l.iter().all(|p| *p > 0.1)));
     // A steady -14 dBFS tone: every bucket ≈ 0.2, none silent, none over.
     assert!(peaks.iter().all(|p| *p > 0.1 && *p <= 1.0), "{peaks:?}");
 }
@@ -661,6 +664,21 @@ fn test_clipping_and_dropout_scan_on_real_files() {
     assert_eq!(r.clipping.count, 0);
     cleanup(&clipped);
     cleanup(&holed);
+}
+
+/// Extract audio from a video: a WAV beside it, same length, same channels.
+#[test]
+fn test_extract_audio_from_video() {
+    let dir = output_dir();
+    let src = format!("{}/extract_src.mov", dir);
+    build_h264_source(&src);
+    let out = format!("{}/extract_src_audio.wav", dir);
+    ffmpeg::run_ffmpeg(&ffmpeg::build_extract_audio_command(&src, &out)).expect("extract");
+    let f = inspector::inspect_file(&out).unwrap();
+    assert_eq!(f.codec_info.as_deref(), Some("pcm_s24le"));
+    assert!((f.duration_secs - 6.0).abs() < 0.1, "{}", f.duration_secs);
+    assert_eq!(f.channel_count, Some(2));
+    cleanup(&out); cleanup(&src);
 }
 
 // ── Measurement tests ──

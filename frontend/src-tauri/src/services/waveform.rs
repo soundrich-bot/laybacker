@@ -26,6 +26,49 @@ pub fn peaks_from_s16le(bytes: &[u8], buckets: usize) -> Vec<f32> {
     out
 }
 
+/// Per-channel peaks from interleaved s16le: one lane of `buckets` values per channel.
+pub fn lanes_from_s16le(bytes: &[u8], channels: usize, buckets: usize) -> Vec<Vec<f32>> {
+    let ch = channels.max(1);
+    let frames = bytes.len() / (2 * ch);
+    if frames == 0 || buckets == 0 {
+        return vec![Vec::new(); ch];
+    }
+    let mut lanes = vec![vec![0f32; buckets]; ch];
+    for (i, frame) in bytes.chunks_exact(2 * ch).enumerate() {
+        let b = i * buckets / frames;
+        for (c, s) in frame.chunks_exact(2).enumerate() {
+            let v = i16::from_le_bytes([s[0], s[1]]).unsigned_abs() as f32 / 32768.0;
+            if v > lanes[c][b] {
+                lanes[c][b] = v;
+            }
+        }
+    }
+    lanes
+}
+
+/// One lane per channel (a stereo file draws as two waveforms).
+pub fn compute_lanes(path: &str, buckets: usize, channels: u32) -> Result<Vec<Vec<f32>>, String> {
+    let ch = channels.clamp(1, 8);
+    let output = ffmpeg::silent_command(&ffmpeg::find_ffmpeg())
+        .args([
+            "-v", "error",
+            "-i", path,
+            "-vn",
+            "-ac", &ch.to_string(),
+            "-ar", &OVERVIEW_RATE.to_string(),
+            "-f", "s16le",
+            "-",
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .map_err(|e| format!("Failed to run ffmpeg: {}", e))?;
+    if !output.status.success() {
+        return Err(format!("Could not decode audio: {}", String::from_utf8_lossy(&output.stderr).trim()));
+    }
+    Ok(lanes_from_s16le(&output.stdout, ch as usize, buckets))
+}
+
 /// Peaks for a file: `buckets` values in 0…1, left to right.
 pub fn compute_peaks(path: &str, buckets: usize) -> Result<Vec<f32>, String> {
     let output = ffmpeg::silent_command(&ffmpeg::find_ffmpeg())
@@ -63,6 +106,16 @@ mod tests {
         assert_eq!(p.len(), 2);
         assert!((p[0] - 1.0).abs() < 1e-6); // -32768 → full scale
         assert!((p[1] - 7.0 / 32768.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_lanes_split_interleaved_channels() {
+        // L: 0, 100, 0, 0 ; R: 32767, 0, 0, 7  (interleaved L R L R …)
+        let bytes = s16(&[0, 32767, 100, 0, 0, 0, 0, 7]);
+        let lanes = lanes_from_s16le(&bytes, 2, 2);
+        assert_eq!(lanes.len(), 2);
+        assert!((lanes[0][0] - 100.0 / 32768.0).abs() < 1e-6 && lanes[0][1] == 0.0);
+        assert!((lanes[1][0] - 32767.0 / 32768.0).abs() < 1e-6 && (lanes[1][1] - 7.0 / 32768.0).abs() < 1e-6);
     }
 
     #[test]

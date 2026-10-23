@@ -225,20 +225,28 @@ pub async fn create_prores(
 ) -> Result<String, String> {
     let video_for_event = video_path.clone();
     tokio::task::spawn_blocking(move || {
-        let (num, label) = match profile.as_str() {
-            "proxy" => (0u8, "Proxy"),
-            "422" => (2u8, "422"),
-            "hq" => (3u8, "HQ"),
-            _ => (1u8, "LT"), // default: ProRes 422 LT
-        };
         let path = std::path::Path::new(&video_path);
         let dir = path
             .parent()
             .map(|p| p.to_string_lossy().to_string())
             .unwrap_or_else(|| ".".to_string());
         let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("video");
-        let output = format!("{}/{}_ProRes_{}.mov", dir, stem, label);
-        let args = ffmpeg::build_prores_command(&video_path, &output, num);
+        // "h264" makes an MP4; anything else is a ProRes flavour (LT by default).
+        let (output, args) = if profile == "h264" {
+            let out = format!("{}/{}_H264.mp4", dir, stem);
+            let a = ffmpeg::build_h264_working_command(&video_path, &out);
+            (out, a)
+        } else {
+            let (num, label) = match profile.as_str() {
+                "proxy" => (0u8, "Proxy"),
+                "422" => (2u8, "422"),
+                "hq" => (3u8, "HQ"),
+                _ => (1u8, "LT"),
+            };
+            let out = format!("{}/{}_ProRes_{}.mov", dir, stem, label);
+            let a = ffmpeg::build_prores_command(&video_path, &out, num);
+            (out, a)
+        };
         ffmpeg::run_ffmpeg_with_progress(&args, duration_secs, |pct| {
             let _ = window.emit(
                 "prores-progress",
@@ -560,4 +568,27 @@ pub async fn scan_audio_issues(
     })
     .await
     .map_err(|e| format!("Task failed: {}", e))?
+}
+
+/// Extract a video's soundtrack as "<name>_audio.wav" beside it.
+#[tauri::command]
+pub async fn extract_audio(video_path: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        let path = std::path::Path::new(&video_path);
+        let dir = path.parent().map(|p| p.to_string_lossy().to_string()).unwrap_or_else(|| ".".to_string());
+        let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("video");
+        let output = format!("{}/{}_audio.wav", dir, stem);
+        ffmpeg::run_ffmpeg(&ffmpeg::build_extract_audio_command(&video_path, &output))?;
+        Ok(output)
+    })
+    .await
+    .map_err(|e| format!("Task failed: {}", e))?
+}
+
+/// Waveform overview per channel: `channels` lanes of `buckets` peaks in 0…1.
+#[tauri::command]
+pub async fn waveform_lanes(audio_path: String, buckets: u32, channels: u32) -> Result<Vec<Vec<f32>>, String> {
+    tokio::task::spawn_blocking(move || waveform::compute_lanes(&audio_path, buckets.clamp(1, 4000) as usize, channels))
+        .await
+        .map_err(|e| format!("Task failed: {}", e))?
 }

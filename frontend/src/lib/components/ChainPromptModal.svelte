@@ -1,4 +1,5 @@
 <script>
+  import { sp } from '../spell.svelte.js';
   // A blocking question from a running chain: fix / skip / stop, with an
   // "apply to all remaining files" tick so a big batch asks once.
   let { prompt, onChoose } = $props();
@@ -14,14 +15,14 @@
 <div class="overlay" role="alertdialog" aria-modal="true" aria-labelledby="chain-prompt-title">
   <div class="box" class:warn={prompt.kind === 'unfixable'}>
     <div class="eyebrow">{prompt.kind === 'unfixable' ? 'CAN’T BE FIXED' : 'CHAIN PAUSED'} · FILE {prompt.index} OF {prompt.total}</div>
-    <div class="title" id="chain-prompt-title">{prompt.title}</div>
+    <div class="title" id="chain-prompt-title">{sp(prompt.title)}</div>
     <div class="file" title={prompt.filename}>{prompt.filename}</div>
     {#if prompt.lines?.length}
       <ul class="lines">
-        {#each prompt.lines as line}<li>{line}</li>{/each}
+        {#each prompt.lines as line}<li>{sp(line)}</li>{/each}
       </ul>
     {/if}
-    {#if prompt.body}<p class="body">{prompt.body}</p>{/if}
+    {#if prompt.body}<p class="body">{sp(prompt.body)}</p>{/if}
 
     <label class="apply-all">
       <input type="checkbox" bind:checked={applyAll} />
@@ -32,7 +33,7 @@
       <button class="btn stop" onclick={() => onChoose('stop', false)} title="Stop the run here. Files already finished are kept.">STOP RUN</button>
       <span class="spacer"></span>
       {#each prompt.choices as c}
-        <button class="btn {c.kind}" onclick={() => onChoose(c.id, applyAll)}>{c.label}</button>
+        <button class="btn {c.kind}" onclick={() => onChoose(c.id, applyAll)}>{sp(c.label)}</button>
       {/each}
     </div>
   </div>

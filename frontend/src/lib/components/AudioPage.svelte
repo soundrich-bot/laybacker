@@ -1,6 +1,7 @@
 <script>
   import MatchedPairRow from './MatchedPairRow.svelte';
   import QcPlayer from './QcPlayer.svelte';
+  import { sp } from '../spell.svelte.js';
 
   // The Audio Only page: everything you can do to audio files on their own,
   // in three sections — QC (measure), File Deliverables (render to a spec),
@@ -276,7 +277,7 @@
                         title="Show where — click a time to listen back">{clickSummary(r.clicks)} ▾</button>
                       {#if openClickList === pair.id}
                         <div class="click-list">
-                          {#if r.clicks.headPop}<button class="click-time" onclick={() => listen(pair, 0)}>head pop · 0:00.000</button>{/if}
+                          {#if r.clicks.headPop}<button class="click-time" onclick={() => listen(pair, 0)}>HEAD POP · 0:00.000</button>{/if}
                           {#each r.clicks.clicks as c}
                             <button class="click-time" onclick={() => listen(pair, c.time)}
                               title="{c.prominenceDb.toFixed(0)} dB above the surrounding audio, {c.widthMs.toFixed(2)} ms wide">
@@ -284,7 +285,7 @@
                             </button>
                           {/each}
                           {#if r.clicks.count > r.clicks.clicks.length}<span class="click-more">…and {r.clicks.count - r.clicks.clicks.length} more</span>{/if}
-                          {#if r.clicks.tailPop}<button class="click-time" onclick={() => listen(pair, Math.max(0, pair.audio.durationSecs - 2))}>tail pop · end</button>{/if}
+                          {#if r.clicks.tailPop}<button class="click-time" onclick={() => listen(pair, Math.max(0, pair.audio.durationSecs - 2))}>TAIL POP · END</button>{/if}
                         </div>
                       {/if}
                     {:else}
@@ -362,7 +363,7 @@
     {#if open.deliver}
     <div class="actions">
       <button class="action normalise" onclick={onNormalizeAll} disabled={busy || pairs.length === 0}>
-        <span class="action-title">{isProcessing ? 'WORKING…' : `NORMALISE ALL → ${specLabel}`}</span>
+        <span class="action-title">{isProcessing ? 'WORKING…' : sp(`NORMALISE ALL → ${specLabel}`)}</span>
         <span class="action-desc">{qcMode === 'peak' ? 'Set every file’s true peak to the target' : 'Level every file to the loudness target'}</span>
       </button>
       <button class="action sixfr" onclick={() => showSixFrConfirm = true} disabled={busy || pairs.length === 0}>
@@ -569,7 +570,7 @@
   .back-btn {
     font-family: var(--font-display);
     font-weight: 700;
-    font-size: 10px;
+    font-size: 11px;
     letter-spacing: 0.04em;
     color: var(--text-muted);
     background: var(--cap-face);
@@ -651,7 +652,7 @@
   .seg-btn {
     font-family: var(--font-display);
     font-weight: 700;
-    font-size: 11.5px;
+    font-size: 11px;
     letter-spacing: 0.04em;
     color: var(--text-muted);
     background: var(--cap-face);
@@ -686,7 +687,7 @@
   .cap {
     font-family: var(--font-display);
     font-weight: 700;
-    font-size: 11.5px;
+    font-size: 11px;
     letter-spacing: 0.04em;
     color: var(--text-muted);
     background: var(--cap-face);
@@ -871,7 +872,7 @@
     font-weight: 500; font-size: 12px; line-height: 1.6; color: var(--text-secondary); margin-bottom: var(--gap-lg); }
   .confirm-body strong { color: var(--text-primary); }
   .confirm-actions { display: flex; justify-content: flex-end; gap: var(--gap-sm); }
-  .confirm-cancel { font-family: var(--font-text); font-size: 11px; font-weight: 700; letter-spacing: 0; color: var(--text-muted); background: var(--cap-face); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 7px 14px; cursor: pointer; box-shadow: var(--cap-shadow); }
+  .confirm-cancel { font-family: var(--font-display); font-size: 11px; font-weight: 700; letter-spacing: 0.04em; color: var(--text-muted); background: var(--cap-face); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 7px 14px; cursor: pointer; box-shadow: var(--cap-shadow); }
   .confirm-cancel:hover { color: var(--text-primary); box-shadow: var(--cap-shadow-hover); }
   .confirm-apply { font-family: var(--font-display);
     font-weight: 700; font-size: 11px; letter-spacing: 0.04em; color: var(--bg-dark); background: var(--neon-orange); border: 1px solid var(--neon-orange); border-radius: var(--radius-sm); padding: 7px 14px; cursor: pointer; box-shadow: var(--cap-shadow); }

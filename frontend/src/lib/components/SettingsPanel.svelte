@@ -2,8 +2,6 @@
   let {
     settings,
     onSettingsChange,
-    theme = 'neon',
-    onThemeChange,
     timestampFormat = 'YYYYMMDD_HHmm',
     onTimestampFormatChange,
     proresProfile = 'lt',
@@ -14,6 +12,7 @@
     onDefaultNameRuleChange,
     audioOnly = false,
     audioPage = false,
+    laybackReady = false, // a video is paired with audio — the only time these export controls apply
   } = $props();
 
   // Audio Only page output: Original first, then the choices.
@@ -82,6 +81,7 @@
     { value: 'lt',    label: 'ProRes 422 LT' },
     { value: '422',   label: 'ProRes 422' },
     { value: 'hq',    label: 'ProRes 422 HQ' },
+    { value: 'h264',  label: 'H.264 (MP4)' },
   ];
 </script>
 
@@ -133,6 +133,9 @@
   </div>
   {/if}
   {:else}
+  <!-- Layback export controls: greyed until there's a layback to apply them to -->
+  <div class="layback-controls" class:inactive={!laybackReady}
+    title={laybackReady ? '' : 'These apply to a layback — pair a video with its audio and they come to life'}>
   <!-- Video codec -->
   <div class="setting-group">
     <span class="setting-label" title="Video codec — Original copies the stream, H.264 re-encodes">VIDEO</span>
@@ -206,6 +209,7 @@
       </span>
     </div>
   {/if}
+  </div>
   {/if}
 
   <!-- Spacer -->
@@ -230,14 +234,6 @@
     </button>
     {#if showSettings}
       <div class="cog-dropdown">
-        <span class="dropdown-label" title="How the app looks">THEME</span>
-        <button class="dropdown-item" class:active={theme === 'neon'} onclick={() => onThemeChange('neon')}
-          title="The original: dark with neon accents">NEON</button>
-        <button class="dropdown-item" class:active={theme === 'tame'} onclick={() => onThemeChange('tame')}
-          title="Warm cream, softer colour — easier on the eyes">MY EYES</button>
-        <button class="dropdown-item" class:active={theme === 'porcelain'} onclick={() => onThemeChange('porcelain')}
-          title="White, high contrast, clear colour — for clarity">PORCELAIN</button>
-        <div class="dropdown-divider"></div>
         <span class="dropdown-label">DATE FORMAT</span>
         {#each formats as fmt}
           <button
@@ -279,7 +275,7 @@
           {savingToFolder ? `FOLDER: ${folderLabel}` : 'CHOOSE A FOLDER…'}
         </button>
         <div class="dropdown-divider"></div>
-        <span class="dropdown-label" title="Codec for the ProRes button on each video">PRORES WORKING FILE</span>
+        <span class="dropdown-label" title="What the working-file button on each video makes">WORKING FILE</span>
         {#each proresFlavors as fl}
           <button
             class="dropdown-item"
@@ -317,6 +313,8 @@
     align-items: center;
     gap: var(--gap-sm);
   }
+  .layback-controls { display: flex; flex-wrap: wrap; gap: var(--gap-lg); align-items: center; transition: opacity 0.2s; }
+  .layback-controls.inactive { opacity: 0.4; pointer-events: none; filter: grayscale(0.6); }
 
   .setting-label {
     font-family: var(--font-display);
@@ -337,8 +335,8 @@
   }
 
   .option-btn {
-    font-family: var(--font-text);
-    font-size: 12px;
+    font-family: var(--font-display);
+    font-size: 11px;
     font-weight: 700;
     padding: 4px 12px;
     border: none;
@@ -347,7 +345,7 @@
     color: var(--text-muted);
     cursor: pointer;
     transition: all 0.15s;
-    letter-spacing: 0;
+    letter-spacing: 0.04em;
   }
 
   .option-btn.active {

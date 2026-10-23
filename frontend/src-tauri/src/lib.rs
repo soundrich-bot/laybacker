@@ -38,12 +38,14 @@ pub fn run() {
             commands::join_channels,
             commands::process_audio,
             commands::waveform_peaks,
+            commands::waveform_lanes,
             commands::chain_workdir,
             commands::remove_workdir,
             commands::chain_shape,
             commands::write_text_file,
             commands::video_frame,
             commands::detect_clicks,
+            commands::extract_audio,
             commands::scan_audio_issues,
         ])
         .run(tauri::generate_context!())

@@ -2,9 +2,25 @@
   import { invoke } from '@tauri-apps/api/core';
   import { getVersion } from '@tauri-apps/api/app';
   import { onMount } from 'svelte';
-  let { ffmpegStatus } = $props();
+  import { spelling, respell } from '../spell.svelte.js';
+  let { theme = 'neon', onThemeChange = () => {} } = $props();
+  // Richard's names for the three looks: LIGHT (porcelain), MY EYES (tame), DARK (neon)
+  // One sun button cycles through them: LIGHT → MY EYES → DARK → LIGHT
+  const THEME_CYCLE = [
+    { id: 'porcelain', label: 'LIGHT' },
+    { id: 'tame', label: 'MY EYES' },
+    { id: 'neon', label: 'DARK' },
+  ];
+  const themeIndex = $derived(Math.max(0, THEME_CYCLE.findIndex((t) => t.id === theme)));
+  const nextTheme = $derived(THEME_CYCLE[(themeIndex + 1) % THEME_CYCLE.length]);
+  function cycleTheme(e) {
+    e.stopPropagation();
+    onThemeChange(nextTheme.id);
+  }
   let showAbout = $state(false);
   let showHelp = $state(false);
+  let helpEl = $state(null);
+  $effect(() => { spelling(); if (showHelp && helpEl) respell(helpEl); });
   let appVersion = $state('');
 
   onMount(async () => {
@@ -102,7 +118,7 @@
         </svg>
       </button>
       {#if showHelp}
-        <div class="help-panel">
+        <div class="help-panel" bind:this={helpEl}>
           <div class="help-head">
             <div class="help-title">HOW IT WORKS</div>
             <button class="help-close" onclick={() => showHelp = false} title="Close (Esc)">✕ CLOSE</button>
@@ -110,7 +126,7 @@
           <div class="help-divider"></div>
           <p class="help-intro">Laybacker lays sound back onto picture in batches, checks and normalises audio for delivery, adds slates, and never touches your originals.</p>
           <ol class="help-steps">
-            <li><strong>Drop files</strong> — Drag video and audio files onto the window, all at once or one at a time. Laybacker pairs them by duration and filename. Drop one mix with several videos to lay it onto every video. Drop a video on its own to make a ProRes working file or add a slate to it.</li>
+            <li><strong>Drop files</strong> — Drag video and audio files onto the window, all at once or one at a time. Laybacker pairs them by duration and filename. Drop one mix with several videos to lay it onto every video. Drop a video on its own and you get a small resizable player, its soundtrack's waveform, and what the audio measures; from there, make a working file (ProRes or H.264, remembered), extract the audio as a WAV, or add a slate.</li>
             <li><strong>Check the pairs</strong> — Each card shows a video + audio pairing with play buttons to preview. If a pair is wrong, remove it and re-drop.</li>
             <li><strong>Filenames</strong> — The <strong>FILENAME</strong> starts as a smart blend of both names with duplicate information removed. Beside it: <strong>RENAME</strong> to type your own, <strong>DATE</strong> to stamp the time, and <strong>NAME ▾</strong> to use the audio filename, the video filename, bump the version number (v3 → v4) or go back to the smart blend. <strong>NAME ALL BY</strong> in the column header applies one choice to the whole batch (it's per batch — <strong>✕ CANCEL</strong> undoes it). Set your usual style under <strong>DEFAULT FILENAME</strong> in the settings cog. A name you've edited stays put whatever else you change; only the extension follows the format.</li>
             <li><strong>Levels &amp; QC</strong> — The QC bar holds one spec for the batch. Pick the reference: <strong>LUFS</strong> (level to a loudness target, with dBTP as a ceiling) or <strong>PEAK</strong> (set every file's true peak to the dBTP value, loudness ignored). <strong>RUN QC</strong> measures every file and shows its LUFS and true peak on the card. <strong>NORM</strong> on a file, or the big <strong>NORMALIZE</strong> button, levels to that spec.</li>
@@ -128,11 +144,12 @@
         </div>
       {/if}
     </div>
-    {#if ffmpegStatus.available}
-      <span class="status-badge good" title={ffmpegStatus.version}>FFmpeg OK</span>
-    {:else}
-      <span class="status-badge bad">FFmpeg Missing</span>
-    {/if}
+    <button class="help-btn" onclick={cycleTheme} title="Theme: {THEME_CYCLE[themeIndex].label} — click for {nextTheme.label}" aria-label="Switch theme">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+        <circle cx="9" cy="9" r="3.6"/>
+        <path d="M9 1.2v2.2M9 14.6v2.2M1.2 9h2.2M14.6 9h2.2M3.5 3.5l1.55 1.55M12.95 12.95l1.55 1.55M3.5 14.5l1.55-1.55M12.95 5.05l1.55-1.55"/>
+      </svg>
+    </button>
   </div>
 </header>
 
@@ -452,37 +469,6 @@
     line-height: 1.4;
   }
 
-  .status-badge {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    padding: 3px 8px;
-    border-radius: var(--radius-sm);
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    font-weight: 700;
-  }
-
-  .status-badge.good {
-    background: rgba(57, 255, 20, 0.15);
-    color: var(--neon-green);
-    border: 1px solid rgba(57, 255, 20, 0.3);
-  }
-
-  .status-badge.bad {
-    background: rgba(255, 46, 99, 0.15);
-    color: var(--neon-pink);
-    border: 1px solid rgba(255, 46, 99, 0.3);
-  }
-
-  :global(:root.tame) .status-badge.good, :global(:root.porcelain) .status-badge.good {
-    background: rgba(106, 154, 90, 0.15);
-    border-color: rgba(106, 154, 90, 0.3);
-  }
-
-  :global(:root.tame) .status-badge.bad, :global(:root.porcelain) .status-badge.bad {
-    background: rgba(224, 122, 95, 0.15);
-    border-color: rgba(224, 122, 95, 0.3);
-  }
 
   :global(:root.tame) .about-panel,
   :global(:root.tame) .help-panel, :global(:root.porcelain) .help-panel {

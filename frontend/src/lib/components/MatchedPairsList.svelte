@@ -1,5 +1,7 @@
 <script>
   import MatchedPairRow from './MatchedPairRow.svelte';
+  import SoloVideoCard from './SoloVideoCard.svelte';
+  import { sp } from '../spell.svelte.js';
   import ProResButton from './ProResButton.svelte';
   import SoloSlateButton from './SoloSlateButton.svelte';
 
@@ -43,6 +45,13 @@
     nameRule = 'smart',
     onNameRuleChange,
     soloSlateStatus = {},
+    videoInfo = {},
+    extractStatus = {},
+    workingFormat = 'lt',
+    onWorkingFormatChange,
+    onExtractAudio,
+    workingFileStatus = {},
+    onMakeWorkingFile,
     isProcessing = false,
     clockChecks = {},
     clockRunning = false,
@@ -82,47 +91,22 @@
   {#if pairs.length === 0}
     <div class="empty-state" class:waiting={videoCount > 0 || audioCount > 0}>
       {#if videoCount > 0 && audioCount === 0}
-        <div class="waiting-icon">
-          <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-            <rect x="2" y="6" width="28" height="20" rx="3" stroke="currentColor" stroke-width="1.5"/>
-            <path d="M13 12L19 16L13 20V12Z" fill="currentColor"/>
-          </svg>
-          <span class="checkmark">✓</span>
+        <div class="status-line">
+          <span class="status-title">{videoCount} VIDEO{videoCount !== 1 ? 'S' : ''} LOADED</span>
+          <span class="status-hint">Drop audio to lay back — or make a working file, extract the audio, or add a slate</span>
         </div>
-        <p class="waiting-text">{videoCount} VIDEO{videoCount !== 1 ? 'S' : ''} LOADED</p>
-        <p class="waiting-hint">Drop audio to lay back — or slate the video, or make a ProRes working file for Pro Tools</p>
-        <div class="video-prores-list">
+        <div class="solo-list">
           {#each videos as v (v.path)}
-            <div class="video-prores-item">
-              <div class="vp-thumb">
-                {#if v.thumbnailData}
-                  <img src={v.thumbnailData} alt="" />
-                {:else}
-                  <svg width="16" height="12" viewBox="0 0 16 12" fill="none">
-                    <rect x="1" y="1" width="14" height="10" rx="1.5" stroke="currentColor" stroke-width="1.2"/>
-                    <path d="M6 4L10 6L6 8V4Z" fill="currentColor"/>
-                  </svg>
-                {/if}
-              </div>
-              <span class="vp-name" title={v.filename}>{v.filename}</span>
-              {#if onOpenSlate}
-                <SoloSlateButton video={v} status={soloSlateStatus[v.path] ?? null} {onOpenSlate} {onReveal} />
-              {/if}
-              <ProResButton videoPath={v.path} durationSecs={v.durationSecs} {onCreateProres} {onReveal} />
-            </div>
+            <SoloVideoCard video={v} info={videoInfo[v.path] ?? null} slateStatus={soloSlateStatus[v.path] ?? null}
+              extractStatus={extractStatus[v.path] ?? null} {workingFormat} {onWorkingFormatChange}
+              workingStatus={workingFileStatus[v.path] ?? null} {onMakeWorkingFile} {onExtractAudio} {onOpenSlate} {onReveal} />
           {/each}
         </div>
       {:else if audioCount > 0 && videoCount === 0}
-        <div class="waiting-icon">
-          <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-            <path d="M16 4C16 4 18 4 18 7V25C18 28 16 28 16 28C16 28 14 28 14 25V7C14 4 16 4 16 4Z" stroke="currentColor" stroke-width="1.5"/>
-            <path d="M10 14V20C10 23.3 12.7 26 16 26C19.3 26 22 23.3 22 20V14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-            <path d="M16 26V30" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-          </svg>
-          <span class="checkmark">✓</span>
+        <div class="status-line">
+          <span class="status-title">{audioCount} AUDIO FILE{audioCount !== 1 ? 'S' : ''} LOADED</span>
+          <span class="status-hint">Now drop a video file to pair up</span>
         </div>
-        <p class="waiting-text">{audioCount} AUDIO FILE{audioCount !== 1 ? 'S' : ''} LOADED</p>
-        <p class="waiting-hint">Now drop a video file to pair up</p>
         {#if onAudioOnly}
           <div class="or-row">
             <span class="or-text">no video? work on the sound itself</span>
@@ -211,9 +195,9 @@
               disabled={busy}
               title={qcMode === 'peak'
                 ? `Set every file's true peak to ${qcTruePeak} dBTP now (boost or cut) — the new files are then measured and displayed`
-                : `Normalise every file to ${qcTargetLufs} LUFS now — the new files are then measured and displayed`}
+                : sp(`Normalise every file to ${qcTargetLufs} LUFS now — the new files are then measured and displayed`)}
             >
-              {isProcessing ? 'WORKING…' : (qcMode === 'peak' ? `NORMALISE ALL → ${qcTruePeak} dBTP` : `NORMALISE ALL → ${qcTargetLufs} LUFS`)}
+              {isProcessing ? 'WORKING…' : sp(qcMode === 'peak' ? `NORMALISE ALL → ${qcTruePeak} dBTP` : `NORMALISE ALL → ${qcTargetLufs} LUFS`)}
             </button>
           {/if}
 
@@ -293,7 +277,7 @@
             class:active={allNormEnabled}
             class:partial={someNormEnabled && !allNormEnabled}
             onclick={onToggleAllNorm}
-            title={allNormEnabled ? "Disable normalization on all" : "Enable normalization on all"}
+            title={sp(allNormEnabled ? "Disable normalisation on all" : "Enable normalisation on all")}
           >
             NORM ALL
           </button>
@@ -401,7 +385,7 @@
   .col-norm-btn {
     font-family: var(--font-display);
     font-weight: 700;
-    font-size: 10px;
+    font-size: 11px;
     letter-spacing: 0.04em;
     color: var(--text-muted);
     background: var(--cap-face);
@@ -462,7 +446,7 @@
   .name-rule-btn {
     font-family: var(--font-display);
     font-weight: 700;
-    font-size: 10px;
+    font-size: 11px;
     letter-spacing: 0.04em;
     color: var(--text-muted);
     background: var(--cap-face);
@@ -491,7 +475,7 @@
   .name-rule-cancel {
     font-family: var(--font-display);
     font-weight: 700;
-    font-size: 10px;
+    font-size: 11px;
     letter-spacing: 0.04em;
     color: var(--neon-orange);
     background: var(--cap-face);
@@ -544,7 +528,7 @@
   .qc-mode-btn {
     font-family: var(--font-display);
     font-weight: 700;
-    font-size: 10px;
+    font-size: 11px;
     letter-spacing: 0.04em;
     color: var(--text-muted);
     background: var(--cap-face);
@@ -598,7 +582,7 @@
   .qc-sixfr {
     font-family: var(--font-display);
     font-weight: 700;
-    font-size: 10px;
+    font-size: 11px;
     letter-spacing: 0.04em;
     color: var(--text-muted);
     background: var(--cap-face);
@@ -675,12 +659,18 @@
 
   .empty-state {
     flex: 1;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     opacity: 0.5;
   }
+  /* Loaded-but-waiting: a single line, the cards need the room */
+  .empty-state.waiting { justify-content: flex-start; overflow-y: auto; padding: 6px var(--gap-lg) var(--gap-md); }
+  .status-line { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; width: 100%; max-width: 960px; margin-bottom: 8px; }
+  .status-title { font-family: var(--font-display); font-weight: 700; font-size: 13px; letter-spacing: 0.04em; color: var(--neon-cyan); white-space: nowrap; }
+  .status-hint { font-family: var(--font-text); font-weight: 500; font-size: 12.5px; color: var(--text-secondary); }
 
   .empty-state.waiting {
     opacity: 1;
@@ -760,7 +750,7 @@
   .audio-only-btn {
     font-family: var(--font-display);
     font-weight: 700;
-    font-size: 10px;
+    font-size: 11px;
     letter-spacing: 0.04em;
     color: var(--neon-cyan);
     background: var(--cap-face);
@@ -774,6 +764,7 @@
   .audio-only-btn:hover { border-color: var(--neon-cyan); box-shadow: var(--cap-shadow-hover); }
   .audio-only-btn:active { transform: translateY(1px); box-shadow: var(--cap-shadow-pressed); }
 
+  .solo-list { display: flex; flex-direction: column; gap: var(--gap-sm); margin-top: 0; width: 100%; max-width: 960px; }
   .video-prores-list {
     display: flex;
     flex-direction: column;
@@ -878,10 +869,10 @@
   }
 
   .confirm-cancel {
-    font-family: var(--font-text);
+    font-family: var(--font-display);
     font-size: 11px;
     font-weight: 700;
-    letter-spacing: 0;
+    letter-spacing: 0.04em;
     color: var(--text-muted);
     background: var(--cap-face);
     border: 1px solid var(--border-color);

@@ -1,5 +1,6 @@
 <script>
   import MediaPreview from './MediaPreview.svelte';
+  import { sp } from '../spell.svelte.js';
   import ProResButton from './ProResButton.svelte';
 
   import { invoke } from '@tauri-apps/api/core';
@@ -319,7 +320,7 @@
 
       <div class="file-block audio-block" style="flex: 2;">
         <div class="file-main">
-          <button class="play-btn" onclick={() => previewFile = { path: pair.audio.path, filename: pair.audio.filename, mediaType: 'audio' }} title="Preview audio">
+          <button class="play-btn" onclick={() => previewFile = { path: pair.audio.path, filename: pair.audio.filename, mediaType: 'audio', channels: pair.audio.channelCount ?? 2 }} title="Preview audio">
             <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 1L9 5L2 9V1Z" fill="currentColor"/></svg>
           </button>
           <span class="file-duration">{formatDuration(pair.audio.durationSecs)}</span>
@@ -350,7 +351,7 @@
       <!-- Video info -->
       <div class="file-block video-block">
         <div class="file-main">
-          <button class="play-btn" onclick={() => previewFile = { path: pair.video.path, filename: pair.video.filename, mediaType: 'video' }} title="Preview video">
+          <button class="play-btn" onclick={() => previewFile = { path: pair.video.path, filename: pair.video.filename, mediaType: 'video', channels: pair.video.channelCount ?? 2 }} title="Preview video">
             <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 1L9 5L2 9V1Z" fill="currentColor"/></svg>
           </button>
           <span class="file-duration">{formatDuration(pair.video.durationSecs)}</span>
@@ -375,7 +376,7 @@
       <!-- Audio info -->
       <div class="file-block audio-block">
         <div class="file-main">
-          <button class="play-btn" onclick={() => previewFile = { path: pair.audio.path, filename: pair.audio.filename, mediaType: 'audio' }} title="Preview audio">
+          <button class="play-btn" onclick={() => previewFile = { path: pair.audio.path, filename: pair.audio.filename, mediaType: 'audio', channels: pair.audio.channelCount ?? 2 }} title="Preview audio">
             <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 1L9 5L2 9V1Z" fill="currentColor"/></svg>
           </button>
           <span class="file-duration">{formatDuration(pair.audio.durationSecs)}</span>
@@ -443,7 +444,7 @@
           </span>
         {:else}
           <button class="norm-settings-btn" onclick={() => showNormSettings = !showNormSettings}
-            title="Click to change normalization settings"
+            title={sp("Click to change normalisation settings")}
           >
             {normMode === 'broadcast' ? `${pair.normalizationSettings.targetLufs} LUFS` : `${pair.normalizationSettings.truePeakLimit} dBTP`}
           </button>
@@ -493,7 +494,7 @@
           ? '10s head / 5s tail silence will be added — click to disable'
           : 'Check levels & head/tail silence, then add 10s head / 5s tail silence (clock)'}
       >
-        Clock
+        CLOCK
       </button>
       {#if checkingClock}
         <span class="silence-checking">...</span>
@@ -771,7 +772,7 @@
       <p class="silence-detail-note">Proceeding anyway — the 10s / 5s handles will be added on export. Click <strong>Clock</strong> to turn it back off.</p>
     {:else}
       <p class="silence-detail-note">This file isn't at the target, but you can clock it anyway.</p>
-      <button class="clock-proceed" onclick={proceedClock}>Proceed anyway &rarr;</button>
+      <button class="clock-proceed" onclick={proceedClock}>PROCEED ANYWAY &rarr;</button>
     {/if}
   </div>
 {/if}
@@ -827,7 +828,7 @@
     {:else}
       <!-- Full scale mode: just true peak limit, no LUFS target -->
       <div class="norm-options">
-        <p class="mode-description">Normalize to maximum level, limited by true peak.</p>
+        <p class="mode-description">{sp("Normalise to maximum level, limited by true peak.")}</p>
         <div class="norm-presets">
           <button class="preset-btn" class:active={pair.normalizationSettings.truePeakLimit === -1}
             onclick={() => onUpdateNormalization(pair.id, true, { targetLufs: 0, truePeakLimit: -1 })}
@@ -863,6 +864,7 @@
     filePath={previewFile.path}
     filename={previewFile.filename}
     mediaType={previewFile.mediaType}
+    channels={previewFile.channels ?? 2}
     onClose={() => previewFile = null}
   />
 {/if}
@@ -948,10 +950,10 @@
   }
 
   .confirm-cancel {
-    font-family: var(--font-text);
+    font-family: var(--font-display);
     font-size: 11px;
     font-weight: 700;
-    letter-spacing: 0;
+    letter-spacing: 0.04em;
     color: var(--text-muted);
     background: var(--cap-face);
     border: 1px solid var(--border-color);
@@ -1211,7 +1213,7 @@
     color: var(--text-muted);
     font-family: var(--font-display);
     font-weight: 700;
-    font-size: 10px;
+    font-size: 11px;
     letter-spacing: 0.04em;
     cursor: pointer;
     transition: all 0.2s;
@@ -1269,8 +1271,9 @@
   }
 
   .norm-settings-btn {
-    font-family: var(--font-text);
-    font-weight: 500;
+    font-family: var(--font-display);
+    font-weight: 700;
+    letter-spacing: 0.04em;
     font-size: 11px;
     color: var(--neon-yellow);
     background: rgba(237, 255, 33, 0.08);
@@ -1315,7 +1318,7 @@
     color: var(--text-muted);
     font-family: var(--font-display);
     font-weight: 700;
-    font-size: 10px;
+    font-size: 11px;
     letter-spacing: 0.04em;
     cursor: pointer;
     transition: all 0.2s;
@@ -1483,7 +1486,7 @@
     gap: 5px;
     font-family: var(--font-display);
     font-weight: 700;
-    font-size: 10px;
+    font-size: 11px;
     letter-spacing: 0.04em;
     color: var(--neon-cyan);
     background: var(--cap-face);
@@ -1577,10 +1580,10 @@
     display: flex;
     align-items: center;
     gap: 4px;
-    font-family: var(--font-text);
+    font-family: var(--font-display);
     font-size: 11px;
     font-weight: 700;
-    letter-spacing: 0;
+    letter-spacing: 0.04em;
     color: var(--neon-cyan);
     background: var(--cap-face);
     border: 1px solid rgba(8, 247, 254, 0.4);
@@ -1807,10 +1810,10 @@
   .clock-proceed {
     margin-top: 8px;
     align-self: flex-start;
-    font-family: var(--font-text);
+    font-family: var(--font-display);
     font-size: 11px;
     font-weight: 700;
-    letter-spacing: 0;
+    letter-spacing: 0.04em;
     color: var(--neon-orange);
     background: var(--cap-face);
     border: 1px solid rgba(255, 159, 28, 0.5);
@@ -1844,7 +1847,7 @@
   .mode-btn {
     font-family: var(--font-display);
     font-weight: 700;
-    font-size: 10px;
+    font-size: 11px;
     letter-spacing: 0.04em;
     padding: 6px 14px;
     border: none;
@@ -1885,9 +1888,10 @@
   }
 
   .preset-btn {
-    font-family: var(--font-text);
-    font-size: 12px;
+    font-family: var(--font-display);
+    font-size: 11px;
     font-weight: 700;
+    letter-spacing: 0.04em;
     padding: 6px 12px;
     border: 1px solid var(--border-accent);
     border-radius: var(--radius-sm);

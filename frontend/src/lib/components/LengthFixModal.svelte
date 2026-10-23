@@ -174,10 +174,10 @@
     justify-content: flex-end;
   }
   .cancel {
-    font-family: var(--font-text);
+    font-family: var(--font-display);
     font-size: 11px;
     font-weight: 700;
-    letter-spacing: 0;
+    letter-spacing: 0.04em;
     color: var(--text-muted);
     background: transparent;
     border: 1px solid var(--border-color);

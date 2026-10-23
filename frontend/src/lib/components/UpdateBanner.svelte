@@ -84,7 +84,7 @@
         </span>
         <div class="update-actions">
           <button class="btn-update" onclick={install}>UPDATE &amp; RESTART</button>
-          <button class="btn-later" onclick={dismiss}>Later</button>
+          <button class="btn-later" onclick={dismiss}>LATER</button>
         </div>
       {:else if state === 'downloading'}
         <span class="update-text">Downloading update… {pct}%</span>
@@ -93,7 +93,7 @@
         <span class="update-text">Update ready — restarting…</span>
       {:else if state === 'error'}
         <span class="update-text">Update failed. <a class="link" href="https://laybacker.com" target="_blank" rel="noreferrer">Download it manually →</a></span>
-        <button class="btn-later" onclick={dismiss}>Dismiss</button>
+        <button class="btn-later" onclick={dismiss}>DISMISS</button>
       {/if}
     </div>
 
@@ -141,8 +141,9 @@
   }
   .btn-update:hover { filter: brightness(1.1); }
   .btn-later {
-    font-family: var(--font-text);
-    font-weight: 500;
+    font-family: var(--font-display);
+    font-weight: 700;
+    letter-spacing: 0.04em;
     font-size: 11px;
     color: var(--text-muted);
     background: none;

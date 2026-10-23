@@ -1,4 +1,5 @@
 <script>
+  import { sp } from '../spell.svelte.js';
   import { FADE_CHOICES, FIX_MODES, UNFIXABLE_MODES, RENAME_RULES, NAME_TOKENS, convertIsSet, chainIsEmpty } from '../chain.js';
 
   // The Multifunction Chain: one ordered list of steps, run on every file.
@@ -138,7 +139,7 @@
           <select class="sel" value={chain.loudness} onchange={(e) => onChange({ loudness: e.target.value })} disabled={running}>
             {#each FIX_MODES as m}<option value={m.value}>{m.label}</option>{/each}
           </select>
-          <span class="desc">{chain.loudness === 'prompt' ? `Asks when a file is off ${specLabel}` : chain.loudness === 'always' ? `Normalises files that are off ${specLabel}; files on spec are left alone` : 'Measured and reported, never changed'}</span>
+          <span class="desc">{sp(chain.loudness === 'prompt' ? `Asks when a file is off ${specLabel}` : chain.loudness === 'always' ? `Normalises files that are off ${specLabel}; files on spec are left alone` : 'Measured and reported, never changed')}</span>
         </div>
       </div>
     </li>
@@ -236,7 +237,7 @@
       {/if}
     </button>
     {#if running}
-      <span class="progress-text"><span class="pfile">{progress.file}</span> — {progress.step}</span>
+      <span class="progress-text"><span class="pfile">{progress.file}</span> — {sp(progress.step)}</span>
     {:else if report.length}
       <span class="progress-text summary">
         <span class="ok">{done} done</span>{#if skipped} · <span class="warnc">{skipped} skipped</span>{/if}{#if failed} · <span class="bad">{failed} failed</span>{/if}
@@ -274,7 +275,7 @@
               </td>
               <td class="num">{fmt(r.before?.lufs)}{#if r.after?.lufs != null} → <strong>{fmt(r.after.lufs)}</strong>{/if}</td>
               <td class="num">{fmt(r.before?.tp)}{#if r.after?.tp != null} → <strong>{fmt(r.after.tp)}</strong>{/if}</td>
-              <td class="steps-cell">{(r.steps || []).join(', ') || '—'}</td>
+              <td class="steps-cell">{sp((r.steps || []).join(', ')) || '—'}</td>
               <td class="notes">{[...(r.warnings || []), r.notes].filter(Boolean).join(' · ')}</td>
             </tr>
           {/each}
@@ -335,7 +336,7 @@
 
   .cap {
     font-family: var(--font-display);
-    font-weight: 700; font-size: 11.5px; letter-spacing: 0.04em; color: var(--text-muted);
+    font-weight: 700; font-size: 11px; letter-spacing: 0.04em; color: var(--text-muted);
     background: var(--cap-face); border: 1px solid var(--border-color); border-radius: var(--radius-sm);
     padding: 4px 10px; cursor: pointer; transition: all 0.15s; box-shadow: var(--cap-shadow);
   }

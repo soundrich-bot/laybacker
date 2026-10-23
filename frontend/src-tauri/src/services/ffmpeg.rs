@@ -562,6 +562,34 @@ pub fn build_solo_slate_command_from(
     args
 }
 
+/// H.264 working file: a smooth-playing MP4 with AAC audio for sharing.
+pub fn build_h264_working_command(video_path: &str, output_path: &str) -> Vec<String> {
+    vec![
+        "-y".to_string(),
+        "-i".to_string(), video_path.to_string(),
+        "-c:v".to_string(), "libx264".to_string(),
+        "-crf".to_string(), "18".to_string(),
+        "-preset".to_string(), "medium".to_string(),
+        "-pix_fmt".to_string(), "yuv420p".to_string(),
+        "-c:a".to_string(), "aac".to_string(),
+        "-b:a".to_string(), "320k".to_string(),
+        "-movflags".to_string(), "+faststart".to_string(),
+        output_path.to_string(),
+    ]
+}
+
+/// Pull the soundtrack out of a video as a 24-bit WAV (no re-sampling).
+pub fn build_extract_audio_command(video_path: &str, output_path: &str) -> Vec<String> {
+    vec![
+        "-y".to_string(),
+        "-i".to_string(), video_path.to_string(),
+        "-vn".to_string(),
+        "-map".to_string(), "0:a:0".to_string(),
+        "-c:a".to_string(), "pcm_s24le".to_string(),
+        output_path.to_string(),
+    ]
+}
+
 pub fn build_prores_command(video_path: &str, output_path: &str, profile: u8) -> Vec<String> {
     vec![
         "-y".to_string(),
@@ -1218,6 +1246,14 @@ mod tests {
     }
 
     // ── build_audio_only_command ──
+
+    #[test]
+    fn test_h264_working_and_extract_audio_commands() {
+        let h = build_h264_working_command("/v.mov", "/v_H264.mp4").join(" ");
+        assert!(h.contains("-c:v libx264") && h.contains("-c:a aac") && h.ends_with("/v_H264.mp4"));
+        let x = build_extract_audio_command("/v.mov", "/v_audio.wav").join(" ");
+        assert!(x.contains("-vn") && x.contains("-map 0:a:0") && x.contains("pcm_s24le") && x.ends_with("/v_audio.wav"));
+    }
 
     #[test]
     fn test_lossless_codec_args_by_container_and_depth() {

@@ -39,7 +39,6 @@ function keepFrontendFlags(fresh, previous) {
 // Reactive state using Svelte 5 runes
 let files = $state([]);
 let matchedPairs = $state([]);
-let ffmpegStatus = $state({ available: false, version: '' });
 let isScanning = $state(false);
 let isProcessing = $state(false);
 let processingResults = $state([]);
@@ -63,6 +62,44 @@ let slateEditor = $state(null); // { scope: 'batch' | 'solo' | <pairId>, text, d
 let batchSlate = $state({ text: '', duration: 5, ...DEFAULT_SLATE_STYLE });
 // Solo-video slating (video dropped without audio): render state per video path.
 let soloSlateStatus = $state({}); // { [videoPath]: { state: 'working'|'done'|'error', pct, output? } }
+
+// What the audio inside a lone video measures — information, not a verdict.
+let videoInfo = $state({}); // { [videoPath]: { loading } | { lufs, tp, stereo, head, tail, clicks, clipping, dropouts } | { error } }
+let extractStatus = $state({}); // { [videoPath]: { state: 'working'|'done'|'error', output? } }
+
+async function analyzeVideo(v) {
+  if (!v || v.mediaType !== 'video' || videoInfo[v.path]) return;
+  const hasAudio = v.channelCount != null || v.sampleRate != null;
+  if (!hasAudio) { videoInfo = { ...videoInfo, [v.path]: { noAudio: true } }; return; }
+  videoInfo = { ...videoInfo, [v.path]: { loading: true } };
+  try {
+    const ch = v.channelCount ?? 2;
+    // Each measurement stands alone: a failure in one still leaves the others.
+    let lufs = null, tp = null, head = null, tail = null, stereo = null;
+    try { [lufs, tp] = await invoke('measure_loudness', { audioPath: v.path }); } catch { /* shown as — */ }
+    try { [head, tail] = await invoke('check_silence', { audioPath: v.path, durationSecs: v.durationSecs, silenceMs: 240 }); } catch { /* shown as — */ }
+    if (ch >= 2) { try { stereo = await invoke('check_stereo', { audioPath: v.path, channels: ch }); } catch { stereo = null; } }
+    let clicks = null, clipping = null, dropouts = null;
+    try { clicks = await invoke('detect_clicks', { audioPath: v.path, sampleRate: v.sampleRate ? Math.round(v.sampleRate) : null, channels: ch, sensitivity: qcClickSensitivity }); } catch { /* shown as — */ }
+    try { const r = await invoke('scan_audio_issues', { audioPath: v.path, sampleRate: v.sampleRate ? Math.round(v.sampleRate) : null, channels: ch }); clipping = r.clipping; dropouts = r.dropouts; } catch { /* shown as — */ }
+    videoInfo = { ...videoInfo, [v.path]: { lufs, tp, stereo, head, tail, clicks, clipping, dropouts } };
+  } catch (e) {
+    videoInfo = { ...videoInfo, [v.path]: { error: String(e) } };
+  }
+}
+
+async function extractAudio(v) {
+  if (extractStatus[v.path]?.state === 'working') return;
+  extractStatus = { ...extractStatus, [v.path]: { state: 'working' } };
+  try {
+    const output = await invoke('extract_audio', { videoPath: v.path });
+    extractStatus = { ...extractStatus, [v.path]: { state: 'done', output } };
+    playCompletionSound();
+  } catch (e) {
+    errors = [...errors, `Extract audio failed: ${e}`];
+    extractStatus = { ...extractStatus, [v.path]: { state: 'error' } };
+  }
+}
 // User-supplied slate background images, kept out of the pair objects (which
 // cross the IPC boundary on every call) and referenced by id.
 let slateAssets = $state({}); // { [id]: { dataUrl, img: HTMLImageElement, name } }
@@ -1079,10 +1116,8 @@ function getAudios() {
 // Actions
 async function checkFfmpeg() {
   try {
-    const version = await invoke('check_ffmpeg');
-    ffmpegStatus = { available: true, version };
+    await invoke('check_ffmpeg');
   } catch (e) {
-    ffmpegStatus = { available: false, version: '' };
     errors = [...errors, e];
   }
 }
@@ -1107,6 +1142,8 @@ async function scanFiles(paths) {
     const existingPaths = new Set(files.map(f => f.path));
     const newFiles = scanned.filter(f => !existingPaths.has(f.path));
     files = [...files, ...newFiles];
+    // Lone videos: measure their audio straight away (shown on the card).
+    for (const f of newFiles) if (f.mediaType === 'video') void analyzeVideo(f);
 
     // Audio on its own? Ask which page the user wants before pairing up.
     maybePromptAudioMode();
@@ -1367,14 +1404,85 @@ async function processAll() {
 // The main action button does the job it's LABELLED for. For an audio-only
 // batch that means normalising to the QC spec (or clocking) — not a plain
 // passthrough, which would leave the files untouched. Video laybacks lay back.
-async function runMainAction() {
-  if (matchedPairs.length === 0) return;
-  const audioOnly = matchedPairs.every(p => !p.video);
-  if (!audioOnly) return processAll();
+// Working files made from the big button or a card's MAKE button, with
+// progress the cards can show.
+let workingFileStatus = $state({}); // { [videoPath]: { state: 'working'|'done'|'error', pct, output? } }
+let workingFilesRunning = $state(false);
+const WORKING_LABEL = { proxy: 'PRORES PROXY', lt: 'PRORES LT', '422': 'PRORES 422', hq: 'PRORES HQ', h264: 'H.264' };
 
-  const clockOnly = matchedPairs.some(p => p.clockEnabled)
-    && !matchedPairs.some(p => p.normalizationEnabled);
-  return clockOnly ? clockAllNow() : normalizeAllNow();
+async function makeWorkingFile(video, profile) {
+  const path = video.path;
+  if (workingFileStatus[path]?.state === 'working') return null;
+  workingFileStatus = { ...workingFileStatus, [path]: { state: 'working', pct: 0 } };
+  try {
+    const output = await invoke('create_prores', { videoPath: path, durationSecs: video.durationSecs, profile });
+    workingFileStatus = { ...workingFileStatus, [path]: { state: 'done', pct: 100, output } };
+    return output;
+  } catch (e) {
+    errors = [...errors, `Working file failed: ${e}`];
+    workingFileStatus = { ...workingFileStatus, [path]: { state: 'error', pct: 0 } };
+    throw e;
+  }
+}
+function updateWorkingFileProgress(payload) {
+  const cur = workingFileStatus[payload?.videoPath];
+  if (!cur || cur.state !== 'working') return;
+  workingFileStatus = { ...workingFileStatus, [payload.videoPath]: { ...cur, pct: Math.min(100, Math.round((payload.progress ?? 0) * 100)) } };
+}
+async function makeWorkingFilesAll(profile) {
+  if (workingFilesRunning) return;
+  const todo = getVideos().filter(v => workingFileStatus[v.path]?.state !== 'done');
+  if (todo.length === 0) return;
+  workingFilesRunning = true;
+  try {
+    for (const v of todo) { try { await makeWorkingFile(v, profile); } catch { /* reported */ } }
+    playCompletionSound();
+  } finally {
+    workingFilesRunning = false;
+  }
+}
+
+// What the big button does right now — it names the job, not the app.
+function mainActionFor(profile = 'lt') {
+  const pairs = matchedPairs;
+  const videos = getVideos();
+  const audios = getAudios();
+  if (pairs.length > 0) {
+    const audioOnly = pairs.every(p => !p.video);
+    if (!audioOnly) {
+      const slated = pairs.some(p => p.video && p.slateEnabled);
+      return { label: slated ? 'LAYBACK + SLATE' : 'LAYBACK', count: pairs.length, disabled: false, kind: 'layback' };
+    }
+    const clockOnly = pairs.some(p => p.clockEnabled) && !pairs.some(p => p.normalizationEnabled);
+    if (clockOnly) return { label: 'CLOCK', count: pairs.length, disabled: false, kind: 'clock' };
+    if (conversionSet() && !pairs.some(p => p.normalizationEnabled || p.silenceCompliance)) {
+      return { label: 'CONVERT', count: pairs.length, disabled: false, kind: 'convert' };
+    }
+    return { label: 'NORMALISE', count: pairs.length, disabled: false, kind: 'normalise' };
+  }
+  if (videos.length > 0 && audios.length === 0) {
+    const remaining = videos.filter(v => workingFileStatus[v.path]?.state !== 'done').length;
+    const fmt = WORKING_LABEL[profile] ?? 'PRORES LT';
+    if (remaining === 0) return { label: `${fmt} FILES MADE`, count: 0, disabled: true, kind: 'working' };
+    return { label: `MAKE ${remaining} ${fmt} FILE${remaining === 1 ? '' : 'S'}`, count: 0, disabled: workingFilesRunning, kind: 'working', busy: workingFilesRunning };
+  }
+  if (audios.length > 0 && videos.length === 0) {
+    return { label: 'WAITING FOR VIDEO', count: 0, disabled: true, kind: 'waiting' };
+  }
+  return { label: 'DROP FILES TO START', count: 0, disabled: true, kind: 'none' };
+}
+
+async function runMainAction(profile = 'lt') {
+  const action = mainActionFor(profile);
+  if (action.disabled) return;
+  switch (action.kind) {
+    case 'layback': return processAll();
+    case 'clock': return clockAllNow();
+    case 'convert': return convertAllNow();
+    case 'normalise': return normalizeAllNow();
+    case 'working': return makeWorkingFilesAll(profile);
+    default: return;
+  }
 }
 
 function updateProgress(progress) {
@@ -1575,6 +1683,9 @@ function removePair(pairId) {
 }
 
 function clearAll() {
+  videoInfo = {};
+  extractStatus = {};
+  workingFileStatus = {};
   files = [];
   matchedPairs = [];
   processingResults = [];
@@ -1622,7 +1733,6 @@ export function getAppState() {
   return {
     get files() { return files; },
     get matchedPairs() { return matchedPairs; },
-    get ffmpegStatus() { return ffmpegStatus; },
     get isScanning() { return isScanning; },
     get isProcessing() { return isProcessing; },
     get processingResults() { return processingResults; },
@@ -1658,6 +1768,11 @@ export function getAppState() {
     cancelAudioStart,
     get slateEditor() { return slateEditor; },
     get soloSlateStatus() { return soloSlateStatus; },
+    get workingFileStatus() { return workingFileStatus; },
+    makeWorkingFile, updateWorkingFileProgress, mainActionFor,
+    get videoInfo() { return videoInfo; },
+    get extractStatus() { return extractStatus; },
+    extractAudio,
     openSlateEditor,
     closeSlateEditor,
     applySlate,

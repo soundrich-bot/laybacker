@@ -1,5 +1,6 @@
 <script>
   import { convertFileSrc, invoke } from '@tauri-apps/api/core';
+  import { drawWaveform } from '../waveform.js';
 
   // The QC player: always on screen under the QC table. Pick a file, see its
   // waveform with every fault marked on it, and play from any of them.
@@ -82,63 +83,13 @@
     peaks = null; loaded = false; isPlaying = false; currentTime = 0; duration = 0;
     if (!path) return;
     let alive = true;
-    invoke('waveform_peaks', { audioPath: path, buckets: 800 })
+    invoke('waveform_lanes', { audioPath: path, buckets: 800, channels: current?.audio.channelCount ?? 2 })
       .then(p => { if (alive) peaks = p; })
       .catch(() => { if (alive) peaks = []; });
     return () => { alive = false; };
   });
 
-  function cssVar(name, fallback) {
-    const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-    return v || fallback;
-  }
-
-  function draw() {
-    if (!canvas) return;
-    const dpr = window.devicePixelRatio || 1;
-    const w = canvas.clientWidth, h = canvas.clientHeight;
-    if (!w || !h) return;
-    if (canvas.width !== w * dpr || canvas.height !== h * dpr) { canvas.width = w * dpr; canvas.height = h * dpr; }
-    const ctx = canvas.getContext('2d');
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, w, h);
-    const lit = cssVar('--neon-cyan', '#08f7fe');
-    const dim = cssVar('--text-muted', '#8888aa');
-    const orange = cssVar('--neon-orange', '#ff9500');
-    const dur = duration || current?.audio.durationSecs || 0;
-    const mid = h / 2;
-    const playedX = dur > 0 ? (currentTime / dur) * w : 0;
-    if (peaks && peaks.length) {
-      const n = peaks.length;
-      for (let x = 0; x < w; x++) {
-        const p = peaks[Math.min(n - 1, Math.floor((x / w) * n))];
-        const bar = Math.max(1, p * (h - 6));
-        ctx.fillStyle = x <= playedX ? lit : dim;
-        ctx.globalAlpha = x <= playedX ? 1 : 0.5;
-        ctx.fillRect(x, mid - bar / 2, 1, bar);
-      }
-      ctx.globalAlpha = 1;
-    }
-    ctx.fillStyle = dim; ctx.globalAlpha = 0.25; ctx.fillRect(0, mid, w, 1); ctx.globalAlpha = 1;
-    // Fault markers: a translucent band for a span, a full-height line for a point.
-    if (dur > 0) {
-      for (const m of markers) {
-        const x0 = (m.time / dur) * w;
-        const x1 = m.end != null ? (m.end / dur) * w : x0;
-        ctx.fillStyle = orange;
-        if (x1 - x0 >= 2) {
-          ctx.globalAlpha = 0.35; ctx.fillRect(x0, 0, x1 - x0, h);
-        } else {
-          ctx.globalAlpha = 0.9; ctx.fillRect(Math.round(x0) - 1, 0, 2, h);
-        }
-        ctx.globalAlpha = 1;
-        // A small flag at the top so single-sample marks are findable.
-        ctx.beginPath(); ctx.moveTo(x0 - 5, 0); ctx.lineTo(x0 + 5, 0); ctx.lineTo(x0, 7); ctx.closePath(); ctx.fill();
-      }
-      ctx.fillStyle = lit;
-      ctx.fillRect(Math.round(playedX), 0, 2, h);
-    }
-  }
+  function draw() { drawWaveform(canvas, peaks, { currentTime, duration: duration || current?.audio.durationSecs || 0, markers }); }
   $effect(() => { peaks; currentTime; duration; markers; canvas; draw(); });
   $effect(() => {
     if (!canvas) return;
@@ -288,13 +239,13 @@
   .fault-count { font-family: var(--font-text); font-size: 12.5px; color: var(--neon-orange); font-weight: 600; }
   .cap {
     font-family: var(--font-display);
-    font-weight: 700; font-size: 11.5px; letter-spacing: 0.04em; color: var(--text-secondary);
+    font-weight: 700; font-size: 11px; letter-spacing: 0.04em; color: var(--text-secondary);
     background: var(--cap-face); border: 1px solid var(--border-color); border-radius: var(--radius-sm);
     padding: 5px 10px; cursor: pointer; box-shadow: var(--cap-shadow);
   }
   .cap:hover { color: var(--neon-cyan); border-color: rgba(8, 247, 254, 0.5); }
 
-  .wave-wrap { position: relative; height: 96px; cursor: pointer; background: var(--bg-panel); border-radius: 3px; border: 1px solid var(--border-color); }
+  .wave-wrap { position: relative; height: 120px; cursor: pointer; background: var(--bg-panel); border-radius: 3px; border: 1px solid var(--border-color); }
   .wave { display: block; width: 100%; height: 100%; }
   .wave-note {
     position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;

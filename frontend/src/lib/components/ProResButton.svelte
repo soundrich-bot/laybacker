@@ -4,7 +4,7 @@
 
   // A self-contained ProRes working-file button. Used on matched-pair rows AND
   // on lone videos (dropped without audio yet) so a ProRes can always be made.
-  let { videoPath, durationSecs = 0, onCreateProres, onReveal } = $props();
+  let { videoPath, durationSecs = 0, onCreateProres, onReveal, label = 'PRORES' } = $props();
 
   let proresState = $state('idle'); // idle | working | done | error
   let proresPath = $state('');
@@ -43,18 +43,18 @@
   title={proresState === 'done'
     ? 'ProRes working file ready — click to show in Finder'
     : proresState === 'working'
-      ? 'Creating ProRes…'
-      : 'Make a ProRes working file for Pro Tools'}
+      ? 'Creating…'
+      : 'Make a working file from this video'}
 >
   {#if proresState === 'working'}
     <span class="prores-fill" style="width:{pct}%"></span>
-    <span class="prores-label">ProRes… {pct}%</span>
+    <span class="prores-label">{pct}%</span>
   {:else if proresState === 'done'}
-    ✓ ProRes
+    ✓ {label.replace(/^MAKE /, '')}
   {:else if proresState === 'error'}
-    ProRes ✕
+    {label.replace(/^MAKE /, '')} ✕
   {:else}
-    ProRes
+    {label}
   {/if}
 </button>
 
@@ -63,19 +63,19 @@
     position: relative;
     overflow: hidden;
     flex-shrink: 0;
-    font-family: var(--font-text);
-    font-size: 10px;
+    font-family: var(--font-display);
+    font-size: 11px;
     font-weight: 700;
-    letter-spacing: 0;
-    color: var(--text-muted);
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
     background: var(--cap-face);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
-    padding: 4px 8px;
+    padding: 5px 10px;
     cursor: pointer;
     transition: all 0.15s;
     white-space: nowrap;
-    opacity: 0.85;
+    opacity: 1;
     box-shadow: var(--cap-shadow);
   }
   .prores-btn:hover {

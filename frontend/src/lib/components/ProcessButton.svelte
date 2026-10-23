@@ -1,8 +1,8 @@
 <script>
-  let { pairCount = 0, fileCount = 0, isProcessing = false, onProcess, onClear, onCancel, audioOnly = false, clockOnly = false } = $props();
-
-  // Audio-only batches: the button names the job it will actually do.
-  let actionLabel = $derived(audioOnly ? (clockOnly ? 'CLOCK' : 'NORMALIZE') : 'LAYBACK');
+  import { sp } from '../spell.svelte.js';
+  // `action` comes from the store: { label, count, disabled, kind, busy } — the
+  // button names the job it will do, and only says LAYBACK for a layback.
+  let { action = { label: 'DROP FILES TO START', count: 0, disabled: true }, pairCount = 0, fileCount = 0, isProcessing = false, onProcess, onClear, onCancel } = $props();
 </script>
 
 <div class="process-bar">
@@ -21,10 +21,11 @@
   {:else}
     <button
       class="process-btn"
-      disabled={pairCount === 0}
+      class:quiet={action.disabled}
+      disabled={action.disabled}
       onclick={onProcess}
     >
-      {actionLabel} {pairCount > 0 ? `(${pairCount})` : ''}
+      {action.busy ? 'WORKING…' : sp(action.label)}{action.count > 0 ? ` (${action.count})` : ''}
     </button>
   {/if}
 
@@ -48,10 +49,10 @@
   }
 
   .clear-btn {
-    font-family: var(--font-text);
-    font-weight: 500;
+    font-family: var(--font-display);
+    font-weight: 700;
     font-size: 11px;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.04em;
     color: var(--text-muted);
     background: var(--cap-face);
     border: 1px solid var(--border-color);
@@ -78,6 +79,7 @@
     cursor: not-allowed;
   }
 
+  .process-btn.quiet { opacity: 0.55; }
   .process-btn {
     font-family: var(--font-display);
     font-weight: 700;

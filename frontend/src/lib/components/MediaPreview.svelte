@@ -1,6 +1,7 @@
 <script>
   import { convertFileSrc, invoke } from '@tauri-apps/api/core';
   import { onMount } from 'svelte';
+  import { drawWaveform } from '../waveform.js';
 
   let {
     filePath = '',
@@ -8,6 +9,7 @@
     mediaType = 'video', // 'video' or 'audio'
     onClose,
     startAt = 0,         // seconds — open the player here (listen back to a click)
+    channels = 2,        // one waveform lane per channel
   } = $props();
 
   let mediaEl = $state(null);
@@ -30,49 +32,13 @@
 
   onMount(async () => {
     try {
-      peaks = await invoke('waveform_peaks', { audioPath: filePath, buckets: BUCKETS });
+      peaks = await invoke('waveform_lanes', { audioPath: filePath, buckets: BUCKETS, channels });
     } catch {
       waveError = true;
     }
   });
 
-  function cssVar(name, fallback) {
-    const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-    return v || fallback;
-  }
-
-  function drawWave() {
-    if (!canvas || !peaks || peaks.length === 0) return;
-    const dpr = window.devicePixelRatio || 1;
-    const w = canvas.clientWidth, h = canvas.clientHeight;
-    if (w === 0 || h === 0) return;
-    if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
-      canvas.width = w * dpr; canvas.height = h * dpr;
-    }
-    const ctx = canvas.getContext('2d');
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, w, h);
-    const lit = cssVar('--neon-cyan', '#08f7fe');
-    const dim = cssVar('--text-muted', '#8888aa');
-    const mid = h / 2;
-    const n = peaks.length;
-    const playedX = duration > 0 ? (currentTime / duration) * w : 0;
-    // Bars: one per pixel column, from the nearest bucket.
-    for (let x = 0; x < w; x++) {
-      const p = peaks[Math.min(n - 1, Math.floor((x / w) * n))];
-      const bar = Math.max(1, p * (h - 4));
-      ctx.fillStyle = x <= playedX ? lit : dim;
-      ctx.globalAlpha = x <= playedX ? 1 : 0.55;
-      ctx.fillRect(x, mid - bar / 2, 1, bar);
-    }
-    ctx.globalAlpha = 1;
-    // Centre line and playhead
-    ctx.fillStyle = dim; ctx.globalAlpha = 0.25; ctx.fillRect(0, mid, w, 1); ctx.globalAlpha = 1;
-    if (duration > 0) {
-      ctx.fillStyle = lit;
-      ctx.fillRect(Math.round(playedX), 0, 1.5, h);
-    }
-  }
+  function drawWave() { drawWaveform(canvas, peaks, { currentTime, duration }); }
 
   // Redraw whenever the peaks arrive, the playhead moves, or the modal resizes.
   $effect(() => {

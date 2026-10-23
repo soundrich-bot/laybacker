@@ -490,7 +490,7 @@
   .token-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
   .token-label { font-family: var(--font-display); font-weight: 700; font-size: 10px; letter-spacing: 0.04em; color: var(--text-secondary); }
   .token-btn {
-    font-family: var(--font-display); font-weight: 700; font-size: 10.5px; letter-spacing: 0.04em; color: var(--neon-cyan);
+    font-family: var(--font-display); font-weight: 700; font-size: 11px; letter-spacing: 0.04em; color: var(--neon-cyan);
     background: var(--cap-face); border: 1px solid rgba(8, 247, 254, 0.35); border-radius: var(--radius-sm);
     padding: 3px 9px; cursor: pointer; box-shadow: var(--cap-shadow);
   }
@@ -516,7 +516,7 @@
   .link-btn {
     font-family: var(--font-display);
     font-weight: 700;
-    font-size: 9px;
+    font-size: 11px;
     letter-spacing: 0.04em;
     color: var(--neon-cyan);
     background: none;
@@ -597,7 +597,7 @@
   .seg-btn {
     font-family: var(--font-display);
     font-weight: 700;
-    font-size: 10px;
+    font-size: 11px;
     letter-spacing: 0.04em;
     color: var(--text-muted);
     background: var(--cap-face);
@@ -717,10 +717,10 @@
   .spacer { flex: 1; }
 
   .cancel, .remove {
-    font-family: var(--font-text);
+    font-family: var(--font-display);
     font-size: 11px;
     font-weight: 700;
-    letter-spacing: 0;
+    letter-spacing: 0.04em;
     color: var(--text-muted);
     background: var(--cap-face);
     border: 1px solid var(--border-color);

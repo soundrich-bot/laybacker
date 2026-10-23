@@ -1,5 +1,7 @@
 <script>
-  let { onFilesDropped, isScanning = false, isDraggingOver = false, compact = false } = $props();
+  // `big`: nothing loaded yet, so the zone takes half the window. Either way
+  // its height is fixed, so the idle and LET GO states are the same size.
+  let { onFilesDropped, isScanning = false, isDraggingOver = false, compact = false, big = false, audioPage = false } = $props();
 </script>
 
 <div
@@ -7,6 +9,7 @@
   class:dragging={isDraggingOver}
   class:scanning={isScanning}
   class:compact
+  class:big
   role="region"
   aria-label="File drop zone"
   title={compact
@@ -17,34 +20,29 @@
     {#if compact}
       <!-- Audio Only page: a slim strip, the page itself needs the room -->
       <p class="drop-text">
-        {#if isScanning}SCANNING…{:else if isDraggingOver}LET GO!{:else}+ DROP MORE AUDIO{/if}
+        {#if isScanning}SCANNING…{:else if isDraggingOver}LET GO!{:else}{audioPage ? '+ DROP MORE AUDIO' : '+ DROP MORE VIDEO & AUDIO'}{/if}
       </p>
       {#if !isScanning && !isDraggingOver}
-        <span class="drop-formats">.wav .aif .aiff .bwf .m4a .aac .mp3 .flac</span>
+        <span class="drop-formats">{audioPage ? '.wav .aif .aiff .bwf .m4a .aac .mp3 .flac' : '.mp4 .mov .m4v .mxf · .wav .aif .bwf .m4a .mp3 .flac'}</span>
       {/if}
-    {:else if isScanning}
-      <div class="spinner"></div>
-      <p class="drop-text">SCANNING FILES...</p>
-    {:else if isDraggingOver}
-      <div class="drop-icon active">
-        <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
-          <rect x="4" y="8" width="40" height="32" rx="4" stroke="currentColor" stroke-width="2.5"/>
-          <path d="M24 16V32M16 24H32" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
-        </svg>
-      </div>
-      <p class="drop-text">LET GO!</p>
     {:else}
-      <div class="drop-icon">
-        <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
-          <rect x="4" y="8" width="40" height="32" rx="4" stroke="currentColor" stroke-width="2" stroke-dasharray="4 4"/>
-          <path d="M24 18V30M18 24H30" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
-        </svg>
+      <!-- One layout for idle, drag-over and scanning: the same four lines,
+           only the words change, so nothing leaps when a file crosses the box. -->
+      <div class="drop-icon" class:active={isDraggingOver}>
+        {#if isScanning}
+          <div class="spinner"></div>
+        {:else}
+          <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+            <rect x="4" y="8" width="40" height="32" rx="4" stroke="currentColor" stroke-width={isDraggingOver ? 2.5 : 2} stroke-dasharray={isDraggingOver ? 'none' : '4 4'}/>
+            <path d="M24 17V31M17 24H31" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+          </svg>
+        {/if}
       </div>
-      <p class="drop-text">DROP VIDEO & AUDIO FILES</p>
+      <p class="drop-text">{isScanning ? 'SCANNING FILES…' : isDraggingOver ? 'LET GO!' : 'DROP VIDEO & AUDIO FILES'}</p>
       <p class="drop-hint">
-        Drop one at a time or all at once — we'll sort and pair them for you
+        {isScanning ? 'Reading the files you dropped' : isDraggingOver ? 'Release to add them' : "Drop one at a time or all at once — we'll sort and pair them for you"}
       </p>
-      <p class="drop-formats">
+      <p class="drop-formats" class:hold={isDraggingOver || isScanning}>
         .mp4 .mov .m4v .mxf &bull; .wav .aif .aiff .bwf .m4a .aac .mp3 .flac &bull; or a folder
       </p>
     {/if}
@@ -60,7 +58,7 @@
     background: var(--bg-panel);
     transition: all 0.2s ease;
     flex-shrink: 0;
-    min-height: 140px;
+    height: 150px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -74,7 +72,6 @@
     box-shadow:
       0 0 20px rgba(8, 247, 254, 0.1),
       inset 0 0 20px rgba(8, 247, 254, 0.05);
-    transform: scale(1.01);
   }
 
   .drop-zone.scanning {
@@ -90,7 +87,10 @@
     color: var(--text-muted);
     margin-bottom: var(--gap-sm);
     transition: color 0.2s;
+    height: 48px;
+    display: flex; align-items: center; justify-content: center;
   }
+  .drop-formats.hold { visibility: hidden; }
 
   .drop-icon.active {
     color: var(--neon-cyan);
@@ -138,15 +138,19 @@
     border-top-color: var(--neon-yellow);
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
-    margin: 0 auto var(--gap-sm);
+    margin: 0 auto;
   }
 
   @keyframes spin {
     to { transform: rotate(360deg); }
   }
 
+  /* Half the window while there's nothing to show beneath it */
+  .drop-zone.big { height: 50vh; }
+
   /* Compact strip for the Audio Only page */
   .drop-zone.compact {
+    height: auto;
     min-height: 0;
     padding: 6px var(--gap-md);
     margin: var(--gap-sm) var(--gap-lg) 0;

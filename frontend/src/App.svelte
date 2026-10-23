@@ -23,6 +23,7 @@
     getCurrentWindow().startResizeDragging('SouthEast').catch(() => { /* edge resize still available */ });
   }
   import { getAppState } from './lib/stores/app.svelte.js';
+  import { setSpellingFromFormat } from './lib/spell.svelte.js';
 
   import Header from './lib/components/Header.svelte';
   import DropZone from './lib/components/DropZone.svelte';
@@ -47,6 +48,8 @@
     || (localStorage.getItem('tameMode') === 'true' ? 'tame' : 'neon'));
   let timestampFormat = $state(localStorage.getItem('timestampFormat') || 'YYYYMMDD_HHmm');
   let proresProfile = $state(localStorage.getItem('proresProfile') || 'lt');
+  // English or American spelling, following the chosen date format.
+  $effect(() => { setSpellingFromFormat(timestampFormat); });
 
   function applyTheme(t) {
     for (const k of THEMES) document.documentElement.classList.toggle(k, k === t && t !== 'neon');
@@ -72,6 +75,11 @@
     // Solo-video slate encode progress (video dropped without audio)
     await listen('slate-progress', (event) => {
       app.updateSoloSlateProgress(event.payload);
+    });
+
+    // Working-file encode progress (the big button or a card's MAKE)
+    await listen('prores-progress', (event) => {
+      app.updateWorkingFileProgress(event.payload);
     });
 
     // Listen for native Tauri drag-drop events (gives us full file paths)
@@ -127,13 +135,14 @@
 <div class="app-container">
   <div class="noise-overlay"></div>
 
-  <Header ffmpegStatus={app.ffmpegStatus} />
+  <Header {theme} onThemeChange={setTheme} />
 
   <UpdateBanner />
 
   <ErrorBar errors={app.errors} onDismiss={app.dismissError} />
 
-  <DropZone onFilesDropped={handleFilesDropped} isScanning={app.isScanning} {isDraggingOver} compact={app.appMode === 'audio'} />
+  <DropZone onFilesDropped={handleFilesDropped} isScanning={app.isScanning} {isDraggingOver}
+    compact={app.appMode === 'audio' || app.files.length > 0} audioPage={app.appMode === 'audio'} big={app.files.length === 0} />
 
   {#if app.appMode === 'audio'}
   <AudioPage
@@ -239,14 +248,19 @@
     clockProgress={app.clockProgress}
     onRunClockCheck={app.runClockCheck}
     onAudioOnly={() => app.setAppMode('audio')}
+    videoInfo={app.videoInfo}
+    extractStatus={app.extractStatus}
+    workingFileStatus={app.workingFileStatus}
+    onMakeWorkingFile={(v) => app.makeWorkingFile(v, proresProfile)}
+    onExtractAudio={app.extractAudio}
+    workingFormat={proresProfile}
+    onWorkingFormatChange={(p) => { proresProfile = p; localStorage.setItem('proresProfile', p); }}
   />
   {/if}
 
   <SettingsPanel
     settings={app.exportSettings}
     onSettingsChange={handleSettingsChange}
-    {theme}
-    onThemeChange={setTheme}
     {timestampFormat}
     onTimestampFormatChange={(fmt) => { timestampFormat = fmt; localStorage.setItem('timestampFormat', fmt); }}
     onChooseOutputDir={chooseOutputDir}
@@ -257,20 +271,17 @@
     onProresProfileChange={(p) => { proresProfile = p; localStorage.setItem('proresProfile', p); }}
     audioOnly={app.matchedPairs.length > 0 && app.matchedPairs.every(p => !p.video)}
     audioPage={app.appMode === 'audio'}
+    laybackReady={app.matchedPairs.some(p => p.video)}
   />
 
   <ProcessButton
     pairCount={app.matchedPairs.length}
     fileCount={app.files.length}
     isProcessing={app.isProcessing}
-    onProcess={app.runMainAction}
+    onProcess={() => app.runMainAction(proresProfile)}
     onCancel={app.cancelProcessing}
     onClear={app.clearAll}
-    audioOnly={app.matchedPairs.length > 0 && app.matchedPairs.every(p => !p.video)}
-    clockOnly={app.matchedPairs.length > 0
-      && app.matchedPairs.every(p => !p.video)
-      && app.matchedPairs.some(p => p.clockEnabled)
-      && !app.matchedPairs.some(p => p.normalizationEnabled)}
+    action={app.mainActionFor(proresProfile)}
   />
 </div>
 
