@@ -15,6 +15,7 @@ Developer: Soundrich Ltd, https://www.soundrich.co/
 - **Loudness**: normalise to EBU R128 (−23 LUFS, −1 dBTP), ATSC A/85 (−24 LKFS, −2 dBTP) or a custom target, measured to ITU-R BS.1770 with the relative gate; or normalise to a true-peak target. Pass tolerances follow the chosen spec.
 - **QC on every file**: integrated loudness, true peak, stereo and phase (dual mono, anti-phase, one-sided), 6 frames of silence at head and tail, digital clicks, clipping (including flat tops from upstream clipping), dropouts. Results in one table with a waveform player that jumps to each fault.
 - **Audio Only page**: split multichannel to named mono stems, join stems to stereo / 5.1 / 7.1, fold surround to stereo or mono, fade, trim silence, convert to WAV / AIFF / FLAC / ALAC / AAC at 44.1 / 48 / 96 kHz and 16 / 24 / 32-bit float.
+- **Stem Checker**: drop a master and its stems and every file is drawn on one time axis, the master first; click between them to hear each stem in situ while it plays. Offered automatically when filenames mark the stems (DX, MX, FX, STEM…).
 - **Multifunction Chain**: one ordered run on every file — shape, QC, fix 6 frames and loudness only where they fail (prompted or automatic), handle unfixable issues, clock handles, convert, rename (with a custom pattern) — saved as presets, with a CSV report.
 - **UK broadcast details**: 6-frame head/tail mutes, 10 s / 5 s clock handles, ProRes working files for Pro Tools.
 - **Privacy**: fully local, works offline, no account, no upload. Three themes including a high-contrast white one.

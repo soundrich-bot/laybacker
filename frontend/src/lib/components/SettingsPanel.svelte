@@ -12,6 +12,7 @@
     onDefaultNameRuleChange,
     audioOnly = false,
     audioPage = false,
+    stemOnly = false, // a stem check in progress: the audio output format plays no part
     laybackReady = false, // a video is paired with audio — the only time these export controls apply
   } = $props();
 
@@ -87,6 +88,7 @@
 
 <div class="settings-bar">
   {#if audioPage}
+  <div class="audio-controls" class:inactive={stemOnly} title={stemOnly ? 'A stem check writes nothing out, so the format plays no part here' : ''}>
   <!-- Audio Only page: what the new audio files come out as -->
   <div class="setting-group">
     <span class="setting-label" title="File type for every audio output">FORMAT</span>
@@ -132,6 +134,7 @@
     </select>
   </div>
   {/if}
+  </div>
   {:else}
   <!-- Layback export controls: greyed until there's a layback to apply them to -->
   <div class="layback-controls" class:inactive={!laybackReady}
@@ -315,6 +318,8 @@
   }
   .layback-controls { display: flex; flex-wrap: wrap; gap: var(--gap-lg); align-items: center; transition: opacity 0.2s; }
   .layback-controls.inactive { opacity: 0.4; pointer-events: none; filter: grayscale(0.6); }
+  .audio-controls { display: contents; }
+  .audio-controls.inactive { display: flex; flex-wrap: wrap; gap: var(--gap-lg); align-items: center; opacity: 0.4; pointer-events: none; filter: grayscale(0.6); }
 
   .setting-label {
     font-family: var(--font-display);

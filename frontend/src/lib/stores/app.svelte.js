@@ -5,6 +5,7 @@ import { save as saveDialog } from '@tauri-apps/plugin-dialog';
 import { DEFAULT_CHAIN, normaliseChain, shapeOps, outputExt as chainOutputExt, stampFor, specTags, renamedStem, unfixableIssues, channelWord, csvReport, describeChain } from '../chain.js';
 import { nameForRule } from '../naming.js';
 import { findJoinGroups } from '../channels.js';
+import { stemCandidate } from '../stems.js';
 
 // Small persisted preferences (localStorage in the webview). Guarded — a
 // missing or blocked store must never break the app.
@@ -287,8 +288,44 @@ function maybePromptAudioMode() {
   if (!allAudio && appMode === 'audio') appMode = 'layback';
 }
 
+// ── Stem check ──────────────────────────────────────────────────────────────
+// A visual check: the mix and its stems stacked on one time axis, each one
+// playable. Offered when dropped audio gives itself away by name; always
+// there on the Audio Only page.
+let stemPrompt = $state(null); // { files: [MediaFile], mixPath }
+const stemPromptSeen = new Set(); // file sets already asked about
+let stemMixPath = $state(''); // which file the prompt (or the user) called the mix
+// Arrived through the stem prompt: the Audio Only page shows the stem check only.
+let stemOnly = $state(false);
+
+function maybePromptStemCheck() {
+  const audios = files.filter(f => f.mediaType === 'audio');
+  if (audios.length !== files.length || audios.length < 2) return;
+  const cand = stemCandidate(audios);
+  if (!cand) return;
+  const sig = audios.map(f => f.path).sort().join('|');
+  if (stemPromptSeen.has(sig)) return;
+  stemPromptSeen.add(sig);
+  stemPrompt = { files: audios, mixPath: cand.mix?.path ?? '' };
+}
+function dismissStemPrompt() { stemPrompt = null; }
+async function acceptStemPrompt(mixPath) {
+  const p = stemPrompt;
+  stemPrompt = null;
+  if (!p) return;
+  stemMixPath = mixPath || '';
+  stemOnly = true;
+  if (appMode !== 'audio') await setAppMode('audio');
+}
+function resetStemCheck() {
+  stemPrompt = null;
+  stemOnly = false;
+  stemMixPath = '';
+}
+
 async function setAppMode(mode) {
   appMode = mode;
+  if (mode !== 'audio') stemOnly = false;
   await autoMatch();
 }
 
@@ -1147,6 +1184,8 @@ async function scanFiles(paths) {
 
     // Audio on its own? Ask which page the user wants before pairing up.
     maybePromptAudioMode();
+    // Stems and a mix? Offer to check that they add up.
+    maybePromptStemCheck();
     await autoMatch();
   } catch (e) {
     console.error('[store] SCAN ERROR:', e);
@@ -1444,6 +1483,8 @@ async function makeWorkingFilesAll(profile) {
 
 // What the big button does right now — it names the job, not the app.
 function mainActionFor(profile = 'lt') {
+  // A stem check writes nothing out: the big button rests until it's over.
+  if (stemOnly) return { label: 'CONVERT', count: 0, disabled: true, kind: 'none' };
   const pairs = matchedPairs;
   const videos = getVideos();
   const audios = getAudios();
@@ -1702,6 +1743,8 @@ function clearAll() {
   soloSlateStatus = {};
   // The naming rule was for the batch that was just cleared — back to the default.
   nameRule = defaultNameRule;
+  // The stem check described the files that were just cleared.
+  resetStemCheck();
   // Back to the layback page; the next lone-audio drop asks again.
   appMode = 'layback';
 }
@@ -1828,6 +1871,11 @@ export function getAppState() {
     get chainPrompt() { return chainPrompt; },
     resolveChainPrompt,
     get chainSpecLabel() { return chainSpecLabel(); },
+    // Stem check
+    get stemPrompt() { return stemPrompt; },
+    dismissStemPrompt, acceptStemPrompt,
+    get stemOnly() { return stemOnly; },
+    get stemMixPath() { return stemMixPath; },
     get conversionSet() { return conversionSet(); },
     get conversionLabel() { return conversionLabel(); },
     get clockChecks() { return clockChecks; },

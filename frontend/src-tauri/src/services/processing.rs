@@ -217,7 +217,8 @@ pub fn chain_workdir() -> Result<String, String> {
 pub fn remove_workdir(path: &str) -> Result<(), String> {
     let p = PathBuf::from(path);
     let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
-    if !name.starts_with("laybacker-chain-") || !p.starts_with(std::env::temp_dir()) {
+    let ours = name.starts_with("laybacker-chain-") || name.starts_with("laybacker-stemcheck-");
+    if !ours || !p.starts_with(std::env::temp_dir()) {
         return Err("Not a Laybacker work folder".to_string());
     }
     if p.exists() {

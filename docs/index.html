@@ -30,7 +30,7 @@
         "applicationCategory": "MultimediaApplication",
         "applicationSubCategory": "Audio post-production",
         "operatingSystem": "macOS 12 or later (Apple Silicon and Intel), Windows 10 or later",
-        "softwareVersion": "0.1.48",
+        "softwareVersion": "0.1.49",
         "downloadUrl": "https://github.com/soundrich-bot/laybacker/releases/latest",
         "license": "https://www.gnu.org/licenses/gpl-3.0.html",
         "isAccessibleForFree": true,
@@ -41,6 +41,7 @@
           "Batch replace the audio on video files (layback), matched automatically by duration and filename",
           "Slates: a text card before the picture, or text laid over the opening seconds with the runtime unchanged; drag each line into place; the file's own name on every card; near-instant on H.264",
           "Loudness normalisation to EBU R128, ATSC A/85 or a custom target, measured to ITU-R BS.1770; true-peak normalisation",
+          "Stem Checker: a master and its stems drawn on one time axis, each one playable, to check by eye and by ear that every stem is where it should be",
           "QC on every file: level, true peak, stereo and phase (dual mono, anti-phase, one-sided), 6 frames of silence, digital clicks, clipping, dropouts — with a player that jumps to each fault",
           "Audio Only page: split multichannel files to mono stems, join stems to stereo, 5.1 or 7.1, fold surround to stereo or mono, fade, trim silence, convert to WAV, AIFF, FLAC, ALAC or AAC at 44.1, 48 or 96 kHz, 16, 24 or 32-bit float",
           "Multifunction Chain: one ordered run of QC, fixes, clock handles, conversion and renaming on every file, with presets and a CSV report",
@@ -394,6 +395,7 @@
         <div class="feature"><h3><span class="dot">▸</span> Broadcast-spec loudness</h3><p>Pick <b>EBU R128</b> or <b>ATSC A/85</b> and the targets and tolerances follow, or set your own. Measured to ITU-R BS.1770. Normalise to loudness or to a true-peak target.</p></div>
         <div class="feature"><h3><span class="dot">▸</span> QC everything, every time</h3><p>Level, true peak, stereo &amp; phase, 6 frames of silence, <b>clicks</b>, <b>clipping</b> and <b>dropouts</b> on every file, laid out in one table with a player that jumps to each fault so you can hear it yourself.</p></div>
         <div class="feature"><h3><span class="dot">▸</span> Audio Only page</h3><p>Split a multichannel file into named mono stems, join stems back into stereo, 5.1 or 7.1, fold surround to stereo or mono, fade, trim silence, and convert to WAV, AIFF, FLAC, ALAC or AAC at 44.1, 48 or 96 kHz.</p></div>
+        <div class="feature"><h3><span class="dot">▸</span> Stem Checker</h3><p>Drop a master and its stems and every file is drawn on one time axis, the master first. Click between the stems to hear each one in situ while it plays — a visual check by eye and by ear.</p></div>
         <div class="feature"><h3><span class="dot">▸</span> Multifunction Chain</h3><p>One ordered run on every file: QC, fix 6 frames and loudness only where they fail, add clock handles, convert, rename. Save it as a preset. Export a CSV of what happened to each file.</p></div>
         <div class="feature"><h3><span class="dot">▸</span> Delivery details</h3><p>6-frame head and tail mutes for UK commercial delivery, 10 s / 5 s clock handles, ProRes working files for Pro Tools, and filenames that carry the spec.</p></div>
         <div class="feature"><h3><span class="dot">▸</span> FFmpeg included</h3><p>No separate install — a pinned, bundled FFmpeg ships inside the app. Nothing else to set up, and it works offline.</p></div>

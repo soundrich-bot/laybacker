@@ -38,6 +38,8 @@
   import AudioStartModal from './lib/components/AudioStartModal.svelte';
   import ChainPanel from './lib/components/ChainPanel.svelte';
   import ChainPromptModal from './lib/components/ChainPromptModal.svelte';
+  import StemCheckPanel from './lib/components/StemCheckPanel.svelte';
+  import StemPromptModal from './lib/components/StemPromptModal.svelte';
 
   const app = getAppState();
   let isDraggingOver = $state(false);
@@ -132,6 +134,13 @@
   />
 {/snippet}
 
+{#snippet stemSection()}
+  <StemCheckPanel
+    files={app.files.filter(f => f.mediaType === 'audio')}
+    mixPath={app.stemMixPath}
+  />
+{/snippet}
+
 <div class="app-container">
   <div class="noise-overlay"></div>
 
@@ -201,6 +210,8 @@
     onProcessAll={app.processAudioAllNow}
     chainRunning={app.chainRunning}
     {chainSection}
+    {stemSection}
+    stemOnly={app.stemOnly}
   />
   {:else}
   <MatchedPairsList
@@ -271,6 +282,7 @@
     onProresProfileChange={(p) => { proresProfile = p; localStorage.setItem('proresProfile', p); }}
     audioOnly={app.matchedPairs.length > 0 && app.matchedPairs.every(p => !p.video)}
     audioPage={app.appMode === 'audio'}
+    stemOnly={app.stemOnly}
     laybackReady={app.matchedPairs.some(p => p.video)}
   />
 
@@ -295,6 +307,10 @@
 
 {#if app.chainPrompt}
   <ChainPromptModal prompt={app.chainPrompt} onChoose={app.resolveChainPrompt} />
+{/if}
+
+{#if app.stemPrompt}
+  <StemPromptModal prompt={app.stemPrompt} onRun={app.acceptStemPrompt} onDismiss={app.dismissStemPrompt} />
 {/if}
 
 {#if app.startPrompt}

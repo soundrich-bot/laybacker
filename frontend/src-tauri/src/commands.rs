@@ -1,7 +1,7 @@
 use tauri::{Emitter, Manager, Window};
 
 use crate::models::*;
-use crate::services::{audioscan, channels, clicks, ffmpeg, inspector, loudness, matcher, namer, processing, processor, waveform};
+use crate::services::{audioscan, channels, clicks, ffmpeg, inspector, loudness, matcher, namer, processing, processor, waveform, stemcheck};
 
 /// Cancel any in-progress processing
 #[tauri::command]
@@ -580,6 +580,45 @@ pub async fn extract_audio(video_path: String) -> Result<String, String> {
         let output = format!("{}/{}_audio.wav", dir, stem);
         ffmpeg::run_ffmpeg(&ffmpeg::build_extract_audio_command(&video_path, &output))?;
         Ok(output)
+    })
+    .await
+    .map_err(|e| format!("Task failed: {}", e))?
+}
+
+/// Stem check: line the stems up with the mix, sum them, and measure what's
+/// left. Writes the residual to a fresh work folder for listening back.
+/// Emits `stemcheck-progress` events: { stage, fraction }.
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StemInput {
+    pub path: String,
+    pub name: String,
+    pub duration_secs: f64,
+}
+
+#[tauri::command]
+pub async fn stem_check(
+    window: tauri::Window,
+    mix: StemInput,
+    stems: Vec<StemInput>,
+    sample_rate: Option<u32>,
+    channels: Option<u32>,
+) -> Result<stemcheck::StemReport, String> {
+    tokio::task::spawn_blocking(move || {
+        let to_file = |s: StemInput| stemcheck::StemFile { path: s.path, name: s.name, duration_secs: s.duration_secs };
+        let mix = to_file(mix);
+        let stems: Vec<stemcheck::StemFile> = stems.into_iter().map(to_file).collect();
+        let dir = stemcheck::workdir()?;
+        let residual = format!("{}/residual.wav", dir);
+        let last = std::cell::Cell::new(std::time::Instant::now() - std::time::Duration::from_secs(1));
+        let progress = |stage: &str, fraction: f64| {
+            // Throttle: a long file produces thousands of windows.
+            if fraction >= 1.0 || last.get().elapsed().as_millis() >= 120 {
+                last.set(std::time::Instant::now());
+                let _ = window.emit("stemcheck-progress", serde_json::json!({ "stage": stage, "fraction": fraction }));
+            }
+        };
+        stemcheck::stem_check(&mix, &stems, sample_rate.unwrap_or(48000), channels.unwrap_or(2), &residual, &progress)
     })
     .await
     .map_err(|e| format!("Task failed: {}", e))?

@@ -62,6 +62,8 @@
     onProcessAll,
     chainSection,       // snippet: the Multifunction Chain panel body
     chainRunning = false,
+    stemSection,        // snippet: the Stem Check panel body
+    stemOnly = false,   // came in via the stem prompt: show the stem check and the files, nothing else
   } = $props();
 
   // Fade length per end, chosen next to the FADE ALL button.
@@ -88,7 +90,7 @@
   let busy = $derived(qcRunning || clockRunning || isProcessing || chainRunning);
 
   // Each section folds away; all of them start open every launch.
-  let open = $state({ qc: true, deliver: true, process: true, chain: true });
+  let open = $state({ qc: true, deliver: true, process: true, chain: true, stems: true });
   function toggle(key) { open[key] = !open[key]; }
 
   let qcChecked = $derived(Object.values(qcResults).filter(r => !r.error));
@@ -160,7 +162,7 @@
 <div class="audio-page">
   <div class="page-head">
     <div class="page-title">
-      AUDIO ONLY
+      {stemOnly ? 'STEM CHECK' : 'AUDIO ONLY'}
       <span class="page-count">{pairs.length} FILE{pairs.length === 1 ? '' : 'S'}</span>
     </div>
     <button class="back-btn" onclick={onBackToLayback} title="Back to the layback page (drop a video to pair with these files)">
@@ -168,6 +170,7 @@
     </button>
   </div>
 
+  {#if !stemOnly}
   <!-- ── QC ── -->
   <section class="panel" class:closed={!open.qc}>
     <button class="panel-head" onclick={() => toggle('qc')} aria-expanded={open.qc}>
@@ -459,6 +462,21 @@
     </button>
     {#if open.chain}
       {@render chainSection()}
+    {/if}
+  </section>
+  {/if}
+  {/if}
+
+  <!-- ── Stem check ── -->
+  {#if stemSection}
+  <section class="panel chain-panel" class:closed={!open.stems}>
+    <button class="panel-head" onclick={() => toggle('stems')} aria-expanded={open.stems}>
+      <span class="chevron" class:down={open.stems}><svg width="14" height="14" viewBox="0 0 16 16"><path d="M4 2L14 8L4 14V2Z" fill="currentColor"/></svg></span>
+      <span class="panel-title">STEM CHECK</span>
+      <span class="panel-desc">The mix and its stems on one time axis. Click a row to hear it.</span>
+    </button>
+    {#if open.stems}
+      {@render stemSection()}
     {/if}
   </section>
   {/if}

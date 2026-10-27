@@ -39,6 +39,7 @@ pub fn run() {
             commands::process_audio,
             commands::waveform_peaks,
             commands::waveform_lanes,
+            commands::stem_check,
             commands::chain_workdir,
             commands::remove_workdir,
             commands::chain_shape,

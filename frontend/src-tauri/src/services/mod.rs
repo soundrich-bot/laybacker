@@ -10,3 +10,4 @@ pub mod waveform;
 pub mod clicks;
 pub mod audioscan;
 pub mod fastslate;
+pub mod stemcheck;

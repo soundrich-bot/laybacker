@@ -6,7 +6,7 @@
 use std::path::Path;
 
 use app_lib::models::*;
-use app_lib::services::{ffmpeg, inspector, loudness, namer, processor};
+use app_lib::services::{ffmpeg, inspector, loudness, namer, processor, stemcheck};
 
 fn test_fixture(name: &str) -> String {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
@@ -980,4 +980,395 @@ fn test_run_ffmpeg_with_progress_reports_and_outputs() {
 
     cleanup(&src);
     cleanup(&out);
+}
+
+// ── Stem check ──────────────────────────────────────────────────────────────
+// Synthetic stems: three independent noise signals (10 s, 48 kHz stereo) and a
+// mix built from them in various deliberately wrong ways.
+
+fn stem_noise(frames: usize, seed: u64, amp: f32) -> Vec<f32> {
+    let mut x = seed;
+    (0..frames * 2)
+        .map(|_| {
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            ((x % 20001) as f32 / 10000.0 - 1.0) * amp
+        })
+        .collect()
+}
+
+fn write_wav(path: &str, samples: &[f32]) {
+    let mut w = stemcheck::WavWriter::create(path, 48000, 2).unwrap();
+    w.write(samples).unwrap();
+    w.close().unwrap();
+}
+
+fn stem_file(path: &str, name: &str, secs: f64) -> stemcheck::StemFile {
+    stemcheck::StemFile { path: path.to_string(), name: name.to_string(), duration_secs: secs }
+}
+
+struct StemFixture {
+    dir: String,
+    stems: Vec<Vec<f32>>,
+    paths: Vec<String>,
+}
+
+fn stem_fixture(tag: &str) -> StemFixture {
+    let dir = format!("{}/stems-{}", output_dir(), tag);
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let frames = 48000 * 10;
+    let stems = vec![stem_noise(frames, 11, 0.25), stem_noise(frames, 23, 0.15), stem_noise(frames, 37, 0.1)];
+    let names = ["DX_stem.wav", "MX_stem.wav", "FX_stem.wav"];
+    let mut paths = Vec::new();
+    for (s, n) in stems.iter().zip(names) {
+        let p = format!("{}/{}", dir, n);
+        write_wav(&p, s);
+        paths.push(p);
+    }
+    StemFixture { dir, stems, paths }
+}
+
+fn run_check(fx: &StemFixture, mix: &[f32], tag: &str) -> stemcheck::StemReport {
+    let mix_path = format!("{}/{}_mix.wav", fx.dir, tag);
+    write_wav(&mix_path, mix);
+    let residual = format!("{}/{}_residual.wav", fx.dir, tag);
+    let stems: Vec<_> = fx.paths.iter().zip(["DX", "MX", "FX"]).map(|(p, n)| stem_file(p, n, 10.0)).collect();
+    stemcheck::stem_check(&stem_file(&mix_path, "MIX", 10.0), &stems, 48000, 2, &residual, &|_, _| {}).unwrap()
+}
+
+#[test]
+fn test_stem_check_perfect_stems_match() {
+    let fx = stem_fixture("perfect");
+    let mix: Vec<f32> = (0..fx.stems[0].len()).map(|i| fx.stems.iter().map(|s| s[i]).sum()).collect();
+    let r = run_check(&fx, &mix, "perfect");
+    assert_eq!(r.verdict, "match", "residual {:.1} dB", r.overall_residual_db);
+    assert!(r.overall_residual_db < -50.0, "residual {:.1}", r.overall_residual_db);
+    assert!(r.gain_db.abs() < 0.1, "gain {}", r.gain_db);
+    for s in &r.stems {
+        assert!(s.aligned, "{} not aligned", s.name);
+        assert!(s.lag_ms.abs() < 0.05, "{} lag {}", s.name, s.lag_ms);
+        assert!(!s.polarity_flipped);
+        assert!(s.presence_db.unwrap().abs() < 0.5, "{} presence {:?}", s.name, s.presence_db);
+    }
+    assert!(r.regions.is_empty(), "regions {:?}", r.regions);
+    assert!(Path::new(&r.residual_path).exists());
+    let _ = std::fs::remove_dir_all(&fx.dir);
+}
+
+#[test]
+fn test_stem_check_finds_offset_polarity_and_gain() {
+    let fx = stem_fixture("offset");
+    // The MX stem carries 100 ms of extra head relative to the mix; FX is
+    // inverted in the stem; and the whole mix sits 6 dB down.
+    let n = fx.stems[0].len();
+    let head = 4800 * 2; // 100 ms of stereo frames
+    let mut mx_file = vec![0f32; head];
+    mx_file.extend_from_slice(&fx.stems[1][..n - head]);
+    write_wav(&fx.paths[1], &mx_file);
+    let fx_flipped: Vec<f32> = fx.stems[2].iter().map(|v| -v).collect();
+    write_wav(&fx.paths[2], &fx_flipped);
+    let mix: Vec<f32> = (0..n).map(|i| (fx.stems[0][i] + fx.stems[1][i] + fx.stems[2][i]) * 0.5).collect();
+    let r = run_check(&fx, &mix, "offset");
+    let mx = r.stems.iter().find(|s| s.name == "MX").unwrap();
+    assert!(mx.aligned);
+    assert!((mx.lag_ms - 100.0).abs() < 0.1, "MX lag {}", mx.lag_ms);
+    let fxs = r.stems.iter().find(|s| s.name == "FX").unwrap();
+    assert!(fxs.polarity_flipped, "FX polarity not detected");
+    assert!(fxs.lag_ms.abs() < 0.1, "FX lag {}", fxs.lag_ms);
+    assert!((r.gain_db + 6.02).abs() < 0.2, "gain {}", r.gain_db);
+    // Aligned and matched, what's left is the last 100 ms of MX, which the mix
+    // has and the shifted stem no longer does: a small tail region, nothing else.
+    assert!(r.overall_residual_db < -20.0, "residual {:.1}", r.overall_residual_db);
+    assert!(r.regions.iter().all(|g| g.start >= 9.0), "regions {:?}", r.regions);
+    let _ = std::fs::remove_dir_all(&fx.dir);
+}
+
+#[test]
+fn test_stem_check_flags_a_muted_stretch_and_names_the_stem() {
+    let fx = stem_fixture("muted");
+    // The mix drops the DX stem between 4 s and 6 s.
+    let n = fx.stems[0].len();
+    let mix: Vec<f32> = (0..n)
+        .map(|i| {
+            let t = (i / 2) as f64 / 48000.0;
+            let dx = if (4.0..6.0).contains(&t) { 0.0 } else { fx.stems[0][i] };
+            dx + fx.stems[1][i] + fx.stems[2][i]
+        })
+        .collect();
+    let r = run_check(&fx, &mix, "muted");
+    assert_ne!(r.verdict, "match");
+    assert!(!r.regions.is_empty(), "no regions flagged");
+    let reg = r.regions.iter().max_by(|a, b| (a.end - a.start).partial_cmp(&(b.end - b.start)).unwrap()).unwrap();
+    assert!((reg.start - 4.0).abs() <= 0.5 && (reg.end - 6.0).abs() <= 0.5, "region {:?}", reg);
+    assert_eq!(reg.likely.as_deref(), Some("DX"), "region {:?}", reg);
+    assert_eq!(reg.direction.as_deref(), Some("stems_only"));
+    // Outside the hole everything cancels, so the overall gain is still ~unity.
+    assert!(r.gain_db.abs() < 1.0, "gain {}", r.gain_db);
+    let _ = std::fs::remove_dir_all(&fx.dir);
+}
+
+#[test]
+fn test_stem_check_reports_a_stem_missing_from_the_mix() {
+    let fx = stem_fixture("missing");
+    // The mix never had FX in it at all.
+    let n = fx.stems[0].len();
+    let mix: Vec<f32> = (0..n).map(|i| fx.stems[0][i] + fx.stems[1][i]).collect();
+    let r = run_check(&fx, &mix, "missing");
+    let fxs = r.stems.iter().find(|s| s.name == "FX").unwrap();
+    assert!(fxs.presence_db.is_none() || fxs.presence_db.unwrap() < -20.0, "FX presence {:?}", fxs.presence_db);
+    assert!(!fxs.aligned, "an absent stem should not claim alignment");
+    assert_ne!(r.verdict, "match");
+    let _ = std::fs::remove_dir_all(&fx.dir);
+}
+
+/// Smoothed noise: correlates with itself for a while, like music or speech.
+fn stem_smooth(frames: usize, seed: u64, amp: f32) -> Vec<f32> {
+    let raw = stem_noise(frames, seed, amp * 6.0);
+    let mut out = vec![0f32; raw.len()];
+    let mut acc = [0f32; 2];
+    for (i, &v) in raw.iter().enumerate() {
+        let c = i % 2;
+        acc[c] = 0.96 * acc[c] + 0.04 * v;
+        out[i] = acc[c];
+    }
+    out
+}
+
+#[test]
+fn test_stem_check_music_stem_lower_in_mix_with_extra_content() {
+    // Richard's case: the music stem is in the mix, but 8 dB down and under
+    // applause the stems don't have. Smooth signals, like real material.
+    let dir = format!("{}/stems-lowmx", output_dir());
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let frames = 48000 * 12;
+    let dx = stem_smooth(frames, 101, 0.25);
+    let mx = stem_smooth(frames, 202, 0.25);
+    let applause = stem_noise(frames, 303, 0.03);
+    let mx_gain = 10f32.powf(-8.0 / 20.0);
+    let mix: Vec<f32> = (0..dx.len()).map(|i| dx[i] + mx_gain * mx[i] + applause[i]).collect();
+    let paths = [format!("{}/DX_stem.wav", dir), format!("{}/MX_stem.wav", dir), format!("{}/mix.wav", dir)];
+    write_wav(&paths[0], &dx);
+    write_wav(&paths[1], &mx);
+    write_wav(&paths[2], &mix);
+    let residual = format!("{}/residual.wav", dir);
+    let stems = vec![stem_file(&paths[0], "DX", 12.0), stem_file(&paths[1], "MX", 12.0)];
+    let r = stemcheck::stem_check(&stem_file(&paths[2], "MIX", 12.0), &stems, 48000, 2, &residual, &|_, _| {}).unwrap();
+    let m = r.stems.iter().find(|s| s.name == "MX").unwrap();
+    assert!(m.aligned, "MX should align: {:?}", m);
+    assert!(m.lag_ms.abs() < 0.1, "MX lag {}", m.lag_ms);
+    assert!((m.presence_db.unwrap() + 8.0).abs() < 0.5, "MX presence {:?}", m.presence_db);
+    let d = r.stems.iter().find(|s| s.name == "DX").unwrap();
+    assert!(d.presence_db.unwrap().abs() < 0.3, "DX presence {:?}", d.presence_db);
+    // What's left is the applause: well below the mix, but the level gap is flagged.
+    assert!(r.overall_residual_db < -15.0, "residual {:.1}", r.overall_residual_db);
+    assert_ne!(r.verdict, "match");
+    assert!(r.notes.iter().any(|n| n.contains("MX") && n.contains("lower")), "notes {:?}", r.notes);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn test_stem_check_corrects_a_speed_drift() {
+    // The MX stem runs 0.1 % long (a 23.976/24 pull-down): without correction
+    // it only cancels at one point; with it, the whole file nulls.
+    let dir = format!("{}/stems-drift", output_dir());
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let frames = 48000 * 30;
+    let dx = stem_smooth(frames, 11, 0.25);
+    let mx = stem_smooth(frames, 22, 0.25);
+    let mix: Vec<f32> = (0..dx.len()).map(|i| dx[i] + mx[i]).collect();
+    // Stretch MX by 1.001 with linear interpolation, per channel.
+    let factor = 1.001f64;
+    let out_frames = (frames as f64 * factor) as usize;
+    let mut mx_long = vec![0f32; out_frames * 2];
+    for f in 0..out_frames {
+        let src = f as f64 / factor;
+        let i0 = src.floor() as usize;
+        let t = (src - i0 as f64) as f32;
+        let i1 = (i0 + 1).min(frames - 1);
+        for c in 0..2 {
+            mx_long[f * 2 + c] = mx[i0 * 2 + c] * (1.0 - t) + mx[i1 * 2 + c] * t;
+        }
+    }
+    let paths = [format!("{}/DX_stem.wav", dir), format!("{}/MX_stem.wav", dir), format!("{}/mix.wav", dir)];
+    write_wav(&paths[0], &dx);
+    write_wav(&paths[1], &mx_long);
+    write_wav(&paths[2], &mix);
+    let residual = format!("{}/residual.wav", dir);
+    let stems = vec![stem_file(&paths[0], "DX", 30.0), stem_file(&paths[1], "MX", 30.03)];
+    let r = stemcheck::stem_check(&stem_file(&paths[2], "MIX", 30.0), &stems, 48000, 2, &residual, &|_, _| {}).unwrap();
+    let m = r.stems.iter().find(|s| s.name == "MX").unwrap();
+    assert!(m.aligned, "{:?}", m);
+    assert!((m.speed_pct - 0.1).abs() < 0.02, "MX speed {} ({:?})", m.speed_pct, m.note);
+    assert!(r.overall_residual_db < -20.0, "residual {:.1} stems {:?} notes {:?}", r.overall_residual_db, r.stems, r.notes);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Diagnostic, not a test: run the stem check on real files and print the
+/// report. `STEM_MIX=/path/mix.wav STEM_STEMS=/a.wav:/b.wav STEM_DEBUG=1
+/// cargo test --test integration_test stem_check_on_real_files -- --ignored --nocapture`
+#[test]
+#[ignore]
+fn stem_check_on_real_files() {
+    let mix = std::env::var("STEM_MIX").expect("STEM_MIX");
+    let stems_env = std::env::var("STEM_STEMS").expect("STEM_STEMS");
+    let dur = |p: &str| inspector::inspect_file(p).map(|m| m.duration_secs).unwrap_or(0.0);
+    let probe = inspector::inspect_file(&mix).expect("probe mix");
+    let stems: Vec<_> = stems_env
+        .split(':')
+        .filter(|p| !p.is_empty())
+        .map(|p| stem_file(p, Path::new(p).file_stem().unwrap().to_str().unwrap(), dur(p)))
+        .collect();
+    let residual = temp_output("real_residual.wav");
+    let r = stemcheck::stem_check(
+        &stem_file(&mix, "MIX", probe.duration_secs),
+        &stems,
+        probe.sample_rate.unwrap_or(48000.0) as u32,
+        probe.channel_count.unwrap_or(2),
+        &residual,
+        &|stage, f| eprintln!("  {} {:.0}%", stage, f * 100.0),
+    )
+    .unwrap();
+    eprintln!("{}", serde_json::to_string_pretty(&r).unwrap());
+}
+
+/// Diagnostic: ground truth on real files, no alignment — do the stems sum
+/// to the mix as delivered, and at what levels? Same env vars as above.
+#[test]
+#[ignore]
+#[allow(clippy::needless_range_loop)]
+fn stem_check_ground_truth() {
+    let mix_path = std::env::var("STEM_MIX").expect("STEM_MIX");
+    let stems_env = std::env::var("STEM_STEMS").expect("STEM_STEMS");
+    let paths: Vec<String> = stems_env.split(':').filter(|p| !p.is_empty()).map(String::from).collect();
+    let mix = stemcheck::decode_whole(&mix_path, 48000, 2).unwrap();
+    let stems: Vec<Vec<f32>> = paths.iter().map(|p| stemcheck::decode_whole(p, 48000, 2).unwrap()).collect();
+    let n = stems.iter().map(|s| s.len()).min().unwrap().min(mix.len());
+    let db = |x: f64| if x > 0.0 { 10.0 * x.log10() } else { f64::NEG_INFINITY };
+    let em: f64 = mix[..n].iter().map(|v| (*v as f64).powi(2)).sum();
+    eprintln!("mix rms {:.1} dBFS, {} frames", db(em / n as f64), n / 2);
+    let k = stems.len();
+    let mut sts = vec![vec![0f64; k]; k];
+    let mut stm = vec![0f64; k];
+    for i in 0..n {
+        let mv = mix[i] as f64;
+        for a in 0..k {
+            let va = stems[a][i] as f64;
+            stm[a] += va * mv;
+            for b in a..k {
+                sts[a][b] += va * stems[b][i] as f64;
+            }
+        }
+    }
+    for a in 0..k {
+        for b in 0..a {
+            sts[a][b] = sts[b][a];
+        }
+    }
+    for (a, p) in paths.iter().enumerate() {
+        let name = Path::new(p).file_stem().unwrap().to_str().unwrap();
+        let es = sts[a][a];
+        eprintln!(
+            "{}: rms {:.1} dBFS, corr with mix {:+.3}, LS gain alone {:+.3} ({:+.1} dB)",
+            name,
+            db(es / n as f64),
+            if es > 0.0 { stm[a] / (es * em).sqrt() } else { 0.0 },
+            if es > 0.0 { stm[a] / es } else { 0.0 },
+            if es > 0.0 && stm[a] > 0.0 { 20.0 * (stm[a] / es).log10() } else { f64::NAN }
+        );
+    }
+    let g = stemcheck::solve_gains(&sts, &stm);
+    eprintln!("joint gains: {:?}", g.iter().map(|v| format!("{:+.3} ({:+.1} dB)", v, if *v > 0.0 { 20.0 * v.log10() } else { f64::NAN })).collect::<Vec<_>>());
+    // Residual of the unity sum at a few whole-frame offsets of the sum.
+    for lag in [-24i64, -12, -6, -3, -1, 0, 1, 3, 6, 12, 24] {
+        let mut er = 0f64;
+        for i in 0..n {
+            let j = i as i64 + 2 * lag;
+            let sum: f64 = if j >= 0 && (j as usize) < n { stems.iter().map(|s| s[j as usize] as f64).sum() } else { 0.0 };
+            er += (mix[i] as f64 - sum).powi(2);
+        }
+        eprintln!("unity sum shifted {:+3} frames: residual {:6.1} dB rel mix", lag, db(er / em));
+    }
+    // Joint-gain residual, per second.
+    let w = 48000 * 2;
+    let mut line = String::new();
+    for t in 0..n / w {
+        let (mut e_m, mut e_r) = (0f64, 0f64);
+        for i in t * w..(t + 1) * w {
+            let mv = mix[i] as f64;
+            let sum: f64 = (0..k).map(|a| g[a] * stems[a][i] as f64).sum();
+            e_m += mv * mv;
+            e_r += (mv - sum).powi(2);
+        }
+        line.push_str(&if e_m / w as f64 > 1e-6 { format!("{:2}:{:5.1} ", t, db(e_r / e_m)) } else { format!("{:2}:  --  ", t) });
+    }
+    eprintln!("joint-fit residual per second (dB rel mix):\n{}", line);
+}
+
+/// Diagnostic: per-stem full-rate lag scan on the loudest 10 s of each stem,
+/// then per-second gains at that lag — is the mix bus processed?
+#[test]
+#[ignore]
+#[allow(clippy::needless_range_loop)]
+fn stem_check_lag_scan() {
+    let mix_path = std::env::var("STEM_MIX").expect("STEM_MIX");
+    let stems_env = std::env::var("STEM_STEMS").expect("STEM_STEMS");
+    let paths: Vec<String> = stems_env.split(':').filter(|p| !p.is_empty()).map(String::from).collect();
+    let mix = stemcheck::decode_whole(&mix_path, 48000, 1).unwrap();
+    let db = |x: f64| if x > 0.0 { 10.0 * x.log10() } else { f64::NEG_INFINITY };
+    let peak = |v: &[f32]| 20.0 * (v.iter().fold(0f32, |m, x| m.max(x.abs())) as f64).log10();
+    let mut sum = vec![0f64; mix.len()];
+    for p in &paths {
+        let stem = stemcheck::decode_whole(p, 48000, 1).unwrap();
+        let name = Path::new(p).file_stem().unwrap().to_str().unwrap().to_string();
+        let n = stem.len().min(mix.len());
+        for i in 0..n { sum[i] += stem[i] as f64; }
+        // loudest 10 s window of the stem
+        let w = 48000 * 10;
+        let mut best_t = 0; let mut best_e = -1.0;
+        let mut t = 0;
+        while t + w <= n {
+            let e: f64 = stem[t..t + w].iter().map(|v| (*v as f64).powi(2)).sum();
+            if e > best_e { best_e = e; best_t = t; }
+            t += 48000;
+        }
+        let seg = &stem[best_t..best_t + w];
+        let es: f64 = seg.iter().map(|v| (*v as f64).powi(2)).sum();
+        let mut best = (0i64, 0f64);
+        let max_lag = 2400i64;
+        for lag in -max_lag..=max_lag {
+            let mut xy = 0f64; let mut yy = 0f64;
+            for (i, sv) in seg.iter().enumerate() {
+                let j = best_t as i64 + i as i64 - lag; // stem at i matches mix at i - lag (lag = stem - mix time)
+                if j >= 0 && (j as usize) < mix.len() {
+                    let mv = mix[j as usize] as f64;
+                    xy += *sv as f64 * mv; yy += mv * mv;
+                }
+            }
+            let c = if yy > 0.0 { xy / (es * yy).sqrt() } else { 0.0 };
+            if c.abs() > best.1.abs() { best = (lag, c); }
+        }
+        eprintln!("{}: loudest 10 s at {:.0} s (rms {:.1} dBFS, peak {:.1} dBFS); best lag {:+} frames ({:+.2} ms) ncc {:+.3}",
+            name, best_t as f64 / 48000.0, db(es / w as f64), peak(seg), best.0, best.0 as f64 / 48.0, best.1);
+        // per-second LS gain at the best lag
+        let lag = best.0;
+        let mut line = String::new();
+        for sec in 0..n / 48000 {
+            let (mut xy, mut xx) = (0f64, 0f64);
+            for i in sec * 48000..(sec + 1) * 48000 {
+                let j = i as i64 - lag;
+                if j >= 0 && (j as usize) < mix.len() { xy += stem[i] as f64 * mix[j as usize] as f64; xx += (stem[i] as f64).powi(2); }
+            }
+            line.push_str(&if xx / 48000.0 > 1e-7 { let g = xy / xx; format!("{:2}:{:>6} ", sec, if g > 0.0 { format!("{:+.1}", 20.0 * g.log10()) } else { "neg".into() }) } else { format!("{:2}:   -- ", sec) });
+        }
+        eprintln!("  per-second gain (dB) at that lag:\n  {}", line);
+    }
+    let m: Vec<f32> = mix.clone();
+    let s32: Vec<f32> = sum.iter().map(|v| *v as f32).collect();
+    eprintln!("mix peak {:.1} dBFS rms {:.1}; unity stem sum peak {:.1} dBFS rms {:.1}",
+        peak(&m), db(m.iter().map(|v| (*v as f64).powi(2)).sum::<f64>() / m.len() as f64),
+        peak(&s32), db(sum.iter().map(|v| v * v).sum::<f64>() / sum.len() as f64));
 }
