@@ -116,9 +116,6 @@
             </button>
           </div>
         {/if}
-      {:else}
-        <p class="empty-text">READY TO GO</p>
-        <p class="empty-hint">Drop some files above to get started</p>
       {/if}
     </div>
   {:else}

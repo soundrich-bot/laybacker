@@ -40,6 +40,8 @@
   import ChainPromptModal from './lib/components/ChainPromptModal.svelte';
   import StemCheckPanel from './lib/components/StemCheckPanel.svelte';
   import StemPromptModal from './lib/components/StemPromptModal.svelte';
+  import FunctionSelector from './lib/components/FunctionSelector.svelte';
+  import { INTENTS } from './lib/intents.js';
 
   const app = getAppState();
   let isDraggingOver = $state(false);
@@ -151,7 +153,13 @@
   <ErrorBar errors={app.errors} onDismiss={app.dismissError} />
 
   <DropZone onFilesDropped={handleFilesDropped} isScanning={app.isScanning} {isDraggingOver}
-    compact={app.appMode === 'audio' || app.files.length > 0} audioPage={app.appMode === 'audio'} big={app.files.length === 0} />
+    compact={app.appMode === 'audio' || app.files.length > 0} audioPage={app.appMode === 'audio'} big={app.files.length === 0}
+    withSelector={app.files.length === 0}
+    ask={app.intent ? INTENTS[app.intent]?.ask : ''} hint={app.intent ? INTENTS[app.intent]?.hint : ''} />
+
+  {#if app.files.length === 0 && !app.isScanning}
+    <FunctionSelector intent={app.intent} onSelect={app.setIntent} />
+  {/if}
 
   {#if app.appMode === 'audio'}
   <AudioPage
@@ -211,7 +219,8 @@
     chainRunning={app.chainRunning}
     {chainSection}
     {stemSection}
-    stemOnly={app.stemOnly}
+    focus={app.audioFocus}
+    onShowAll={() => app.setAudioFocus(null)}
   />
   {:else}
   <MatchedPairsList
@@ -282,7 +291,7 @@
     onProresProfileChange={(p) => { proresProfile = p; localStorage.setItem('proresProfile', p); }}
     audioOnly={app.matchedPairs.length > 0 && app.matchedPairs.every(p => !p.video)}
     audioPage={app.appMode === 'audio'}
-    stemOnly={app.stemOnly}
+    stemOnly={app.audioFocus === 'stems'}
     laybackReady={app.matchedPairs.some(p => p.video)}
   />
 

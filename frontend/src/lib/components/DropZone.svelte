@@ -1,7 +1,7 @@
 <script>
   // `big`: nothing loaded yet, so the zone takes half the window. Either way
   // its height is fixed, so the idle and LET GO states are the same size.
-  let { onFilesDropped, isScanning = false, isDraggingOver = false, compact = false, big = false, audioPage = false } = $props();
+  let { onFilesDropped, isScanning = false, isDraggingOver = false, compact = false, big = false, audioPage = false, ask = '', hint = '', withSelector = false } = $props();
 </script>
 
 <div
@@ -10,6 +10,7 @@
   class:scanning={isScanning}
   class:compact
   class:big
+  class:with-selector={big && withSelector}
   role="region"
   aria-label="File drop zone"
   title={compact
@@ -38,9 +39,9 @@
           </svg>
         {/if}
       </div>
-      <p class="drop-text">{isScanning ? 'SCANNING FILES…' : isDraggingOver ? 'LET GO!' : 'DROP VIDEO & AUDIO FILES'}</p>
+      <p class="drop-text">{isScanning ? 'SCANNING FILES…' : isDraggingOver ? 'LET GO!' : (ask || 'DROP VIDEO & AUDIO FILES TO START')}</p>
       <p class="drop-hint">
-        {isScanning ? 'Reading the files you dropped' : isDraggingOver ? 'Release to add them' : "Drop one at a time or all at once — we'll sort and pair them for you"}
+        {isScanning ? 'Reading the files you dropped' : isDraggingOver ? 'Release to add them' : (hint || "Drop one at a time or all at once — we'll sort and pair them for you")}
       </p>
       <p class="drop-formats" class:hold={isDraggingOver || isScanning}>
         .mp4 .mov .m4v .mxf &bull; .wav .aif .aiff .bwf .m4a .aac .mp3 .flac &bull; or a folder
@@ -147,6 +148,7 @@
 
   /* Half the window while there's nothing to show beneath it */
   .drop-zone.big { height: 50vh; }
+  .drop-zone.big.with-selector { height: 40vh; }
 
   /* Compact strip for the Audio Only page */
   .drop-zone.compact {

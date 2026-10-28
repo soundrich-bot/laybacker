@@ -6,6 +6,7 @@ import { DEFAULT_CHAIN, normaliseChain, shapeOps, outputExt as chainOutputExt, s
 import { nameForRule } from '../naming.js';
 import { findJoinGroups } from '../channels.js';
 import { stemCandidate } from '../stems.js';
+import { INTENT_FOCUS } from '../intents.js';
 
 // Small persisted preferences (localStorage in the webview). Guarded — a
 // missing or blocked store must never break the app.
@@ -295,8 +296,44 @@ function maybePromptAudioMode() {
 let stemPrompt = $state(null); // { files: [MediaFile], mixPath }
 const stemPromptSeen = new Set(); // file sets already asked about
 let stemMixPath = $state(''); // which file the prompt (or the user) called the mix
-// Arrived through the stem prompt: the Audio Only page shows the stem check only.
-let stemOnly = $state(false);
+// Which Audio Only section the page is showing on its own (null = all of them).
+// Set by the stem prompt or by a chosen function; SHOW ALL TOOLS clears it.
+let audioFocus = $state(null);
+
+// ── Function selector ───────────────────────────────────────────────────────
+// A chosen job on the empty screen. It changes what the drop zone asks for
+// and where the next drop lands; it clears with the files.
+let intent = $state(null);
+function setIntent(key) { intent = key || null; }
+function setAudioFocus(f) { audioFocus = f || null; }
+// After a drop with a job chosen: go straight there, no questions asked.
+async function applyIntent() {
+  if (!intent) return;
+  const key = intent;
+  const audios = files.filter(f => f.mediaType === 'audio');
+  const videos = files.filter(f => f.mediaType === 'video');
+  const focus = INTENT_FOCUS[key];
+  if (focus && videos.length === 0 && audios.length > 0) {
+    if (key === 'stems') {
+      stemPromptSeen.add(audios.map(f => f.path).sort().join('|'));
+      stemPrompt = null;
+      stemMixPath = stemCandidate(audios)?.mix?.path ?? '';
+    }
+    audioFocus = focus;
+    if (appMode !== 'audio') await setAppMode('audio');
+    if (key === 'qc' && !qcRunning) void runBatchQc();
+    // Clock: the check first; the handles go on at export.
+    if (key === 'clock' && !clockRunning) void runBatchClock();
+    if (key === 'normalise' && !matchedPairs.every(p => p.normalizationEnabled)) toggleAllNorm();
+    return;
+  }
+  const pairs = matchedPairs.filter(p => p.video);
+  if (key === 'slate') {
+    if (pairs.length) openSlateEditor('batch');
+    else if (videos.length === 1) openSlateEditor(videos[0]);
+  }
+  if (key === 'clock' && pairs.length) for (const p of pairs) void runClockCheck(p.id);
+}
 
 function maybePromptStemCheck() {
   const audios = files.filter(f => f.mediaType === 'audio');
@@ -314,18 +351,19 @@ async function acceptStemPrompt(mixPath) {
   stemPrompt = null;
   if (!p) return;
   stemMixPath = mixPath || '';
-  stemOnly = true;
+  audioFocus = 'stems';
   if (appMode !== 'audio') await setAppMode('audio');
 }
 function resetStemCheck() {
   stemPrompt = null;
-  stemOnly = false;
+  audioFocus = null;
   stemMixPath = '';
+  intent = null;
 }
 
 async function setAppMode(mode) {
   appMode = mode;
-  if (mode !== 'audio') stemOnly = false;
+  if (mode !== 'audio') audioFocus = null;
   await autoMatch();
 }
 
@@ -1184,9 +1222,11 @@ async function scanFiles(paths) {
 
     // Audio on its own? Ask which page the user wants before pairing up.
     maybePromptAudioMode();
-    // Stems and a mix? Offer to check that they add up.
-    maybePromptStemCheck();
+    // Stems and a mix? Offer to check that they add up (unless a job was chosen).
+    if (!intent) maybePromptStemCheck();
     await autoMatch();
+    // A chosen job: straight to the right place.
+    await applyIntent();
   } catch (e) {
     console.error('[store] SCAN ERROR:', e);
     errors = [...errors, `Scan failed: ${e}`];
@@ -1484,7 +1524,7 @@ async function makeWorkingFilesAll(profile) {
 // What the big button does right now — it names the job, not the app.
 function mainActionFor(profile = 'lt') {
   // A stem check writes nothing out: the big button rests until it's over.
-  if (stemOnly) return { label: 'CONVERT', count: 0, disabled: true, kind: 'none' };
+  if (audioFocus === 'stems') return { label: 'CONVERT', count: 0, disabled: true, kind: 'none' };
   const pairs = matchedPairs;
   const videos = getVideos();
   const audios = getAudios();
@@ -1874,7 +1914,10 @@ export function getAppState() {
     // Stem check
     get stemPrompt() { return stemPrompt; },
     dismissStemPrompt, acceptStemPrompt,
-    get stemOnly() { return stemOnly; },
+    get audioFocus() { return audioFocus; },
+    setAudioFocus,
+    get intent() { return intent; },
+    setIntent,
     get stemMixPath() { return stemMixPath; },
     get conversionSet() { return conversionSet(); },
     get conversionLabel() { return conversionLabel(); },

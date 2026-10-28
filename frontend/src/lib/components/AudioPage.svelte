@@ -2,6 +2,7 @@
   import MatchedPairRow from './MatchedPairRow.svelte';
   import QcPlayer from './QcPlayer.svelte';
   import { sp } from '../spell.svelte.js';
+  import { FOCUS_TITLES } from '../intents.js';
 
   // The Audio Only page: everything you can do to audio files on their own,
   // in three sections — QC (measure), File Deliverables (render to a spec),
@@ -63,7 +64,8 @@
     chainSection,       // snippet: the Multifunction Chain panel body
     chainRunning = false,
     stemSection,        // snippet: the Stem Check panel body
-    stemOnly = false,   // came in via the stem prompt: show the stem check and the files, nothing else
+    focus = null,       // one section on its own ('qc' | 'deliver' | 'process' | 'chain' | 'stems'), or null for all
+    onShowAll,          // clear the focus
   } = $props();
 
   // Fade length per end, chosen next to the FADE ALL button.
@@ -162,15 +164,18 @@
 <div class="audio-page">
   <div class="page-head">
     <div class="page-title">
-      {stemOnly ? 'STEM CHECK' : 'AUDIO ONLY'}
+      {focus ? sp(FOCUS_TITLES[focus] ?? 'AUDIO ONLY') : 'AUDIO ONLY'}
       <span class="page-count">{pairs.length} FILE{pairs.length === 1 ? '' : 'S'}</span>
     </div>
+    {#if focus && onShowAll}
+      <button class="back-btn" onclick={onShowAll} title="Show every Audio Only tool">ALL TOOLS</button>
+    {/if}
     <button class="back-btn" onclick={onBackToLayback} title="Back to the layback page (drop a video to pair with these files)">
       ← LAYBACK
     </button>
   </div>
 
-  {#if !stemOnly}
+  {#if !focus || focus === 'qc'}
   <!-- ── QC ── -->
   <section class="panel" class:closed={!open.qc}>
     <button class="panel-head" onclick={() => toggle('qc')} aria-expanded={open.qc}>
@@ -357,6 +362,8 @@
   </section>
 
   <!-- ── FILE DELIVERABLES ── -->
+  {/if}
+  {#if !focus || focus === 'deliver'}
   <section class="panel" class:closed={!open.deliver}>
     <button class="panel-head" onclick={() => toggle('deliver')} aria-expanded={open.deliver}>
       <span class="chevron" class:down={open.deliver}><svg width="14" height="14" viewBox="0 0 16 16"><path d="M4 2L14 8L4 14V2Z" fill="currentColor"/></svg></span>
@@ -393,6 +400,8 @@
   </section>
 
   <!-- ── FILE PROCESSING ── -->
+  {/if}
+  {#if !focus || focus === 'process'}
   <section class="panel" class:closed={!open.process}>
     <button class="panel-head" onclick={() => toggle('process')} aria-expanded={open.process}>
       <span class="chevron" class:down={open.process}><svg width="14" height="14" viewBox="0 0 16 16"><path d="M4 2L14 8L4 14V2Z" fill="currentColor"/></svg></span>
@@ -452,6 +461,8 @@
     {/if}
   </section>
 
+  {/if}
+  {#if !focus || focus === 'chain'}
   <!-- ── MULTIFUNCTION CHAIN ── -->
   {#if chainSection}
   <section class="panel chain-panel" class:closed={!open.chain}>
@@ -468,7 +479,7 @@
   {/if}
 
   <!-- ── Stem check ── -->
-  {#if stemSection}
+  {#if stemSection && (!focus || focus === 'stems')}
   <section class="panel chain-panel" class:closed={!open.stems}>
     <button class="panel-head" onclick={() => toggle('stems')} aria-expanded={open.stems}>
       <span class="chevron" class:down={open.stems}><svg width="14" height="14" viewBox="0 0 16 16"><path d="M4 2L14 8L4 14V2Z" fill="currentColor"/></svg></span>
