@@ -1,4 +1,5 @@
 <script>
+  import { sixFrFail } from '../sixfr.js';
   import { convertFileSrc, invoke } from '@tauri-apps/api/core';
   import SoloSlateButton from './SoloSlateButton.svelte';
   import { drawWaveform } from '../waveform.js';
@@ -138,7 +139,7 @@
         <span class="reading"><b>{fmt(info.lufs)}</b><small>LUFS</small></span>
         <span class="reading"><b>{fmt(info.tp)}</b><small>dBTP</small></span>
         {#if info.stereo}<span class="info-chip" title={info.stereo.correlation != null ? `phase correlation ${info.stereo.correlation.toFixed(2)}` : ''}>{stereoWord(info.stereo)}{info.stereo.correlation != null ? ` · ${info.stereo.correlation >= 0 ? '+' : ''}${info.stereo.correlation.toFixed(2)}` : ''}</span>{/if}
-        {#if info.head != null}<span class="info-chip">{!info.head && !info.tail ? 'head & tail silent' : info.head && info.tail ? 'sound at head & tail' : info.head ? 'sound at head' : 'sound at tail'}</span>{/if}
+        {#if info.head != null}<span class="info-chip">{!info.head && !info.tail ? 'head & tail silent' : 'not silent: ' + sixFrFail({ headHasAudio: info.head, tailHasAudio: info.tail, headPeak: info.headPeak, tailPeak: info.tailPeak }, { caps: false })}</span>{/if}
         <span class="info-chip">clicks: {info.clicks ? (info.clicks.count || 'none') : '—'}{info.clicks?.headPop ? ' · head pop' : ''}{info.clicks?.tailPop ? ' · tail pop' : ''}</span>
         <span class="info-chip">clipping: {info.clipping ? (info.clipping.count ? `${info.clipping.count} run${info.clipping.count === 1 ? '' : 's'}` : 'none') : '—'}</span>
         <span class="info-chip">dropouts: {info.dropouts ? (info.dropouts.count || 'none') : '—'}</span>

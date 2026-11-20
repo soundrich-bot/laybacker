@@ -3,6 +3,7 @@
   import QcPlayer from './QcPlayer.svelte';
   import { sp } from '../spell.svelte.js';
   import { FOCUS_TITLES } from '../intents.js';
+  import { sixFrFail, SIXFR_RULE } from '../sixfr.js';
 
   // The Audio Only page: everything you can do to audio files on their own,
   // in three sections — QC (measure), File Deliverables (render to a spec),
@@ -274,7 +275,7 @@
                   </td>
                   <td class="t-tag"><span class="tag {stereoClass(r)}"
                     title={r.stereo?.correlation != null ? `Phase correlation ${r.stereo.correlation.toFixed(2)}` : ''}>{stereoLabel(r.stereo)}</span></td>
-                  <td class="t-tag"><span class="tag" class:good={r.silencePass} class:bad={!r.silencePass}>{r.silencePass ? 'SILENT' : (r.headHasAudio && r.tailHasAudio ? 'HEAD & TAIL' : r.headHasAudio ? 'HEAD' : 'TAIL')}</span></td>
+                  <td class="t-tag"><span class="tag" class:good={r.silencePass} class:bad={!r.silencePass} title={SIXFR_RULE}>{r.silencePass ? 'SILENT' : sixFrFail(r)}</span></td>
                   <td class="t-tag clicks-cell">
                     {#if r.clicks?.error}
                       <span class="tag warn" title={r.clicks.error}>?</span>

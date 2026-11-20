@@ -6,6 +6,7 @@ import { DEFAULT_CHAIN, normaliseChain, shapeOps, outputExt as chainOutputExt, s
 import { nameForRule } from '../naming.js';
 import { findJoinGroups } from '../channels.js';
 import { stemCandidate } from '../stems.js';
+import { sixFrFail } from '../sixfr.js';
 import { INTENT_FOCUS } from '../intents.js';
 
 // Small persisted preferences (localStorage in the webview). Guarded — a
@@ -77,14 +78,14 @@ async function analyzeVideo(v) {
   try {
     const ch = v.channelCount ?? 2;
     // Each measurement stands alone: a failure in one still leaves the others.
-    let lufs = null, tp = null, head = null, tail = null, stereo = null;
+    let lufs = null, tp = null, head = null, tail = null, headPeak = null, tailPeak = null, stereo = null;
     try { [lufs, tp] = await invoke('measure_loudness', { audioPath: v.path }); } catch { /* shown as — */ }
-    try { [head, tail] = await invoke('check_silence', { audioPath: v.path, durationSecs: v.durationSecs, silenceMs: 240 }); } catch { /* shown as — */ }
+    try { [head, tail, headPeak, tailPeak] = await invoke('check_silence', { audioPath: v.path, durationSecs: v.durationSecs, silenceMs: 240 }); } catch { /* shown as — */ }
     if (ch >= 2) { try { stereo = await invoke('check_stereo', { audioPath: v.path, channels: ch }); } catch { stereo = null; } }
     let clicks = null, clipping = null, dropouts = null;
     try { clicks = await invoke('detect_clicks', { audioPath: v.path, sampleRate: v.sampleRate ? Math.round(v.sampleRate) : null, channels: ch, sensitivity: qcClickSensitivity }); } catch { /* shown as — */ }
     try { const r = await invoke('scan_audio_issues', { audioPath: v.path, sampleRate: v.sampleRate ? Math.round(v.sampleRate) : null, channels: ch }); clipping = r.clipping; dropouts = r.dropouts; } catch { /* shown as — */ }
-    videoInfo = { ...videoInfo, [v.path]: { lufs, tp, stereo, head, tail, clicks, clipping, dropouts } };
+    videoInfo = { ...videoInfo, [v.path]: { lufs, tp, stereo, head, tail, headPeak, tailPeak, clicks, clipping, dropouts } };
   } catch (e) {
     videoInfo = { ...videoInfo, [v.path]: { error: String(e) } };
   }
@@ -781,12 +782,13 @@ async function runChain() {
           chainProgress = { ...chainProgress, step: 'Measuring…' };
           const [media] = await invoke('scan_files', { paths: [s] });
           const [lufs, tp] = await invoke('measure_loudness', { audioPath: s });
-          const [head, tail] = await invoke('check_silence', { audioPath: s, durationSecs: media.durationSecs, silenceMs: 240 });
+          const [head, tail, headPeak, tailPeak] = await invoke('check_silence', { audioPath: s, durationSecs: media.durationSecs, silenceMs: 240 });
+          const sixFrFound = sixFrFail({ headHasAudio: head, tailHasAudio: tail, headPeak, tailPeak }, { caps: false });
           let stereo = null;
           if ((media.channelCount ?? 1) >= 2) {
             try { stereo = await invoke('check_stereo', { audioPath: s, channels: media.channelCount }); } catch { stereo = null; }
           }
-          sub.before = { lufs, tp, stereo: stereo?.verdict?.replace('_', ' ') ?? (media.channelCount === 1 ? 'mono' : ''), sixFr: (head || tail) ? `sound at ${head && tail ? 'head & tail' : head ? 'head' : 'tail'}` : 'silent' };
+          sub.before = { lufs, tp, stereo: stereo?.verdict?.replace('_', ' ') ?? (media.channelCount === 1 ? 'mono' : ''), sixFr: (head || tail) ? `sound at ${sixFrFound}` : 'silent' };
 
           // QC verdicts, shown as ticks in the report. A pass is never "fixed".
           const sixFrPass = !(head || tail);
@@ -825,7 +827,7 @@ async function runChain() {
             const choice = await decide('sixFr', {
               kind: 'fix', index: i + 1, total: targets.length, filename: sub.file,
               title: 'SOUND IN THE FIRST OR LAST 6 FRAMES',
-              lines: [`There is sound within 6 frames (240 ms) of ${where}.`],
+              lines: [`There is sound within 6 frames (240 ms) of ${where}: ${sixFrFound}.`, 'The pass line is digital silence.'],
               body: 'FIX mutes the first and last 6 frames with a short fade. SKIP leaves them as they are and carries on with the rest of the chain.',
               choices: [{ id: 'skip', label: 'SKIP THIS STEP', kind: 'neutral' }, { id: 'fix', label: 'FIX — MUTE 6 Fr', kind: 'primary' }],
             });
@@ -1034,8 +1036,10 @@ async function runBatchQc() {
       const [measuredLufs, measuredTP] = await invoke('measure_loudness', { audioPath: p.audio.path });
       let headHasAudio = false;
       let tailHasAudio = false;
+      let headPeak = null;
+      let tailPeak = null;
       if (qcCheckSilence) {
-        [headHasAudio, tailHasAudio] = await invoke('check_silence', {
+        [headHasAudio, tailHasAudio, headPeak, tailPeak] = await invoke('check_silence', {
           audioPath: p.audio.path,
           durationSecs: p.audio.durationSecs,
           silenceMs: p.silenceMs ?? 240.0,
@@ -1086,7 +1090,7 @@ async function runBatchQc() {
         clicks, clicksPass,
         clipping: scan.clipping, clippingPass: scan.clippingPass,
         dropouts: scan.dropouts, dropoutsPass: scan.dropoutsPass,
-        measuredLufs, measuredTP, headHasAudio, tailHasAudio, peakLimit, mode: qcMode,
+        measuredLufs, measuredTP, headHasAudio, tailHasAudio, headPeak, tailPeak, peakLimit, mode: qcMode,
       };
     } catch (e) {
       results[p.id] = { error: String(e) };
@@ -1608,7 +1612,7 @@ let clockProgress = $state({ done: 0, total: 0 });
 
 async function evaluateClockFor(pair) {
   const [measuredLufs, measuredTP] = await invoke('measure_loudness', { audioPath: pair.audio.path });
-  const [headHasAudio, tailHasAudio] = await invoke('check_silence', {
+  const [headHasAudio, tailHasAudio, headPeak, tailPeak] = await invoke('check_silence', {
     audioPath: pair.audio.path,
     durationSecs: pair.audio.durationSecs,
     silenceMs: pair.silenceMs ?? 240.0,
@@ -1626,7 +1630,7 @@ async function evaluateClockFor(pair) {
   return {
     silencePass, loudnessPass: lufsPass && peakPass, lufsPass, peakPass,
     willBeLevelled, hasLufsTarget, targetLufs, truePeakLimit,
-    headHasAudio, tailHasAudio, measuredLufs, measuredTP,
+    headHasAudio, tailHasAudio, headPeak, tailPeak, measuredLufs, measuredTP,
   };
 }
 

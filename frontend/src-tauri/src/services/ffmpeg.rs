@@ -395,6 +395,16 @@ pub fn build_audio_only_command(
     // Audio filter chain
     let mut audio_filters: Vec<String> = Vec::new();
 
+    // A sample-rate change goes FIRST when the 6 Fr mute is on. Left to the
+    // `-ar` option it runs after the filters, and the resampler's ringing
+    // leaks back into the muted frames (−108 dB at 96 kHz): not silence.
+    // The mute must be the last thing to touch the head and tail.
+    if compliance.is_some() {
+        if let Some(rate) = settings.audio_output_spec().sample_rate {
+            audio_filters.push(format!("aresample={}", rate));
+        }
+    }
+
     // Normalization gain (computed from the ebur128 measurement upstream)
     if let Some(gain) = audio_gain_db {
         if gain.abs() > 0.001 {
@@ -665,58 +675,141 @@ pub fn extract_frame(video_path: &str, secs: f64, width: u32) -> Result<String, 
     Ok(format!("data:image/jpeg;base64,{}", STANDARD.encode(&output.stdout)))
 }
 
-/// Check if the first/last N ms of audio contain non-silence.
-/// Returns (head_has_audio, tail_has_audio, head_peak_db, tail_peak_db).
-pub fn check_silence_compliance(audio_path: &str, duration_secs: f64, silence_ms: f64) -> Result<(bool, bool, f64, f64), String> {
-    let ffmpeg = find_ffmpeg();
-    let silence_secs = silence_ms / 1000.0;
-    let threshold_db = -60.0; // anything above -60dB is considered non-silent
-
-    // Check head
-    let head_output = silent_command(&ffmpeg)
-        .args([
-            "-i", audio_path,
-            "-af", &format!("atrim=0:{},astats=metadata=1:reset=1", silence_secs),
-            "-f", "null", "-",
-        ])
-        .output()
-        .map_err(|e| format!("Failed to check head silence: {}", e))?;
-
-    let head_stderr = String::from_utf8_lossy(&head_output.stderr);
-    let head_peak = parse_peak_from_astats(&head_stderr).unwrap_or(-120.0);
-    let head_has_audio = head_peak > threshold_db;
-
-    // Check tail
-    let tail_start = (duration_secs - silence_secs).max(0.0);
-    let tail_output = silent_command(&ffmpeg)
-        .args([
-            "-i", audio_path,
-            "-af", &format!("atrim={}:{},astats=metadata=1:reset=1", tail_start, duration_secs),
-            "-f", "null", "-",
-        ])
-        .output()
-        .map_err(|e| format!("Failed to check tail silence: {}", e))?;
-
-    let tail_stderr = String::from_utf8_lossy(&tail_output.stderr);
-    let tail_peak = parse_peak_from_astats(&tail_stderr).unwrap_or(-120.0);
-    let tail_has_audio = tail_peak > threshold_db;
-
-    Ok((head_has_audio, tail_has_audio, head_peak, tail_peak))
+/// Measures the head and tail windows of a file, sample by sample.
+///
+/// Feed it every decoded sample in order (interleaved); it keeps the peak of
+/// the first `window` frames and, in a ring, the last `window` frames. EVERY
+/// sample of both windows on EVERY channel counts — the previous check used
+/// `astats=reset=1`, which reports only the final ~32 ms block of channel 1,
+/// and so passed tails with sound in the first five of the six frames.
+pub struct EdgeMeter {
+    channels: usize,
+    window: usize, // frames
+    frames: u64,
+    head_peak: f32,
+    ring: Vec<f32>, // per-frame peak (max over channels) of the last `window` frames
+    ring_pos: usize,
+    carry: Vec<f32>, // a partial frame between feeds
 }
 
-/// Parse the peak level from ffmpeg astats output
-fn parse_peak_from_astats(stderr: &str) -> Option<f64> {
-    // Look for "Peak level dB:" in the astats output
-    for line in stderr.lines() {
-        if line.contains("Peak level dB:") {
-            let val = line.split(':').next_back()?.trim();
-            if val == "-inf" {
-                return Some(-120.0);
-            }
-            return val.parse::<f64>().ok();
+impl EdgeMeter {
+    pub fn new(channels: usize, window_frames: usize) -> Self {
+        EdgeMeter {
+            channels: channels.max(1),
+            window: window_frames.max(1),
+            frames: 0,
+            head_peak: 0.0,
+            ring: Vec::with_capacity(window_frames.max(1)),
+            ring_pos: 0,
+            carry: Vec::new(),
         }
     }
-    None
+
+    pub fn feed(&mut self, samples: &[f32]) {
+        let joined;
+        let data: &[f32] = if self.carry.is_empty() {
+            samples
+        } else {
+            let mut v = std::mem::take(&mut self.carry);
+            v.extend_from_slice(samples);
+            joined = v;
+            &joined
+        };
+        let whole = data.len() - data.len() % self.channels;
+        for frame in data[..whole].chunks_exact(self.channels) {
+            // NaN must never read as silence.
+            let peak = frame.iter().fold(0f32, |m, v| if v.is_nan() { f32::INFINITY } else { m.max(v.abs()) });
+            if (self.frames as usize) < self.window {
+                self.head_peak = self.head_peak.max(peak);
+            }
+            if self.ring.len() < self.window {
+                self.ring.push(peak);
+            } else {
+                self.ring[self.ring_pos] = peak;
+                self.ring_pos = (self.ring_pos + 1) % self.window;
+            }
+            self.frames += 1;
+        }
+        self.carry = data[whole..].to_vec();
+    }
+
+    pub fn frames(&self) -> u64 {
+        self.frames
+    }
+
+    /// Raw (head peak, tail peak) as linear sample values; 0.0 = digital silence.
+    pub fn peaks(&self) -> (f32, f32) {
+        (self.head_peak, self.ring.iter().fold(0f32, |m, v| m.max(*v)))
+    }
+
+    /// (head peak dBFS, tail peak dBFS). Exactly −120 means digital silence;
+    /// any real signal reads above it (a 24-bit LSB is clamped to −119.9).
+    pub fn finish(&self) -> (f64, f64) {
+        let db = |v: f32| if v <= 0.0 { -120.0 } else { (20.0 * (v as f64).log10()).max(-119.9) };
+        let (head, tail) = self.peaks();
+        (db(head), db(tail))
+    }
+}
+
+/// The pass line is digital silence: every sample in the window exactly zero.
+/// Broadcasters' automated QC (Vidchecker and the like) gives no leeway, so
+/// neither does this — a reverb tail at −60 dB, or at −100, is not silence.
+pub fn is_silent(peak: f32) -> bool {
+    peak == 0.0
+}
+
+/// 6-frame check: is there sound in the first or last `silence_ms` of the file?
+/// Returns (head has audio, tail has audio, head peak dBFS, tail peak dBFS).
+///
+/// The whole file is decoded at its own rate and channel count and the windows
+/// are counted in samples from the true start and the true end, so the result
+/// does not depend on the probed duration. Any failure — the file won't
+/// decode, no audio came out, the format can't be read — is an error, never a
+/// pass: a check that cannot measure must not say "silent".
+pub fn check_silence_compliance(audio_path: &str, _duration_secs: f64, silence_ms: f64) -> Result<(bool, bool, f64, f64), String> {
+    use std::io::Read;
+    use std::process::Stdio;
+
+    let media = crate::services::inspector::inspect_file(audio_path).map_err(|e| format!("Silence check could not read the file: {}", e))?;
+    let rate = media.sample_rate.filter(|r| *r > 0.0).ok_or("Silence check could not read the sample rate")?;
+    let channels = media.channel_count.filter(|c| *c > 0).ok_or("Silence check could not read the channel count")? as usize;
+    let window = ((silence_ms / 1000.0) * rate).round().max(1.0) as usize;
+
+    let mut child = silent_command(&find_ffmpeg())
+        .args(["-v", "error", "-i", audio_path, "-vn", "-f", "f32le", "-"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Failed to run the silence check: {}", e))?;
+    let mut out = child.stdout.take().ok_or("Silence check: no decoder output")?;
+    let mut meter = EdgeMeter::new(channels, window);
+    let mut buf = vec![0u8; 1 << 20];
+    let mut carry: Vec<u8> = Vec::new();
+    loop {
+        let n = out.read(&mut buf).map_err(|e| format!("Silence check read failed: {}", e))?;
+        if n == 0 {
+            break;
+        }
+        carry.extend_from_slice(&buf[..n]);
+        let usable = carry.len() - carry.len() % 4;
+        let samples: Vec<f32> = carry[..usable].chunks_exact(4).map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]])).collect();
+        meter.feed(&samples);
+        carry.drain(..usable);
+    }
+    let status = child.wait().map_err(|e| format!("Silence check failed: {}", e))?;
+    if !status.success() {
+        let mut err = String::new();
+        if let Some(mut e) = child.stderr.take() {
+            let _ = e.read_to_string(&mut err);
+        }
+        return Err(format!("Silence check could not decode the audio: {}", err.trim()));
+    }
+    if meter.frames() == 0 {
+        return Err("Silence check: the file decoded to no audio".to_string());
+    }
+    let (head_raw, tail_raw) = meter.peaks();
+    let (head_peak, tail_peak) = meter.finish();
+    Ok((!is_silent(head_raw), !is_silent(tail_raw), head_peak, tail_peak))
 }
 
 /// Build silence compliance audio filters:
@@ -1469,22 +1562,93 @@ Summary:
         assert!(filters[3].contains("afade=t=out:st=29.7550:d=0.0050"));
     }
 
-    // ── parse_peak_from_astats ──
+    // ── EdgeMeter (6-frame head / tail windows) ──
 
-    #[test]
-    fn test_parse_peak_from_astats_normal() {
-        let stderr = "Peak level dB:   -12.5\n";
-        assert!((parse_peak_from_astats(stderr).unwrap() - (-12.5)).abs() < 0.01);
+    fn db_amp(db: f64) -> f32 {
+        10f64.powf(db / 20.0) as f32
+    }
+
+    /// 1 s of stereo at 48 kHz, silent except where `paint` says otherwise.
+    fn edge_case(paint: impl Fn(usize, usize) -> f32) -> (f64, f64) {
+        let (rate, ch, window) = (48000usize, 2usize, 11520usize); // 240 ms
+        let mut m = EdgeMeter::new(ch, window);
+        let mut data = Vec::with_capacity(rate * ch);
+        for f in 0..rate {
+            for c in 0..ch {
+                data.push(paint(f, c));
+            }
+        }
+        // Fed in awkward block sizes, splitting frames, as a pipe would.
+        for chunk in data.chunks(1537) {
+            m.feed(chunk);
+        }
+        assert_eq!(m.frames(), rate as u64);
+        m.finish()
     }
 
     #[test]
-    fn test_parse_peak_from_astats_silence() {
-        let stderr = "Peak level dB: -inf\n";
-        assert!((parse_peak_from_astats(stderr).unwrap() - (-120.0)).abs() < 0.01);
+    fn edge_meter_catches_sound_early_in_the_tail_window() {
+        // The 20 November 2026 failure: sound in the FIRST frame of the last
+        // six, then a quiet end. The old check read only the final block.
+        let tail_start = 48000 - 11520;
+        let (head, tail) = edge_case(|f, _| if (tail_start..tail_start + 1920).contains(&f) { db_amp(-26.0) } else { 0.0 });
+        assert!((tail - (-26.0)).abs() < 0.1, "tail {}", tail);
+        assert!(tail > -120.0);
+        assert_eq!(head, -120.0);
     }
 
     #[test]
-    fn test_parse_peak_from_astats_missing() {
-        assert!(parse_peak_from_astats("no peak info here").is_none());
+    fn edge_meter_ignores_sound_just_outside_the_windows() {
+        let tail_start = 48000 - 11520;
+        let (head, tail) = edge_case(|f, _| if (11520..tail_start).contains(&f) { 0.5 } else { 0.0 });
+        assert_eq!(head, -120.0);
+        assert_eq!(tail, -120.0);
+        // ...and one sample inside either window is enough.
+        let (head, _) = edge_case(|f, _| if f == 11519 { 0.5 } else { 0.0 });
+        assert!(head > -7.0);
+        let (_, tail) = edge_case(|f, _| if f == tail_start { 0.5 } else { 0.0 });
+        assert!(tail > -7.0);
+    }
+
+    #[test]
+    fn digital_silence_is_the_only_pass() {
+        // One least-significant bit of 24-bit audio, once, is not silence.
+        let lsb = 1.0f32 / 8_388_608.0;
+        let mut m = EdgeMeter::new(2, 100);
+        m.feed(&vec![0.0; 2000]);
+        let (h, t) = m.peaks();
+        assert!(is_silent(h) && is_silent(t));
+        assert_eq!(m.finish(), (-120.0, -120.0));
+        let mut m = EdgeMeter::new(2, 100);
+        let mut data = vec![0.0f32; 2000];
+        data[1950] = -lsb; // right channel, inside the tail window
+        m.feed(&data);
+        let (h, t) = m.peaks();
+        assert!(is_silent(h) && !is_silent(t));
+        assert!(m.finish().1 > -120.0);
+        // A −100 dB tail — far below the old −60 dB line — fails.
+        assert!(!is_silent(db_amp(-100.0)));
+    }
+
+    #[test]
+    fn edge_meter_checks_every_channel() {
+        // Sound on the right channel only must not hide behind a silent left.
+        let (head, tail) = edge_case(|f, c| if c == 1 && !(100..=47000).contains(&f) { 0.1 } else { 0.0 });
+        assert!((head - (-20.0)).abs() < 0.1, "head {}", head);
+        assert!((tail - (-20.0)).abs() < 0.1, "tail {}", tail);
+    }
+
+    #[test]
+    fn edge_meter_short_file_and_nan() {
+        // Shorter than the window: the whole file is both head and tail.
+        let mut m = EdgeMeter::new(1, 11520);
+        m.feed(&[0.0, 0.25, 0.0]);
+        let (head, tail) = m.finish();
+        assert!(head > -13.0 && tail > -13.0);
+        // A NaN sample is never silence.
+        let mut m = EdgeMeter::new(1, 4);
+        m.feed(&[0.0, f32::NAN, 0.0, 0.0]);
+        let (head, tail) = m.finish();
+        assert!(head > -120.0 && tail > -120.0);
     }
 }

@@ -1,4 +1,5 @@
 <script>
+  import { sixFrFail, sixFrLevel, SIXFR_RULE } from '../sixfr.js';
   import MediaPreview from './MediaPreview.svelte';
   import { sp } from '../spell.svelte.js';
   import ProResButton from './ProResButton.svelte';
@@ -136,9 +137,7 @@
       bits.push(qcResult.dropouts.error ? 'dropout scan failed' : `${qcResult.dropouts.count} dropout${qcResult.dropouts.count === 1 ? '' : 's'} (silence inside the programme)`);
     }
     if (!qcResult.silencePass) {
-      const where = qcResult.headHasAudio && qcResult.tailHasAudio ? 'head & tail'
-        : qcResult.headHasAudio ? 'head' : 'tail';
-      bits.push(`audio in the ${where} silence guard`);
+      bits.push(`not silent in the 6-frame guard: ${sixFrFail(qcResult, { caps: false })}`);
     }
     return bits.join('; ');
   });
@@ -468,7 +467,7 @@
           class:open={showSilenceDetail}
           onclick={() => showSilenceDetail = !showSilenceDetail}
           aria-expanded={showSilenceDetail}
-          title="Audio found in the silence guard — click for details"
+          title="Not silent: {sixFrFail(silenceCheck)} — click for details"
         >
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
             <path d="M7 1L13 12H1L7 1Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
@@ -561,7 +560,7 @@
         {#if qcResult.silencePass}
           <span class="qc-badge sixfr-pass" title="6-frame check passed — head and tail are already silent">6Fr &#10003;</span>
         {:else}
-          <span class="qc-badge sixfr-fail" title="6-frame check — sound found at the {qcResult.headHasAudio && qcResult.tailHasAudio ? 'head & tail' : qcResult.headHasAudio ? 'head' : 'tail'}; use 6 Fr to mute it">6Fr &#10007;</span>
+          <span class="qc-badge sixfr-fail" title="{SIXFR_RULE} Use 6 Fr to mute it.">6Fr &#10007; {sixFrFail(qcResult)}</span>
         {/if}
       {/if}
       {#if qcResult.clicks}
@@ -723,10 +722,10 @@
     </div>
     <ul class="silence-detail-list">
       {#if silenceCheck.headHasAudio}
-        <li><span class="sd-where">Head</span> — first {(pair.silenceMs ?? 240).toFixed(0)} ms: peak <strong>{silenceCheck.headPeak.toFixed(1)} dBTP</strong></li>
+        <li><span class="sd-where">Head</span> — first {(pair.silenceMs ?? 240).toFixed(0)} ms: loudest sample <strong>{sixFrLevel(silenceCheck.headPeak)}</strong></li>
       {/if}
       {#if silenceCheck.tailHasAudio}
-        <li><span class="sd-where">Tail</span> — last {(pair.silenceMs ?? 240).toFixed(0)} ms: peak <strong>{silenceCheck.tailPeak.toFixed(1)} dBTP</strong></li>
+        <li><span class="sd-where">Tail</span> — last {(pair.silenceMs ?? 240).toFixed(0)} ms: loudest sample <strong>{sixFrLevel(silenceCheck.tailPeak)}</strong></li>
       {/if}
     </ul>
     <p class="silence-detail-note">On export these regions are muted to digital silence with a {(pair.fadeMs ?? 5).toFixed(0)} ms fade to prevent clicks, so the delivered file is compliant. Nothing to do — this is just a heads-up.</p>
@@ -765,7 +764,7 @@
         <li>True peak is <strong>{clockCheck.measuredTP.toFixed(1)} dBTP</strong> — over the {clockCheck.truePeakLimit} dBTP ceiling.</li>
       {/if}
       {#if !clockCheck.silencePass}
-        <li>Audio found in the {clockCheck.headHasAudio ? 'head' : ''}{clockCheck.headHasAudio && clockCheck.tailHasAudio ? ' &amp; ' : ''}{clockCheck.tailHasAudio ? 'tail' : ''} silence guard.</li>
+        <li>Not silent in the 6-frame guard: {sixFrFail(clockCheck, { caps: false })}. The pass line is digital silence.</li>
       {/if}
     </ul>
     {#if pair.clockEnabled}

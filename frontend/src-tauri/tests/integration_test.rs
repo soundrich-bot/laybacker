@@ -887,8 +887,118 @@ fn test_silence_compliance_check() {
     let (head_has_audio, tail_has_audio, head_peak, tail_peak) = result.unwrap();
     assert!(head_has_audio, "Test tone should have audio at head");
     assert!(tail_has_audio, "Test tone should have audio at tail");
-    assert!(head_peak > -60.0, "Head peak should be above silence threshold");
-    assert!(tail_peak > -60.0, "Tail peak should be above silence threshold");
+    assert!(head_peak > -20.0, "Head peak should read the tone");
+    assert!(tail_peak > -20.0, "Tail peak should read the tone");
+}
+
+/// Regression for 20 November 2026: fourteen ITV masters passed the 6-frame
+/// check with sound in the first frames of the tail window. The old check
+/// (astats with reset=1) read only the final ~32 ms block. These files have
+/// sound early in the last 240 ms and a quiet final 100 ms — exactly that case.
+#[test]
+fn test_silence_check_catches_sound_anywhere_in_the_last_six_frames() {
+    let dir = output_dir();
+    let frames = 48000 * 2;
+    let window = 11520; // 240 ms
+    let amp = |db: f64| 10f64.powf(db / 20.0) as f32;
+    let make = |name: &str, paint: &dyn Fn(usize, usize) -> f32| -> String {
+        let mut data = Vec::with_capacity(frames * 2);
+        for f in 0..frames {
+            for c in 0..2 {
+                data.push(paint(f, c));
+            }
+        }
+        let p = format!("{}/{}", dir, name);
+        let mut w = stemcheck::WavWriter::create(&p, 48000, 2).unwrap();
+        w.write(&data).unwrap();
+        w.close().unwrap();
+        p
+    };
+    let tone = |f: usize| (f as f32 * 0.13).sin();
+    let tail_start = frames - window;
+
+    // Sound in the first frame of the tail window only (−26 dBFS), then nothing.
+    let early = make("sixfr_early_tail.wav", &|f, _| {
+        if f < tail_start - 4800 && f >= window { 0.3 * tone(f) }
+        else if (tail_start..tail_start + 1920).contains(&f) { amp(-26.0) * tone(f) }
+        else { 0.0 }
+    });
+    let (head, tail, head_peak, tail_peak) = ffmpeg::check_silence_compliance(&early, 2.0, 240.0).unwrap();
+    assert!(!head, "head should be silent ({} dB)", head_peak);
+    assert!(tail, "sound in the first of the last six frames must fail (tail {} dB)", tail_peak);
+    assert!((tail_peak - (-26.0)).abs() < 1.0, "tail peak {}", tail_peak);
+
+    // Right channel only, in the middle of the tail window.
+    let right = make("sixfr_right_only.wav", &|f, c| {
+        if c == 1 && (tail_start + 4000..tail_start + 6000).contains(&f) { amp(-40.0) * tone(f) } else { 0.0 }
+    });
+    let (_, tail, _, tail_peak) = ffmpeg::check_silence_compliance(&right, 2.0, 240.0).unwrap();
+    assert!(tail, "sound on the right channel only must fail (tail {} dB)", tail_peak);
+
+    // Genuinely silent head and tail, programme in between: a pass, and the
+    // probed duration being wrong must not matter.
+    let clean = make("sixfr_clean.wav", &|f, _| if f >= window && f < tail_start { 0.3 * tone(f) } else { 0.0 });
+    for claimed in [2.0, 1.5, 3.0, 0.0] {
+        let (head, tail, hp, tp) = ffmpeg::check_silence_compliance(&clean, claimed, 240.0).unwrap();
+        assert!(!head && !tail, "clean file should pass with claimed duration {} (head {} tail {})", claimed, hp, tp);
+    }
+    // One sample of programme inside the window is a fail.
+    let edge = make("sixfr_one_sample.wav", &|f, _| if f == tail_start { 0.5 } else { 0.0 });
+    let (_, tail, _, _) = ffmpeg::check_silence_compliance(&edge, 2.0, 240.0).unwrap();
+    assert!(tail, "a single sample inside the tail window must fail");
+
+    for p in [early, right, clean, edge] {
+        cleanup(&p);
+    }
+}
+
+/// The 6 Fr mute must produce what the 6 Fr check demands: exact digital
+/// silence for the first and last six frames — on its own, with levelling,
+/// and at other sample rates and bit depths. The check and the fix were never
+/// tested against each other before.
+#[test]
+fn test_six_frame_mute_output_passes_the_strict_check() {
+    for (name, norm, rate, depth) in [
+        ("sixfr_mute_plain.wav", false, None, None),
+        ("sixfr_mute_norm.wav", true, None, None),
+        ("sixfr_mute_441_16.wav", true, Some(44100u32), Some(16u32)),
+        ("sixfr_mute_96_24.wav", false, Some(96000u32), Some(24u32)),
+        ("sixfr_mute_96_norm.wav", true, Some(96000u32), Some(24u32)),
+        ("sixfr_mute_48_32.wav", true, Some(48000u32), Some(32u32)),
+    ] {
+        let output = temp_output(name);
+        cleanup(&output);
+        let mut pair = make_audio_pair("test_tone.wav", name, norm, -23.0, -1.0);
+        pair.silence_compliance = true;
+        let mut settings = ExportSettings::default();
+        if rate.is_some() {
+            settings.audio_container = AudioContainer::Wav;
+            settings.sample_rate = rate;
+            settings.bit_depth = depth;
+        }
+        // The source tone is loud from the first sample to the last.
+        let (h, t, _, _) = ffmpeg::check_silence_compliance(&pair.audio.path, 0.0, 240.0).unwrap();
+        assert!(h && t, "fixture should have sound at both ends");
+        let result = processor::process_pair(&pair, &settings, |_| {});
+        assert!(result.success, "{}: processing failed: {:?}", name, result.error);
+        let (head, tail, hp, tp) = ffmpeg::check_silence_compliance(&output, 0.0, 240.0).unwrap();
+        assert!(!head, "{}: head not digitally silent after 6 Fr (peak {} dB)", name, hp);
+        assert!(!tail, "{}: tail not digitally silent after 6 Fr (peak {} dB)", name, tp);
+        // ...and the programme is still there in between.
+        let m = loudness::measure(&output).unwrap();
+        assert!(m.integrated_lufs > -40.0, "{}: programme missing ({} LUFS)", name, m.integrated_lufs);
+        cleanup(&output);
+    }
+}
+
+/// A check that cannot measure must be an error, never a pass.
+#[test]
+fn test_silence_check_fails_closed() {
+    assert!(ffmpeg::check_silence_compliance("/nonexistent/file.wav", 2.0, 240.0).is_err());
+    let junk = temp_output("sixfr_not_audio.wav");
+    std::fs::write(&junk, b"this is not a wav file").unwrap();
+    assert!(ffmpeg::check_silence_compliance(&junk, 2.0, 240.0).is_err(), "an undecodable file must not pass");
+    cleanup(&junk);
 }
 
 // ── Inspector (file probing) ──
@@ -1371,4 +1481,19 @@ fn stem_check_lag_scan() {
     eprintln!("mix peak {:.1} dBFS rms {:.1}; unity stem sum peak {:.1} dBFS rms {:.1}",
         peak(&m), db(m.iter().map(|v| (*v as f64).powi(2)).sum::<f64>() / m.len() as f64),
         peak(&s32), db(sum.iter().map(|v| v * v).sum::<f64>() / sum.len() as f64));
+}
+
+/// Diagnostic: run the 6-frame check on every WAV under SIXFR_DIR.
+#[test]
+#[ignore]
+fn silence_check_on_real_files() {
+    let root = std::env::var("SIXFR_DIR").expect("SIXFR_DIR");
+    let mut files: Vec<_> = walkdir::WalkDir::new(&root).into_iter().flatten()
+        .filter(|e| e.path().extension().is_some_and(|x| x.eq_ignore_ascii_case("wav")) && !e.file_name().to_string_lossy().starts_with('.'))
+        .map(|e| e.path().to_string_lossy().to_string()).collect();
+    files.sort();
+    for f in files {
+        let (head, tail, hp, tp) = ffmpeg::check_silence_compliance(&f, 0.0, 240.0).unwrap();
+        eprintln!("{:5} head {:7.1}  {:5} tail {:7.1}  {}", if head { "FAIL" } else { "pass" }, hp, if tail { "FAIL" } else { "pass" }, tp, Path::new(&f).file_name().unwrap().to_string_lossy());
+    }
 }
